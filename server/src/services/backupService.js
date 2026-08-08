@@ -12,19 +12,20 @@ import { join, basename } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { getDb, closeDb, openDatabase, setDb } from '../db/index.js';
-import { getDataDir, getDbPath, ensureDataDir } from '../db/paths.js';
+import { getDbPath, ensureDataDir, getBackupsDir } from '../db/paths.js';
 import { getSetting } from './settingsService.js';
 import { writeAudit } from './auditService.js';
 import { AppError } from '../utils/errors.js';
+import { APP_VERSION as APP_VERSION_CONST } from '../version.js';
 
 const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
 
-const APP_VERSION = () => getSetting('app_version', '0.4.0');
+const APP_VERSION = () => getSetting('app_version', APP_VERSION_CONST);
 
 export function getBackupDir() {
   const custom = getSetting('backup_dir', '');
-  const dir = custom && custom.trim() ? custom.trim() : join(getDataDir(), 'backups');
+  const dir = custom && custom.trim() ? custom.trim() : getBackupsDir();
   mkdirSync(dir, { recursive: true });
   return dir;
 }

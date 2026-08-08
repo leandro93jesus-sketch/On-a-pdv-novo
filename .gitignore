@@ -14,6 +14,15 @@ server/data/
 *.db-shm
 *.db-wal
 
+# Desktop packaging (gerado; não inclui dados reais)
+desktop-resources/
+release/dist/
+*.exe
+*.AppImage
+*.blockmap
+*.dmg
+*.snap
+
 # IDE / tooling
 .vscode/
 .idea/

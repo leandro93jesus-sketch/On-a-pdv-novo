@@ -70,9 +70,14 @@ export default function CaixaPage() {
     void load();
   }, []);
 
+  const expectedCents = conference?.expected_amount_cents ?? null;
+  const countedCents = useMemo(() => parseBRLToCents(counted), [counted]);
+  const liveDiffCents =
+    expectedCents != null && countedCents != null ? countedCents - expectedCents : null;
+
   const expectedLabel = useMemo(
-    () => (conference ? formatBRL(conference.expected_amount_cents) : '—'),
-    [conference]
+    () => (expectedCents != null ? formatBRL(expectedCents) : '—'),
+    [expectedCents]
   );
 
   async function handleOpen() {
@@ -166,18 +171,36 @@ export default function CaixaPage() {
         ) : (
           <>
             <div className="side-card">
-              <h3>Sessão atual</h3>
-              <div className="kv-list">
+              <h3>Totalizador do caixa</h3>
+              <div className="kv-list cash-totalizer" data-testid="cash-totalizer">
                 <div><span>Operador</span><strong>{current.operator_name}</strong></div>
                 <div><span>Abertura</span><strong>{current.opened_at}</strong></div>
-                <div><span>Fundo</span><strong>{formatBRL(current.opening_amount_cents)}</strong></div>
-                <div><span>Vendas</span><strong>{formatBRL(current.sales_total_cents)}</strong></div>
-                <div><span>Dinheiro</span><strong>{formatBRL(current.sales_dinheiro_cents)}</strong></div>
-                <div><span>Pix</span><strong>{formatBRL(current.sales_pix_cents)}</strong></div>
-                <div><span>Cartão</span><strong>{formatBRL(current.sales_cartao_cents)}</strong></div>
-                <div><span>Entradas</span><strong>{formatBRL(current.cash_in_cents)}</strong></div>
-                <div><span>Saídas</span><strong>{formatBRL(current.cash_out_cents)}</strong></div>
-                <div><span>Esperado (dinheiro)</span><strong>{expectedLabel}</strong></div>
+                <div><span>Fundo inicial</span><strong>{formatBRL(current.opening_amount_cents)}</strong></div>
+                <div><span>Total vendido</span><strong>{formatBRL(current.sales_total_cents)}</strong></div>
+                <div><span>Total dinheiro</span><strong>{formatBRL(current.sales_dinheiro_cents)}</strong></div>
+                <div><span>Total Pix</span><strong>{formatBRL(current.sales_pix_cents)}</strong></div>
+                <div><span>Total cartão</span><strong>{formatBRL(current.sales_cartao_cents)}</strong></div>
+                <div>
+                  <span>Total crediário</span>
+                  <strong>{formatBRL(current.sales_crediario_cents || 0)}</strong>
+                </div>
+                <div><span>Entradas / suprimentos</span><strong>{formatBRL(current.cash_in_cents)}</strong></div>
+                <div><span>Saídas / sangrias</span><strong>{formatBRL(current.cash_out_cents)}</strong></div>
+                <div><span>Valor esperado (gaveta)</span><strong>{expectedLabel}</strong></div>
+                <div>
+                  <span>Valor informado</span>
+                  <strong>{countedCents != null ? formatBRL(countedCents) : '—'}</strong>
+                </div>
+                <div>
+                  <span>Diferença</span>
+                  <strong data-testid="cash-difference">
+                    {liveDiffCents == null
+                      ? '—'
+                      : `${formatBRL(liveDiffCents)} (${
+                          liveDiffCents === 0 ? 'bateu' : liveDiffCents > 0 ? 'sobra' : 'falta'
+                        })`}
+                  </strong>
+                </div>
               </div>
             </div>
 
@@ -211,8 +234,13 @@ export default function CaixaPage() {
               <h3>Fechamento / Conferência</h3>
               <div className="modal-fields">
                 <label>
-                  Valor contado em dinheiro (R$)
-                  <input className="field-input" value={counted} onChange={(e) => setCounted(e.target.value)} />
+                  Valor informado / contado em dinheiro (R$)
+                  <input
+                    className="field-input"
+                    value={counted}
+                    onChange={(e) => setCounted(e.target.value)}
+                    data-testid="cash-counted-input"
+                  />
                 </label>
                 <label>
                   Observações

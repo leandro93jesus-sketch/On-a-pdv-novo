@@ -1,15 +1,19 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { getAuthToken, loginApi } from '../../api/client';
+import { getAuthToken, getStoredAuthUser, loginApi } from '../../api/client';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [login, setLogin] = useState('admin');
+  const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   if (getAuthToken()) {
+    const user = getStoredAuthUser();
+    if (user?.must_change_password) {
+      return <Navigate to="/trocar-senha" replace />;
+    }
     return <Navigate to="/vendas" replace />;
   }
 
@@ -18,8 +22,12 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await loginApi(login.trim(), password);
-      navigate('/vendas', { replace: true });
+      const session = await loginApi(login.trim(), password);
+      if (session.user?.must_change_password) {
+        navigate('/trocar-senha', { replace: true });
+      } else {
+        navigate('/vendas', { replace: true });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha no login');
     } finally {
@@ -33,7 +41,7 @@ export default function LoginPage() {
         <div className="login-brand">
           <div className="brand-mark">ON</div>
           <h1>ONÇA PDV</h1>
-          <p>Acesso ao sistema</p>
+          <p>Acesso ao sistema · v1.0.0</p>
         </div>
 
         {error && <div className="alert alert-error">{error}</div>}
@@ -46,6 +54,7 @@ export default function LoginPage() {
             value={login}
             onChange={(e) => setLogin(e.target.value)}
             required
+            autoFocus
           />
         </label>
         <label>
@@ -65,7 +74,7 @@ export default function LoginPage() {
         </button>
 
         <p className="login-hint">
-          Credenciais iniciais: <strong>admin</strong> / <strong>admin123</strong>
+          No primeiro acesso, o sistema exige a troca da senha do administrador.
         </p>
       </form>
     </div>

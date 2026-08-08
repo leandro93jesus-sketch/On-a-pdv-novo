@@ -266,8 +266,12 @@ export function getCashConference(sessionId) {
       sales_dinheiro_cents: session.sales_dinheiro_cents,
       sales_pix_cents: session.sales_pix_cents,
       sales_cartao_cents: session.sales_cartao_cents,
+      sales_crediario_cents: session.sales_crediario_cents || 0,
       cash_in_cents: session.cash_in_cents,
       cash_out_cents: session.cash_out_cents,
+      expected_amount_cents: expected,
+      counted_amount_cents: session.counted_amount_cents,
+      difference_cents: session.difference_cents,
     },
   };
 }

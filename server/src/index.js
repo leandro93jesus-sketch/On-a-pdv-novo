@@ -1,28 +1,45 @@
-import { getDb } from './db/index.js';
-import { seedIfEmpty } from './db/seed.js';
 import { createApp } from './app.js';
-import { getDbPath } from './db/paths.js';
-import { ensureBootstrapAdmin } from './services/authService.js';
+import { bootstrapRuntime } from './bootstrap.js';
+import { getDataDir, getDbPath } from './db/paths.js';
+import { logger } from './utils/logger.js';
+import { APP_NAME, APP_VERSION } from './version.js';
 
-// Garante DB + migrations
-getDb();
-ensureBootstrapAdmin();
-
-if (process.env.PDV_SEED !== '0') {
-  const result = seedIfEmpty();
-  if (result.seeded) {
-    console.log(`[onca-pdv] seed: ${result.count} produtos inseridos`);
-  }
-}
-
+const runtime = bootstrapRuntime();
 const app = createApp();
 const PORT = Number(process.env.PORT || 3001);
 
-if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
-    console.log(`[onca-pdv] API em http://localhost:${PORT}`);
+let server = null;
+
+export function startServer(port = PORT) {
+  if (server) return server;
+  const host = process.env.PDV_HOST || '127.0.0.1';
+  server = app.listen(port, host, () => {
+    logger.info(`${APP_NAME} ${APP_VERSION} API em http://${host}:${port}`);
+    logger.info(`data dir: ${getDataDir()}`);
+    logger.info(`banco: ${getDbPath()}`);
+    console.log(`[onca-pdv] ${APP_NAME} ${APP_VERSION}`);
+    console.log(`[onca-pdv] API em http://${host}:${port}`);
     console.log(`[onca-pdv] banco: ${getDbPath()}`);
+  });
+  server.on('error', (err) => {
+    logger.error('falha ao iniciar HTTP', { message: err.message, code: err.code });
+    console.error('[onca-pdv] falha ao iniciar HTTP:', err.message);
+  });
+  return server;
+}
+
+export function stopServer() {
+  return new Promise((resolve) => {
+    if (!server) return resolve();
+    server.close(() => {
+      server = null;
+      resolve();
+    });
   });
 }
 
-export { app };
+if (process.env.NODE_ENV !== 'test' && process.env.PDV_NO_LISTEN !== '1') {
+  startServer(PORT);
+}
+
+export { app, runtime };

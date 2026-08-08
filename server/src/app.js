@@ -1,5 +1,8 @@
 import express from 'express';
 import cors from 'cors';
+import { existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import healthRouter from './routes/health.js';
 import productsRouter from './routes/products.js';
 import salesRouter from './routes/sales.js';
@@ -20,6 +23,13 @@ import receiptsRouter from './routes/receipts.js';
 import auditRouter from './routes/audit.js';
 import { authOptional } from './middleware/auth.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+function resolveWebDist() {
+  if (process.env.PDV_WEB_DIST) return process.env.PDV_WEB_DIST;
+  return join(__dirname, '../../web/dist');
+}
 
 export function createApp() {
   const app = express();
@@ -45,6 +55,18 @@ export function createApp() {
   app.use('/api/credit', creditRouter);
   app.use('/api/returns', returnsRouter);
   app.use('/api/deliveries', deliveriesRouter);
+
+  const webDist = resolveWebDist();
+  if (existsSync(webDist)) {
+    app.use(express.static(webDist, { index: false, maxAge: '1h' }));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api')) return next();
+      if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+      return res.sendFile(join(webDist, 'index.html'), (err) => {
+        if (err) next();
+      });
+    });
+  }
 
   app.use(notFoundHandler);
   app.use(errorHandler);

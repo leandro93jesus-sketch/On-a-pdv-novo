@@ -46,11 +46,15 @@ export default function AppShell() {
         </nav>
 
         <div className="sidebar-footer">
-          <div>Etapa 4 · Relatórios, Backup, Configurações e Usuários</div>
+          <div className="sidebar-version">ONÇA PDV 1.0.0</div>
           {user ? (
             <div className="sidebar-user">
-              <span>{user.name || user.login}</span>
-              <button type="button" className="btn btn-ghost sidebar-logout" onClick={() => void handleLogout()}>
+              <span title={user.role}>{user.name || user.login}</span>
+              <button
+                type="button"
+                className="btn btn-ghost sidebar-logout"
+                onClick={() => void handleLogout()}
+              >
                 Sair
               </button>
             </div>

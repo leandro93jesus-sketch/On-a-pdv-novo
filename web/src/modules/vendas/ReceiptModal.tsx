@@ -18,7 +18,8 @@ export default function ReceiptModal({ sale, onClose, onCancelSale, companyName 
   const cancelled = sale.status === 'cancelled';
   const [waNote, setWaNote] = useState<string | null>(null);
   const [waBusy, setWaBusy] = useState(false);
-  const brand = companyName?.trim() || 'ONÇA PDV';
+  const [waPhone, setWaPhone] = useState(sale.customer?.phone || sale.customer?.whatsapp || '');
+  const brand = companyName?.trim() || 'ONÇA PRODUTOS DE LIMPEZA';
 
   function openPdf() {
     window.open(buildReceiptPdfUrl(sale.id), '_blank', 'noopener,noreferrer');
@@ -28,7 +29,9 @@ export default function ReceiptModal({ sale, onClose, onCancelSale, companyName 
     setWaBusy(true);
     setWaNote(null);
     try {
-      const share = await whatsappShareApi(sale.id);
+      const share = await whatsappShareApi(sale.id, {
+        phone: waPhone.trim() || undefined,
+      });
       setWaNote(
         share.note ||
           'O PDF não é anexado automaticamente. Gere o PDF e anexe manualmente se necessário.'
@@ -124,6 +127,20 @@ export default function ReceiptModal({ sale, onClose, onCancelSale, companyName 
           </div>
         </div>
 
+        {!cancelled && (
+          <div className="no-print" style={{ marginTop: 12 }}>
+            <label style={{ display: 'grid', gap: 4, fontSize: '0.9rem' }}>
+              WhatsApp (opcional)
+              <input
+                className="field-input"
+                placeholder="DDD + número"
+                value={waPhone}
+                onChange={(e) => setWaPhone(e.target.value)}
+              />
+            </label>
+          </div>
+        )}
+
         {waNote && <div className="alert alert-ok no-print">{waNote}</div>}
 
         <div className="modal-actions no-print">
@@ -138,7 +155,7 @@ export default function ReceiptModal({ sale, onClose, onCancelSale, companyName 
           <button
             type="button"
             className="btn btn-accent"
-            disabled={waBusy}
+            disabled={waBusy || cancelled}
             onClick={() => void sendWhatsApp()}
           >
             Enviar pelo WhatsApp

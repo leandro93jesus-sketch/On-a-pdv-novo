@@ -8,8 +8,9 @@ Sistema profissional de **Ponto de Venda** local-first.
 - **Etapa 2**: **Produtos**, **Estoque**, **Caixa** e **Clientes** (+ cancelamento pós-venda)
 - **Etapa 3**: **Fornecedores**, **Compras**, **Crediário**, **Devoluções** e **Entregas**
 - **Etapa 4**: **Relatórios**, **Backup/Restauração**, **Importador JSON legado**, **Configurações**, **Usuários/Auth**, **PDF**, **WhatsApp**, **Auditoria**
+- **Etapa 5**: revisão profissional, **desktop Electron**, instalador Windows, versão **1.0.0**
 
-Documentação: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/DECISIONS.md](docs/DECISIONS.md)
+Documentação: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/DECISIONS.md](docs/DECISIONS.md) · [docs/DESKTOP-WINDOWS.md](docs/DESKTOP-WINDOWS.md) · [release/README.md](release/README.md)
 
 ## Requisitos
 
@@ -44,8 +45,14 @@ Scripts úteis:
 | `npm run simulate:oncas-v2 -- arquivo.json` | Simulação do backup real em DB temporário (não importa no principal) |
 | `npm run validate:etapa3` | Suíte completa de validação da Etapa 3 |
 | `npm run validate:etapa4` | Suíte completa de validação da Etapa 4 |
+| `npm run validate:etapa5` | Suíte completa de validação da Etapa 5 |
+| `npm run desktop:prepare` | Prepara resources (server+web+Node) para empacote |
+| `npm run desktop:dist:win` | Gera instalador Windows (NSIS) |
+| `npm run desktop:dist:linux` | Gera pasta desktop Linux (smoke) |
 
-Login bootstrap inicial: `admin` / `admin123` (trocar após primeiro acesso).
+Login bootstrap inicial: `admin` / senha temporária com **troca obrigatória** no primeiro acesso.
+
+Compatibilidade desktop: **Windows 10/11**. Windows 7 não é suportado nesta versão.
 
 ## Módulo Vendas (etapa 1)
 

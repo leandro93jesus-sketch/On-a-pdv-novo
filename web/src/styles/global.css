@@ -223,7 +223,7 @@ a {
 
 .sales-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
   gap: 16px;
   align-items: stretch;
   min-height: calc(100vh - 96px);
@@ -579,9 +579,10 @@ a {
 }
 
 .total-block {
-  margin-top: 4px;
-  padding: 14px 16px;
-  border-radius: 10px;
+  margin-top: 8px;
+  margin-bottom: 10px;
+  padding: 18px 18px;
+  border-radius: 12px;
   background: linear-gradient(135deg, #0f3d2e, #1a5c45);
   color: #fff;
   display: flex;
@@ -609,7 +610,7 @@ a {
 }
 
 .total-block strong {
-  font-size: 2rem;
+  font-size: 2.35rem;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
   line-height: 1;
@@ -622,11 +623,20 @@ a {
 }
 
 .pay-btn {
-  padding: 12px 8px;
+  padding: 14px 10px;
   border-radius: 8px;
   border: 1px solid var(--border-strong);
   background: #fff;
-  font-weight: 650;
+  font-weight: 700;
+  font-size: 0.95rem;
+  min-height: 48px;
+}
+
+.sidebar-version {
+  font-size: 0.78rem;
+  opacity: 0.85;
+  margin-bottom: 8px;
+  letter-spacing: 0.04em;
 }
 
 .pay-btn.active {
@@ -963,6 +973,11 @@ select.field-input {
 .kv-list strong {
   color: var(--text);
   font-variant-numeric: tabular-nums;
+}
+
+.cash-totalizer > div:nth-last-child(-n + 3) strong {
+  font-size: 1.05rem;
+  color: var(--brand);
 }
 
 .customer-bar {

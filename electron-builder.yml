@@ -1,0 +1,46 @@
+appId: br.com.oncaprodutos.pdv
+productName: ONÇA PDV
+copyright: ONÇA Produtos de Limpeza
+artifactName: ONCA-PDV-Setup-${version}.${ext}
+directories:
+  output: release/dist
+  buildResources: electron/assets
+files:
+  - electron/**/*
+  - package.json
+extraResources:
+  - from: desktop-resources/app-server
+    to: app-server
+  - from: desktop-resources/web-dist
+    to: web-dist
+  - from: desktop-resources/node
+    to: node
+asar: true
+extraMetadata:
+  main: electron/main.cjs
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: electron/assets/icon.ico
+  requestedExecutionLevel: asInvoker
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: ONÇA PDV
+  uninstallDisplayName: ONÇA PDV
+  deleteAppDataOnUninstall: false
+  artifactName: ONCA-PDV-Setup-${version}.${ext}
+  license: release/LICENSE.txt
+linux:
+  target:
+    - dir
+  category: Office
+  executableName: onca-pdv
+mac:
+  target: dir
+# Electron 33+ = Windows 10/11. Sem suporte declarado a Windows 7.
+electronVersion: 33.2.1

@@ -90,6 +90,7 @@ export interface CashSession {
   sales_dinheiro_cents: number;
   sales_pix_cents: number;
   sales_cartao_cents: number;
+  sales_crediario_cents?: number;
   cash_in_cents: number;
   cash_out_cents: number;
   expected_amount_cents: number | null;
@@ -864,6 +865,17 @@ export function logoutApi(): Promise<{ ok: boolean }> {
 
 export function fetchMe(): Promise<{ user: AuthUser }> {
   return apiFetch('/api/auth/me').then((r) => handle<{ user: AuthUser }>(r));
+}
+
+export function changePasswordApi(payload: {
+  current_password: string;
+  new_password: string;
+}): Promise<{ user: AuthUser }> {
+  return apiFetch('/api/auth/change-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<{ user: AuthUser }>(r));
 }
 
 export function fetchSettings(): Promise<SettingsBundle> {
