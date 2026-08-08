@@ -1,6 +1,6 @@
 import type { Product } from '../../api/client';
 
-export type PaymentMethod = 'dinheiro' | 'pix' | 'cartao';
+export type PaymentMethod = 'dinheiro' | 'pix' | 'cartao' | 'crediario';
 
 export interface CartLine {
   key: string;

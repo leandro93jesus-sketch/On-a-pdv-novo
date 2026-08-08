@@ -8,10 +8,11 @@ import {
   recordSaleOnCash,
   requireOpenCashSession,
 } from './cashService.js';
+import { createCreditAccountFromSale } from './creditService.js';
 import { writeAudit } from './auditService.js';
 import { getCurrentOperator } from './settingsService.js';
 
-const PAYMENT_METHODS = new Set(['dinheiro', 'pix', 'cartao']);
+const PAYMENT_METHODS = new Set(['dinheiro', 'pix', 'cartao', 'crediario']);
 
 function nextSaleNumber(db) {
   const row = db.prepare(`SELECT COALESCE(MAX(id), 0) AS max_id FROM sales`).get();
@@ -269,6 +270,17 @@ export function createSale(payload = {}) {
     });
   }
 
+  const hasCredit = normalizedPayments.some((p) => p.method === 'crediario');
+  if (hasCredit && !customerId) {
+    throw new AppError('Venda no crediário exige cliente', {
+      status: 400,
+      code: 'CUSTOMER_REQUIRED_FOR_CREDIT',
+    });
+  }
+  const creditOpts = payload.credit || {};
+  const creditEntry = assertNonNegativeCents(creditOpts.entry_cents ?? 0, 'credit.entry_cents');
+  const creditInstallments = Number(creditOpts.installment_count ?? 1);
+
   const stockDemand = new Map();
   for (const item of resolvedItems) {
     if (item.is_misc || !item.product_id) continue;
@@ -363,6 +375,21 @@ export function createSale(payload = {}) {
         payments: normalizedPayments,
       });
 
+      if (hasCredit) {
+        const creditAmount = normalizedPayments
+          .filter((p) => p.method === 'crediario')
+          .reduce((s, p) => s + p.amount_cents, 0);
+        createCreditAccountFromSale(db, {
+          saleId: id,
+          customerId,
+          totalCents: creditAmount,
+          entryCents: Math.min(creditEntry, creditAmount),
+          installmentCount: creditInstallments,
+          firstDueDate: creditOpts.first_due_date || null,
+          notes: creditOpts.notes || null,
+        });
+      }
+
       writeAudit({
         action: 'sale.create',
         entityType: 'sale',
@@ -372,6 +399,7 @@ export function createSale(payload = {}) {
           total_cents: total,
           customer_id: customerId,
           cash_session_id: cashSession.id,
+          has_credit: hasCredit,
         },
       });
 
@@ -451,6 +479,16 @@ export function cancelSale(id, payload = {}) {
         reason,
         userName,
       });
+    }
+
+    const credit = db.prepare('SELECT id FROM credit_accounts WHERE sale_id = ?').get(Number(id));
+    if (credit) {
+      db.prepare(
+        `UPDATE credit_accounts SET status='cancelado', balance_cents=0, updated_at=datetime('now') WHERE id=?`
+      ).run(credit.id);
+      db.prepare(
+        `UPDATE credit_installments SET status='cancelado' WHERE credit_account_id=?`
+      ).run(credit.id);
     }
 
     db.prepare(

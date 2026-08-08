@@ -32,7 +32,9 @@ export default function AppShell() {
           ))}
         </nav>
 
-        <div className="sidebar-footer">Etapa 2 · Vendas, Produtos, Estoque, Caixa e Clientes</div>
+        <div className="sidebar-footer">
+          Etapa 3 · Fornecedores, Compras, Crediário, Devoluções e Entregas
+        </div>
       </aside>
 
       <div className="main-area">

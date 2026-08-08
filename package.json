@@ -18,7 +18,8 @@
     "migrate": "npm run migrate -w server",
     "seed": "npm run seed -w server",
     "review:etapa1": "node scripts/review-etapa1.mjs",
-    "review:etapa2": "node scripts/review-etapa2.mjs"
+    "review:etapa2": "node scripts/review-etapa2.mjs",
+    "review:etapa3": "node scripts/review-etapa3.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

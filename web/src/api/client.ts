@@ -143,6 +143,135 @@ export interface CreateSalePayload {
   client_request_id?: string;
   customer_id?: number | null;
   notes?: string;
+  credit?: {
+    entry_cents?: number;
+    installment_count?: number;
+    first_due_date?: string;
+    notes?: string;
+  };
+}
+
+export interface Supplier {
+  id: number;
+  name: string;
+  trade_name: string | null;
+  document: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  email: string | null;
+  address: string | null;
+  address_number: string | null;
+  neighborhood: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
+  contact_name: string | null;
+  notes: string | null;
+  active: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Purchase {
+  id: number;
+  purchase_number: string;
+  supplier_id: number;
+  supplier_name?: string;
+  status: string;
+  subtotal_cents?: number;
+  discount_cents?: number;
+  freight_cents?: number;
+  other_costs_cents?: number;
+  total_cents: number;
+  purchase_date: string;
+  document_number?: string | null;
+  notes?: string | null;
+  items?: Array<{
+    id: number;
+    product_id: number;
+    product_name: string;
+    quantity: number;
+    unit_cost_cents: number;
+    discount_cents?: number;
+    line_total_cents: number;
+  }>;
+}
+
+export interface CreditAccount {
+  id: number;
+  customer_id: number;
+  customer_name?: string;
+  sale_id: number;
+  sale_number?: string;
+  total_cents: number;
+  entry_cents: number;
+  balance_cents: number;
+  installment_count: number;
+  status: string;
+  installments?: Array<{
+    id: number;
+    installment_number: number;
+    due_date: string;
+    amount_cents: number;
+    paid_cents: number;
+    status: string;
+  }>;
+  payments?: Array<{
+    id: number;
+    amount_cents: number;
+    method: string;
+    paid_at: string;
+    is_reversal: number;
+  }>;
+}
+
+export interface ReturnRecord {
+  id: number;
+  return_number: string;
+  sale_id: number;
+  sale_number?: string;
+  reason: string;
+  total_cents: number;
+  user_name?: string | null;
+  created_at: string;
+  items?: Array<{
+    id: number;
+    sale_item_id: number;
+    product_id: number | null;
+    product_name: string;
+    quantity: number;
+    unit_price_cents: number;
+    line_total_cents: number;
+  }>;
+}
+
+export interface Delivery {
+  id: number;
+  sale_id: number;
+  sale_number?: string;
+  customer_id?: number | null;
+  customer_name: string | null;
+  phone: string | null;
+  whatsapp?: string | null;
+  address?: string | null;
+  address_number?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip_code?: string | null;
+  scheduled_date: string | null;
+  period: string | null;
+  notes?: string | null;
+  courier_name: string | null;
+  status: string;
+  history?: Array<{
+    id: number;
+    from_status: string | null;
+    to_status: string;
+    note: string | null;
+    user_name?: string | null;
+    created_at: string;
+  }>;
 }
 
 async function handle<T>(res: Response): Promise<T> {
@@ -380,9 +509,170 @@ export function paymentLabel(method: string | null | undefined): string {
       return 'Pix';
     case 'cartao':
       return 'Cartão';
+    case 'crediario':
+      return 'Crediário';
     case 'misto':
       return 'Misto';
     default:
       return method || '—';
   }
+}
+
+export function fetchSuppliers(params?: { q?: string; include_inactive?: boolean }): Promise<Supplier[]> {
+  return fetch(
+    `/api/suppliers${qs({
+      q: params?.q,
+      include_inactive: params?.include_inactive ? '1' : undefined,
+    })}`
+  ).then((r) => handle<Supplier[]>(r));
+}
+
+export function createSupplier(payload: Record<string, unknown>): Promise<Supplier> {
+  return fetch('/api/suppliers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<Supplier>(r));
+}
+
+export function updateSupplier(id: number, payload: Record<string, unknown>): Promise<Supplier> {
+  return fetch(`/api/suppliers/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<Supplier>(r));
+}
+
+export function inactivateSupplier(id: number): Promise<Supplier> {
+  return fetch(`/api/suppliers/${id}/inactivate`, { method: 'POST' }).then((r) => handle<Supplier>(r));
+}
+
+export function fetchSupplierPurchases(id: number): Promise<Purchase[]> {
+  return fetch(`/api/suppliers/${id}/purchases`).then((r) => handle<Purchase[]>(r));
+}
+
+export function fetchPurchases(params?: {
+  status?: string;
+  supplier_id?: number;
+}): Promise<Purchase[]> {
+  return fetch(
+    `/api/purchases${qs({ status: params?.status, supplier_id: params?.supplier_id })}`
+  ).then((r) => handle<Purchase[]>(r));
+}
+
+export function fetchPurchase(id: number): Promise<Purchase> {
+  return fetch(`/api/purchases/${id}`).then((r) => handle<Purchase>(r));
+}
+
+export function createPurchase(payload: Record<string, unknown>): Promise<Purchase> {
+  return fetch('/api/purchases', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<Purchase>(r));
+}
+
+export function completePurchase(id: number): Promise<Purchase> {
+  return fetch(`/api/purchases/${id}/complete`, { method: 'POST' }).then((r) =>
+    handle<Purchase>(r)
+  );
+}
+
+export function cancelPurchase(id: number, reason: string): Promise<Purchase> {
+  return fetch(`/api/purchases/${id}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  }).then((r) => handle<Purchase>(r));
+}
+
+export function fetchCreditSummary(): Promise<{
+  total_open_cents: number;
+  total_overdue_cents: number;
+  total_received_cents: number;
+  customers_with_balance: number;
+}> {
+  return fetch('/api/credit/summary').then((r) => handle(r));
+}
+
+export function fetchCreditAccounts(params?: {
+  status?: string;
+  customer_id?: number;
+}): Promise<CreditAccount[]> {
+  return fetch(
+    `/api/credit/accounts${qs({ status: params?.status, customer_id: params?.customer_id })}`
+  ).then((r) => handle<CreditAccount[]>(r));
+}
+
+export function fetchCreditAccount(id: number): Promise<CreditAccount> {
+  return fetch(`/api/credit/accounts/${id}`).then((r) => handle<CreditAccount>(r));
+}
+
+export function payCredit(payload: {
+  credit_account_id: number;
+  amount_cents: number;
+  method: string;
+}): Promise<CreditAccount> {
+  return fetch('/api/credit/payments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<CreditAccount>(r));
+}
+
+export function fetchReturns(): Promise<ReturnRecord[]> {
+  return fetch('/api/returns').then((r) => handle<ReturnRecord[]>(r));
+}
+
+export function fetchReturn(id: number): Promise<ReturnRecord> {
+  return fetch(`/api/returns/${id}`).then((r) => handle<ReturnRecord>(r));
+}
+
+export function createReturn(payload: Record<string, unknown>): Promise<ReturnRecord> {
+  return fetch('/api/returns', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<ReturnRecord>(r));
+}
+
+export function fetchDeliveries(params?: {
+  status?: string;
+  customer_id?: number;
+  courier?: string;
+  date_from?: string;
+  date_to?: string;
+}): Promise<Delivery[]> {
+  return fetch(
+    `/api/deliveries${qs({
+      status: params?.status,
+      customer_id: params?.customer_id,
+      courier: params?.courier,
+      date_from: params?.date_from,
+      date_to: params?.date_to,
+    })}`
+  ).then((r) => handle<Delivery[]>(r));
+}
+
+export function createDelivery(payload: Record<string, unknown>): Promise<Delivery> {
+  return fetch('/api/deliveries', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<Delivery>(r));
+}
+
+export function updateDeliveryStatus(
+  id: number,
+  payload: { status: string; note?: string; courier_name?: string }
+): Promise<Delivery> {
+  return fetch(`/api/deliveries/${id}/status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<Delivery>(r));
+}
+
+export function fetchDelivery(id: number): Promise<Delivery> {
+  return fetch(`/api/deliveries/${id}`).then((r) => handle<Delivery>(r));
 }

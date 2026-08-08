@@ -28,6 +28,7 @@ const PAYMENTS: { id: PaymentMethod; label: string }[] = [
   { id: 'dinheiro', label: 'Dinheiro' },
   { id: 'pix', label: 'Pix' },
   { id: 'cartao', label: 'Cartão' },
+  { id: 'crediario', label: 'Crediário' },
 ];
 
 function parseDiscountInput(value: string): { ok: true; cents: number } | { ok: false; error: string } {
@@ -57,6 +58,13 @@ export default function VendasPage() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [payment, setPayment] = useState<PaymentMethod>('dinheiro');
+  const [creditEntryInput, setCreditEntryInput] = useState('0,00');
+  const [creditInstallments, setCreditInstallments] = useState(1);
+  const [creditFirstDue, setCreditFirstDue] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 1);
+    return d.toISOString().slice(0, 10);
+  });
   const [discountInput, setDiscountInput] = useState('0,00');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -236,6 +244,23 @@ export default function VendasPage() {
       return;
     }
 
+    if (payment === 'crediario' && !customer) {
+      setError('Venda no crediário exige cliente selecionado.');
+      return;
+    }
+    if (payment === 'crediario') {
+      const entryNorm = creditEntryInput.trim().replace(/\./g, '').replace(',', '.');
+      const entryN = Number(entryNorm || '0');
+      if (!Number.isFinite(entryN) || entryN < 0) {
+        setError('Entrada do crediário inválida.');
+        return;
+      }
+      if (!Number.isInteger(creditInstallments) || creditInstallments < 1) {
+        setError('Número de parcelas inválido.');
+        return;
+      }
+    }
+
     await loadCash();
     const openCashNow = await fetchOpenCash();
     setCash(openCashNow);
@@ -254,6 +279,12 @@ export default function VendasPage() {
     }
 
     try {
+      const entryCents =
+        payment === 'crediario'
+          ? Math.round(
+              Number(creditEntryInput.trim().replace(/\./g, '').replace(',', '.') || '0') * 100
+            )
+          : 0;
       const sale = await createSale({
         payment_method: payment,
         discount_cents: discountParse.cents,
@@ -267,11 +298,22 @@ export default function VendasPage() {
           discount_cents: line.discountCents,
           is_misc: line.isMisc,
         })),
+        credit:
+          payment === 'crediario'
+            ? {
+                entry_cents: entryCents,
+                installment_count: creditInstallments,
+                first_due_date: creditFirstDue,
+              }
+            : undefined,
       });
       const full = await fetchSale(sale.id);
       setReceipt(full);
       setCart([]);
       setDiscountInput('0,00');
+      setPayment('dinheiro');
+      setCreditEntryInput('0,00');
+      setCreditInstallments(1);
       requestIdRef.current = null;
       setNotice(`Venda ${full.sale_number} concluída com sucesso.`);
       await Promise.all([loadProducts(query.trim() || undefined), loadSales(), loadCash()]);
@@ -280,6 +322,8 @@ export default function VendasPage() {
       const err = e as Error & { code?: string };
       if (err.code === 'CASH_SESSION_REQUIRED') {
         setError('Não há caixa aberto. Abra o caixa antes de concluir a venda.');
+      } else if (err.code === 'CUSTOMER_REQUIRED_FOR_CREDIT') {
+        setError('Venda no crediário exige cliente selecionado.');
       } else {
         setError(err.message || 'Erro ao finalizar a venda');
       }
@@ -511,6 +555,40 @@ export default function VendasPage() {
                 </button>
               ))}
             </div>
+            {payment === 'crediario' ? (
+              <div className="credit-fields" style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                <label>
+                  Entrada (R$)
+                  <input
+                    value={creditEntryInput}
+                    onChange={(e) => setCreditEntryInput(e.target.value)}
+                    inputMode="decimal"
+                  />
+                </label>
+                <label>
+                  Parcelas
+                  <input
+                    type="number"
+                    min={1}
+                    value={creditInstallments}
+                    onChange={(e) => setCreditInstallments(Math.max(1, Number(e.target.value) || 1))}
+                  />
+                </label>
+                <label>
+                  1º vencimento
+                  <input
+                    type="date"
+                    value={creditFirstDue}
+                    onChange={(e) => setCreditFirstDue(e.target.value)}
+                  />
+                </label>
+                {!customer ? (
+                  <span className="alert alert-error" style={{ margin: 0 }}>
+                    Selecione um cliente para crediário.
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="cart-actions">

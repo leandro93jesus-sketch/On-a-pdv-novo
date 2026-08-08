@@ -73,12 +73,22 @@ before(async () => {
 
 beforeEach(() => {
   db.exec(`
+    DELETE FROM credit_payments;
+    DELETE FROM credit_installments;
+    DELETE FROM credit_accounts;
+    DELETE FROM return_items;
+    DELETE FROM returns;
+    DELETE FROM delivery_history;
+    DELETE FROM deliveries;
+    DELETE FROM purchase_items;
+    DELETE FROM purchases;
     DELETE FROM stock_movements;
     DELETE FROM sale_payments;
     DELETE FROM sale_items;
     DELETE FROM sales;
     DELETE FROM products;
     DELETE FROM customers;
+    DELETE FROM suppliers;
     DELETE FROM audit_logs;
   `);
   resetCash();

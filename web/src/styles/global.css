@@ -1018,10 +1018,41 @@ select.field-input {
   font-size: 0.86rem;
 }
 
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stat-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.stat-card span {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.stat-card strong {
+  font-size: 1.15rem;
+}
+
+.muted-line {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
 @media (max-width: 1100px) {
   .split-panels,
   .cash-grid,
-  .form-grid {
+  .form-grid,
+  .stats-row {
     grid-template-columns: 1fr;
   }
   .form-grid .span-2,

@@ -178,10 +178,12 @@ export function recordSaleOnCash(db, { sessionId, saleId, totalCents, payments }
   let dinheiro = 0;
   let pix = 0;
   let cartao = 0;
+  let crediario = 0;
   for (const p of payments) {
     if (p.method === 'dinheiro') dinheiro += p.amount_cents;
     else if (p.method === 'pix') pix += p.amount_cents;
     else if (p.method === 'cartao') cartao += p.amount_cents;
+    else if (p.method === 'crediario') crediario += p.amount_cents;
   }
 
   db.prepare(
@@ -189,9 +191,10 @@ export function recordSaleOnCash(db, { sessionId, saleId, totalCents, payments }
        sales_total_cents = sales_total_cents + ?,
        sales_dinheiro_cents = sales_dinheiro_cents + ?,
        sales_pix_cents = sales_pix_cents + ?,
-       sales_cartao_cents = sales_cartao_cents + ?
+       sales_cartao_cents = sales_cartao_cents + ?,
+       sales_crediario_cents = sales_crediario_cents + ?
      WHERE id = ? AND status = 'open'`
-  ).run(totalCents, dinheiro, pix, cartao, sessionId);
+  ).run(totalCents, dinheiro, pix, cartao, crediario, sessionId);
 
   const method =
     payments.length === 1 ? payments[0].method : 'misto';
@@ -211,10 +214,12 @@ export function recordSaleCancelOnCash(db, { sessionId, saleId, totalCents, paym
   let dinheiro = 0;
   let pix = 0;
   let cartao = 0;
+  let crediario = 0;
   for (const p of payments) {
     if (p.method === 'dinheiro') dinheiro += p.amount_cents;
     else if (p.method === 'pix') pix += p.amount_cents;
     else if (p.method === 'cartao') cartao += p.amount_cents;
+    else if (p.method === 'crediario') crediario += p.amount_cents;
   }
 
   db.prepare(
@@ -222,9 +227,10 @@ export function recordSaleCancelOnCash(db, { sessionId, saleId, totalCents, paym
        sales_total_cents = MAX(sales_total_cents - ?, 0),
        sales_dinheiro_cents = MAX(sales_dinheiro_cents - ?, 0),
        sales_pix_cents = MAX(sales_pix_cents - ?, 0),
-       sales_cartao_cents = MAX(sales_cartao_cents - ?, 0)
+       sales_cartao_cents = MAX(sales_cartao_cents - ?, 0),
+       sales_crediario_cents = MAX(sales_crediario_cents - ?, 0)
      WHERE id = ?`
-  ).run(totalCents, dinheiro, pix, cartao, sessionId);
+  ).run(totalCents, dinheiro, pix, cartao, crediario, sessionId);
 
   addCashMovementTx(db, {
     sessionId,
