@@ -1,0 +1,29 @@
+{
+  "name": "onca-pdv",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ONÇA PDV — sistema profissional de ponto de venda local-first.",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm run dev -w server",
+    "dev:web": "npm run dev -w web",
+    "build": "npm run build -w web",
+    "start:server": "npm run start -w server",
+    "test": "npm run test -w server",
+    "lint": "npm run lint -w web",
+    "migrate": "npm run migrate -w server",
+    "seed": "npm run seed -w server",
+    "review:etapa1": "node scripts/review-etapa1.mjs",
+    "review:etapa2": "node scripts/review-etapa2.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
