@@ -1,0 +1,15 @@
+{
+  "kind": "pre_fase1",
+  "created_at": "2026-08-08T19:00:37.924Z",
+  "dest": "server/data/backups/onca-pdv-backup-pre-fase1-2026-08-08T19-00-37.db",
+  "sha256": "709c06e21c3b94079e7b81d766eda0783d2c6cad57b35a1c9686c046ca8dda6d",
+  "size": 663552,
+  "integrity": "ok",
+  "fk_violations": 0,
+  "counts": {
+    "products": 490,
+    "customers": 9,
+    "sales": 105,
+    "sales_legacy": 87
+  }
+}
