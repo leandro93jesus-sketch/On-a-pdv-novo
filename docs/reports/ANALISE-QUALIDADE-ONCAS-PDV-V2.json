@@ -1,0 +1,323 @@
+{
+  "inventory": {
+    "products": 488,
+    "customers": 7,
+    "suppliers": 0,
+    "sales": 87,
+    "sale_items": 210,
+    "receivables": 0,
+    "payables": 0,
+    "purchases": 0,
+    "deliveries": 0,
+    "returns": 0,
+    "stock_movements": 204,
+    "users": 1,
+    "audit_log": 109,
+    "cash_sessions": 0,
+    "cash_movements": 0,
+    "cash_history": 2,
+    "quotes": 0,
+    "promotions": 0,
+    "financial_entries": 0,
+    "stock_locations": 1,
+    "backup_history": 7
+  },
+  "finance": {
+    "sales_total_cents": 343053,
+    "sales_subtotal_cents": 343753,
+    "sales_discount_cents": 700,
+    "sales_total_brl": "3430.53",
+    "payment_methods": {
+      "Dinheiro": 20,
+      "Cartao de credito": 8,
+      "PIX": 34,
+      "Cartao de debito": 25
+    },
+    "credit_sales_count": 8,
+    "receivables_count": 0,
+    "receivables_open_cents": 0,
+    "receivables_paid_cents": 0,
+    "receivables_pending_cents": 0
+  },
+  "stock": {
+    "stock_qty_sum": 214763,
+    "zero": 12,
+    "negative": 4,
+    "missing": 0,
+    "categories": {
+      "1": 2,
+      "Geral": 447,
+      "LIMPEZA": 18,
+      "limpeza": 5,
+      "ULTILITARIOS": 3,
+      "LIMPEZAS": 2,
+      "ULTILIDADES": 2,
+      "utilidades": 1,
+      "AUTOMOTIVO": 1,
+      "limpezas": 1,
+      "higiene": 1,
+      "INTENSILIOS": 1,
+      "INTESILIOS": 1,
+      "UTILIDADES": 1,
+      "HIGIENE": 1,
+      "UNTESILIOS": 1
+    }
+  },
+  "quality": {
+    "products_no_name": 0,
+    "products_no_code": 0,
+    "products_invalid_money": 0,
+    "barcode_or_code_duplicates": [
+      {
+        "code": "700083139368",
+        "ids": [
+          267,
+          100
+        ]
+      },
+      {
+        "code": "7898917671153",
+        "ids": [
+          251,
+          240
+        ]
+      },
+      {
+        "code": "7898669410109",
+        "ids": [
+          265,
+          45
+        ]
+      },
+      {
+        "code": "070341439777",
+        "ids": [
+          353,
+          357
+        ]
+      },
+      {
+        "code": "7896090100101",
+        "ids": [
+          144,
+          434
+        ]
+      },
+      {
+        "code": "7365323869080",
+        "ids": [
+          168,
+          61
+        ]
+      },
+      {
+        "code": "7896527700782",
+        "ids": [
+          174,
+          223
+        ]
+      },
+      {
+        "code": "7899928308700",
+        "ids": [
+          432,
+          404
+        ]
+      },
+      {
+        "code": "7899958221857",
+        "ids": [
+          421,
+          181
+        ]
+      },
+      {
+        "code": "A790816826351",
+        "ids": [
+          196,
+          88
+        ]
+      },
+      {
+        "code": "7897750771778",
+        "ids": [
+          136,
+          162
+        ]
+      },
+      {
+        "code": "7899809001768",
+        "ids": [
+          195,
+          124
+        ]
+      },
+      {
+        "code": "httpsÇ;;qrco.",
+        "ids": [
+          451,
+          452
+        ]
+      },
+      {
+        "code": "7365322809780",
+        "ids": [
+          324,
+          341
+        ]
+      },
+      {
+        "code": "609963037070",
+        "ids": [
+          103,
+          266
+        ]
+      },
+      {
+        "code": "7898669410956",
+        "ids": [
+          309,
+          308
+        ]
+      },
+      {
+        "code": "7896013404682",
+        "ids": [
+          130,
+          161
+        ]
+      },
+      {
+        "code": "7898311540536",
+        "ids": [
+          135,
+          274
+        ]
+      },
+      {
+        "code": "7898311540390",
+        "ids": [
+          249,
+          119
+        ]
+      },
+      {
+        "code": "7896076001897",
+        "ids": [
+          385,
+          371
+        ]
+      }
+    ],
+    "barcode_dup_count": 38,
+    "product_id_duplicates": [],
+    "customer_dup_document": [],
+    "customer_dup_phone": [],
+    "customer_dup_name": [],
+    "sale_id_duplicates": [],
+    "sales_invalid_money": 0,
+    "sales_invalid_date": 0,
+    "incomplete_sales": [],
+    "missing_product_refs_in_sales": [
+      -1786034015662,
+      -1786034054348,
+      -1786034084152,
+      -1786034541360,
+      -1786034625920,
+      -1786034686010,
+      -1786036297753,
+      -1786037825596,
+      -1786037873940,
+      -1786038005260,
+      -1786038022804,
+      -1786038894028,
+      -1786038922104,
+      -1786038950226,
+      -1786040213651,
+      -1786132398659,
+      -1786133182069,
+      -1786135925154,
+      -1786136014059,
+      -1786136152916
+    ],
+    "missing_product_refs_count": 20,
+    "stock_move_types": {
+      "Venda": 190,
+      "Ajuste positivo": 5,
+      "Entrada": 9
+    }
+  },
+  "unknown_root_keys": [
+    "backupHistory",
+    "backupSettings",
+    "startDate",
+    "internalNotes",
+    "payables",
+    "quotes",
+    "salesGoals",
+    "promotions",
+    "backup",
+    "operatorHistory",
+    "_estoque1000feito",
+    "financialEntries",
+    "stockLocations",
+    "stockByLocation"
+  ],
+  "customers_list": [
+    {
+      "id": 0,
+      "name": "Consumidor Final",
+      "phone": "-",
+      "document": "-",
+      "active": true
+    },
+    {
+      "id": 1,
+      "name": "STHEPHANY MARTINS",
+      "phone": "(15) 99277-5918",
+      "document": "460.735.888-60",
+      "active": true
+    },
+    {
+      "id": 2,
+      "name": "JEAN  ARAUJO",
+      "phone": "(15) 99724-7958",
+      "document": "-",
+      "active": true
+    },
+    {
+      "id": 3,
+      "name": "ELISAMA MARTINS",
+      "phone": "(15) 99818-0457",
+      "document": "-",
+      "active": true
+    },
+    {
+      "id": 4,
+      "name": "LEANDRO ONCINHA",
+      "phone": "(15) 99710-6049",
+      "document": "-",
+      "active": true
+    },
+    {
+      "id": 5,
+      "name": "JOAO AMIGO LE",
+      "phone": "-",
+      "document": "-",
+      "active": true
+    },
+    {
+      "id": 1785953632439,
+      "name": "TEREZINHA MULHER HILDE",
+      "phone": "0",
+      "document": "0",
+      "active": true
+    }
+  ],
+  "payment_method_samples": [
+    "Dinheiro",
+    "Cartao de credito",
+    "PIX",
+    "Cartao de debito"
+  ]
+}
