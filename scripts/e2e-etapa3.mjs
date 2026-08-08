@@ -15,7 +15,8 @@ const WEB = process.env.PDV_WEB_URL || 'http://localhost:5173';
 const DB_PATH =
   process.env.PDV_DB_PATH ||
   resolve(dirname(fileURLToPath(import.meta.url)), '../server/data/onca-pdv.db');
-const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS || 120_000);
+// Timeout máximo padrão: 5 minutos (pedido operacional). Sem espera infinita.
+const TIMEOUT_MS = Math.min(Number(process.env.E2E_TIMEOUT_MS || 300_000), 300_000);
 const REQ_MS = Number(process.env.E2E_REQ_TIMEOUT_MS || 10_000);
 
 const results = [];
