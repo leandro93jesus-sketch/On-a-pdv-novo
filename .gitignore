@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+
+# SQLite database files (generated at runtime)
+server/data/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Env
+.env
+.env.local
+
+# OS
+.DS_Store

@@ -1,0 +1,25 @@
+{
+  "name": "on-a-pdv-novo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "On-a PDV — a simple full-stack Point of Sale (Ponto de Venda) starter application.",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm run dev -w server",
+    "dev:web": "npm run dev -w web",
+    "build": "npm run build -w web",
+    "start:server": "npm run start -w server",
+    "test": "npm run test -w server",
+    "lint": "npm run lint -w web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
