@@ -41,6 +41,7 @@ Scripts úteis:
 | `npm run e2e:etapa3` | E2E API/UI HTTP (timeout ≤ 5 min) |
 | `npm run e2e:ui:etapa3` | E2E UI headless Chrome (timeout ≤ 5 min) |
 | `npm run e2e:etapa4` | E2E Etapa 4 (timeout ≤ 5 min) |
+| `npm run simulate:oncas-v2 -- arquivo.json` | Simulação do backup real em DB temporário (não importa no principal) |
 | `npm run validate:etapa3` | Suíte completa de validação da Etapa 3 |
 | `npm run validate:etapa4` | Suíte completa de validação da Etapa 4 |
 

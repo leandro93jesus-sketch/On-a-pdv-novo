@@ -5,8 +5,14 @@ import { writeAudit } from './auditService.js';
 import { createBackup } from './backupService.js';
 import { analyzeJsonStructure } from './legacyImport/analyze.js';
 import { toIntermediateModel, buildPreview } from './legacyImport/mapGeneric.js';
+import {
+  matchesOncasPdvV2,
+  toOncasPdvV2Model,
+  buildOncasPreview,
+  ADAPTER_ID as ONCAS_ADAPTER_ID,
+} from './legacyImport/mapOncasPdvV2.js';
 
-export const IMPORTER_VERSION = '0.4.0-generic';
+export const IMPORTER_VERSION = '0.4.1-oncas-v2';
 
 function sha256Buffer(buf) {
   return createHash('sha256').update(buf).digest('hex');
@@ -51,9 +57,33 @@ export function parseLegacyJsonBuffer(buffer, { filename = 'backup.json' } = {})
     sizeBytes: buffer.length,
     sha256,
   });
+
+  // Preferência: adaptador específico do backup real Oncas PDV v2
+  if (matchesOncasPdvV2(data)) {
+    const model = toOncasPdvV2Model(data);
+    const preview = buildOncasPreview(model, {
+      analysis_summary: {
+        root_type: analysis.root_type,
+        detected_collections: analysis.detected_collections,
+        sha256,
+        filename,
+        adapter: ONCAS_ADAPTER_ID,
+      },
+    });
+    return {
+      data,
+      analysis: { ...analysis, adapter: ONCAS_ADAPTER_ID },
+      model,
+      preview,
+      sha256,
+      filename,
+      adapter: ONCAS_ADAPTER_ID,
+    };
+  }
+
   const model = toIntermediateModel(data, analysis);
   const preview = buildPreview(model, analysis);
-  return { data, analysis, model, preview, sha256, filename };
+  return { data, analysis, model, preview, sha256, filename, adapter: 'generic_v1' };
 }
 
 export function createPreviewRun(parsed, { createdBy = null } = {}) {
