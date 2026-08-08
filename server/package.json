@@ -1,0 +1,20 @@
+{
+  "name": "@onca-pdv/server",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "migrate": "node src/db/migrate-cli.js",
+    "seed": "node src/db/seed-cli.js",
+    "test": "node --test src/sales.test.js src/etapa2.test.js src/etapa3.test.js src/etapa4.test.js src/etapa4b.test.js src/fase1.test.js src/fase2.test.js src/fase3.test.js src/fase4.test.js src/fase5.test.js src/estoqueVendas.test.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "pdfkit": "^0.19.1"
+  }
+}

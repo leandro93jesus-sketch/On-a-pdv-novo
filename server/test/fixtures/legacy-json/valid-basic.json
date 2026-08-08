@@ -1,0 +1,64 @@
+{
+  "versao": "legado-teste-1",
+  "produtos": [
+    {
+      "id": "P1",
+      "nome": "Detergente 500ml",
+      "codigo": "DET-1",
+      "codigoBarras": "7891111111111",
+      "preco": "19,90",
+      "custo": "R$ 8,50",
+      "estoque": 10,
+      "categoria": "Limpeza"
+    },
+    {
+      "id": "P2",
+      "nome": "Sabão em Pó",
+      "codigo": "SAB-1",
+      "preco": 25.5,
+      "custo": 12,
+      "estoque": 0,
+      "categoria": "Limpeza"
+    }
+  ],
+  "clientes": [
+    {
+      "id": "C1",
+      "nome": "Maria Silva",
+      "telefone": "11999998888",
+      "whatsapp": "11999998888",
+      "cpf": "123.456.789-00"
+    }
+  ],
+  "fornecedores": [
+    {
+      "id": "F1",
+      "nome": "Distribuidora ABC",
+      "cnpj": "12.345.678/0001-99",
+      "cidade": "São Paulo",
+      "uf": "SP"
+    }
+  ],
+  "vendas": [
+    {
+      "id": "V1",
+      "data": "2024-01-15 10:00:00",
+      "total": "39,80",
+      "pagamento": "pix",
+      "clienteId": "C1",
+      "itens": [
+        {
+          "nome": "Detergente 500ml",
+          "quantidade": 2,
+          "preco": "19,90",
+          "produtoId": "P1"
+        }
+      ]
+    }
+  ],
+  "campoDesconhecidoXYZ": [
+    {
+      "foo": 1
+    }
+  ]
+}
