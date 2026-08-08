@@ -1,0 +1,30 @@
+{
+  "format": "onca-pdv-backup-v1",
+  "kind": "pre_etapa5",
+  "created_at": "2026-08-08T16:17:34.715Z",
+  "filename": "onca-pdv-backup-2026-08-08-161734.db",
+  "filepath": "server/data/backups/onca-pdv-backup-2026-08-08-161734.db",
+  "size_bytes": 638976,
+  "sha256": "53653bd946e850c07acb6470687060e31e172ac1f89c8c9406d5fe577b0dc880",
+  "counts": {
+    "products": 488,
+    "customers": 7,
+    "sales": 88,
+    "sales_legacy": 87,
+    "sale_items": 211,
+    "suppliers": 0,
+    "credit": 0,
+    "stock_sum": 214762,
+    "sales_total_legacy": 343053,
+    "users": [
+      {
+        "id": 1,
+        "login": "admin",
+        "role": "administrador",
+        "must_change_password": 1
+      }
+    ]
+  },
+  "integrity_check": "ok",
+  "fk_violations": 0
+}
