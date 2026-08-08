@@ -101,12 +101,13 @@ async function main() {
   const alerts = await api('GET', '/api/stock?alerts=1');
   record(7, 'Estoque baixo', alerts.json.some((r) => r.id === prod.json.id));
 
+  const custDoc = `${Date.now()}`.slice(-11).padStart(11, '9');
   const cust = await api('POST', '/api/customers', {
-    name: 'Cliente Review',
-    document: '52998224725',
+    name: `Cliente Review ${Date.now()}`,
+    document: custDoc,
     phone: '11988887777',
   });
-  record(15, 'Cadastro cliente', cust.status === 201, cust.json?.id);
+  record(15, 'Cadastro cliente', cust.status === 201, cust.json?.id || JSON.stringify(cust.json));
 
   const stockBefore = db.prepare('SELECT stock_qty FROM products WHERE id=?').get(prod.json.id).stock_qty;
   const saleWith = await api('POST', '/api/sales', {

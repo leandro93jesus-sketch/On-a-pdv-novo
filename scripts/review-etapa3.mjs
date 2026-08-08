@@ -175,15 +175,19 @@ async function main() {
   record(7, 'Venda no crediário', creditSale.status === 201, creditSale.json?.id);
 
   const accounts = await api('GET', `/api/credit/accounts?customer_id=${customer.json.id}`);
-  const account = accounts.json?.[0];
+  const account = accounts.json?.find((a) => a.sale_id === creditSale.json.id) || accounts.json?.[0];
+  const detail = account
+    ? await api('GET', `/api/credit/accounts/${account.id}`)
+    : { status: 404, json: null };
   record(
     8,
     'Criação de parcelas',
-    !!account && account.installment_count === 3 && (account.installments?.length || 0) >= 3,
-    `account=${account?.id}`
+    detail.status === 200 &&
+      detail.json?.installment_count === 3 &&
+      (detail.json?.installments?.length || 0) === 3,
+    `account=${account?.id} parcels=${detail.json?.installments?.length}`
   );
 
-  const detail = await api('GET', `/api/credit/accounts/${account.id}`);
   const partial = await api('POST', '/api/credit/payments', {
     credit_account_id: account.id,
     amount_cents: 400,
@@ -214,8 +218,9 @@ async function main() {
   const overdueAccounts = await api('GET', `/api/credit/accounts?customer_id=${customer.json.id}`);
   const overdueAcc = overdueAccounts.json.find((a) => a.sale_id === overdueSale.json.id);
   const overdueDetail = await api('GET', `/api/credit/accounts/${overdueAcc.id}`);
-  const hasOverdue = (overdueDetail.json.installments || []).some((i) => i.status === 'vencido')
-    || overdueDetail.json.status === 'vencido';
+  const hasOverdue =
+    (overdueDetail.json.installments || []).some((i) => i.status === 'vencido') ||
+    overdueDetail.json.status === 'vencido';
   record(11, 'Parcela vencida', hasOverdue, overdueDetail.json.status);
 
   const stockBeforeReturn = db
@@ -321,9 +326,6 @@ async function main() {
     'Regressão Etapas 1 e 2',
     saleCash.status === 201 && Array.isArray(products.json) && Array.isArray(customers.json)
   );
-
-  // sanity unused vars
-  void detail;
 
   db.close();
   const failed = results.filter((r) => !r.ok);
