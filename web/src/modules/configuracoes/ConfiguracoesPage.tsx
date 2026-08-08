@@ -2,11 +2,14 @@ import { useEffect, useState } from 'react';
 import {
   changeUserPasswordApi,
   createUserApi,
+  exportDatasetApi,
   fetchAuditLogs,
   fetchPrinterSettings,
   fetchSettings,
+  fetchSupportDiagnostics,
   fetchUsers,
   fileToBase64,
+  generateDiagnosticReportApi,
   getStoredAuthUser,
   removeLogoApi,
   updatePrinterSettingsApi,
@@ -22,7 +25,7 @@ import {
 import { ModuleToolbar, StatusPill } from '../../components/ModuleChrome';
 import BrandLogo from '../../components/BrandLogo';
 
-type Tab = 'empresa' | 'impressoras' | 'pdv' | 'usuarios' | 'auditoria' | 'sobre';
+type Tab = 'empresa' | 'impressoras' | 'pdv' | 'usuarios' | 'auditoria' | 'suporte' | 'exportacao' | 'sobre';
 
 const emptyUser = {
   name: '',
@@ -43,6 +46,8 @@ export default function ConfiguracoesPage() {
   const [logo, setLogo] = useState<LogoMeta | null>(null);
   const [logoTick, setLogoTick] = useState(0);
   const [printers, setPrinters] = useState<PrinterSettings | null>(null);
+  const [supportInfo, setSupportInfo] = useState<Record<string, unknown> | null>(null);
+  const [diagnostic, setDiagnostic] = useState<Record<string, unknown> | null>(null);
   const [osPrinters, setOsPrinters] = useState<Array<{ name: string; displayName?: string; isDefault?: boolean }>>([]);
   const [printerNote, setPrinterNote] = useState<string | null>(null);
   const [users, setUsers] = useState<AppUser[]>([]);
@@ -297,6 +302,8 @@ export default function ConfiguracoesPage() {
             ['pdv', 'PDV'],
             ['usuarios', 'Usuários'],
             ['auditoria', 'Auditoria'],
+            ['exportacao', 'Exportar dados'],
+            ['suporte', 'Suporte'],
             ['sobre', 'Sobre'],
           ] as const
         ).map(([id, label]) => (
@@ -601,6 +608,100 @@ export default function ConfiguracoesPage() {
             uma mensagem clara é exibida.
           </p>
         </>
+      )}
+
+      {tab === 'exportacao' && (
+        <div className="side-card">
+          <h3>Exportar dados (emergência)</h3>
+          <p className="muted-line">Formato CSV. Não inclui senhas.</p>
+          {!isAdmin ? (
+            <div className="alert alert-error">Somente administrador.</div>
+          ) : (
+            <div className="form-grid">
+              {['products', 'stock', 'customers', 'sales', 'credit'].map((ds) => (
+                <button
+                  key={ds}
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={busy}
+                  onClick={() =>
+                    void (async () => {
+                      try {
+                        setBusy(true);
+                        const file = await exportDatasetApi(ds);
+                        const blob = new Blob([file.content], { type: file.mime });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = file.filename;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        setNotice(`Exportado ${ds}: ${file.rows} linha(s).`);
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : 'Erro na exportação');
+                      } finally {
+                        setBusy(false);
+                      }
+                    })()
+                  }
+                >
+                  Exportar {ds}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'suporte' && (
+        <div className="side-card">
+          <h3>Modo suporte</h3>
+          {!isAdmin ? (
+            <div className="alert alert-error">Somente administrador.</div>
+          ) : (
+            <>
+              <ModuleToolbar>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={busy}
+                  onClick={() =>
+                    void (async () => {
+                      try {
+                        setSupportInfo(await fetchSupportDiagnostics());
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : 'Erro no diagnóstico');
+                      }
+                    })()
+                  }
+                >
+                  Atualizar diagnóstico
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={busy}
+                  onClick={() =>
+                    void (async () => {
+                      try {
+                        const report = await generateDiagnosticReportApi();
+                        setDiagnostic(report);
+                        setNotice('Relatório de diagnóstico gerado (sem senhas).');
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : 'Erro ao gerar relatório');
+                      }
+                    })()
+                  }
+                >
+                  Gerar relatório de diagnóstico
+                </button>
+              </ModuleToolbar>
+              <pre className="code-block" style={{ maxHeight: 360, overflow: 'auto' }}>
+                {JSON.stringify(diagnostic || supportInfo || { tip: 'Clique em atualizar diagnóstico' }, null, 2)}
+              </pre>
+            </>
+          )}
+        </div>
       )}
 
       {tab === 'sobre' && (

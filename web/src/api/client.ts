@@ -717,6 +717,23 @@ export function parseBRLToCents(input: string): number | null {
   return Math.round(n * 100);
 }
 
+export function fetchSupportDiagnostics(): Promise<Record<string, unknown>> {
+  return apiFetch('/api/support/diagnostics').then((r) => handle(r));
+}
+
+export function generateDiagnosticReportApi(): Promise<Record<string, unknown>> {
+  return apiFetch('/api/support/diagnostic-report', { method: 'POST' }).then((r) => handle(r));
+}
+
+export function exportDatasetApi(dataset: string): Promise<{
+  filename: string;
+  content: string;
+  rows: number;
+  mime: string;
+}> {
+  return apiFetch(`/api/export/${dataset}`, { method: 'POST' }).then((r) => handle(r));
+}
+
 export function paymentLabel(method: string | null | undefined): string {
   switch (method) {
     case 'dinheiro':

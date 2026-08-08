@@ -21,6 +21,8 @@ import backupsRouter from './routes/backups.js';
 import importsRouter from './routes/imports.js';
 import receiptsRouter from './routes/receipts.js';
 import auditRouter from './routes/audit.js';
+import exportRouter from './routes/export.js';
+import supportRouter from './routes/support.js';
 import { authOptional } from './middleware/auth.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
@@ -45,6 +47,8 @@ export function createApp() {
   app.use('/api/imports', importsRouter);
   app.use('/api/receipts', receiptsRouter);
   app.use('/api/audit', auditRouter);
+  app.use('/api/export', exportRouter);
+  app.use('/api/support', supportRouter);
   app.use('/api/products', productsRouter);
   app.use('/api/sales', salesRouter);
   app.use('/api/stock', stockRouter);
