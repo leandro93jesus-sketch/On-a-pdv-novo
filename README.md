@@ -5,6 +5,7 @@ Sistema profissional de **Ponto de Venda** local-first.
 - **Backend** (`server/`): Node.js + Express + SQLite (`better-sqlite3`)
 - **Frontend** (`web/`): React + TypeScript + Vite
 - **Etapa 1**: arquitetura, shell de navegação e módulo de **Vendas** completo
+- **Etapa 2**: **Produtos**, **Estoque**, **Caixa** e **Clientes** (+ cancelamento pós-venda)
 
 Documentação: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/DECISIONS.md](docs/DECISIONS.md)
 
