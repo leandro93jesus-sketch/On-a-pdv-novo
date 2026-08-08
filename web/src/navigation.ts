@@ -7,10 +7,10 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { path: '/vendas', label: 'Vendas', ready: true, description: 'PDV e finalização de vendas' },
-  { path: '/caixa', label: 'Caixa', ready: false, description: 'Abertura, sangria e fechamento' },
-  { path: '/produtos', label: 'Produtos', ready: false, description: 'Cadastro e preços' },
-  { path: '/estoque', label: 'Estoque', ready: false, description: 'Saldos e movimentações' },
-  { path: '/clientes', label: 'Clientes', ready: false, description: 'Cadastro de clientes' },
+  { path: '/caixa', label: 'Caixa', ready: true, description: 'Abertura, sangria e fechamento' },
+  { path: '/produtos', label: 'Produtos', ready: true, description: 'Cadastro e preços' },
+  { path: '/estoque', label: 'Estoque', ready: true, description: 'Saldos e movimentações' },
+  { path: '/clientes', label: 'Clientes', ready: true, description: 'Cadastro de clientes' },
   { path: '/fornecedores', label: 'Fornecedores', ready: false, description: 'Cadastro de fornecedores' },
   { path: '/compras', label: 'Compras', ready: false, description: 'Entrada de mercadorias' },
   { path: '/crediario', label: 'Crediário', ready: false, description: 'Contas a receber' },

@@ -56,6 +56,19 @@ async function main() {
     process.exit(1);
   }
 
+  // Etapa 2+: vendas exigem caixa aberto
+  const openCash = await api('GET', '/api/cash/sessions/current');
+  if (!openCash.json) {
+    const opened = await api('POST', '/api/cash/sessions/open', {
+      operator_name: 'Revisor E1',
+      opening_amount_cents: 10000,
+    });
+    if (opened.status !== 201) {
+      console.error('Não foi possível abrir caixa para a revisão', opened.json);
+      process.exit(1);
+    }
+  }
+
   const db = openDb();
   const snapshotStock = () =>
     Object.fromEntries(

@@ -1,6 +1,15 @@
 import { getDb } from '../db/index.js';
 import { AppError } from '../utils/errors.js';
 import { assertNonNegativeCents } from '../utils/money.js';
+import { applyStockMovement } from './stockService.js';
+import { getCustomerById } from './customersService.js';
+import {
+  recordSaleCancelOnCash,
+  recordSaleOnCash,
+  requireOpenCashSession,
+} from './cashService.js';
+import { writeAudit } from './auditService.js';
+import { getCurrentOperator } from './settingsService.js';
 
 const PAYMENT_METHODS = new Set(['dinheiro', 'pix', 'cartao']);
 
@@ -25,8 +34,12 @@ function mapSale(row) {
     total_cents: row.total_cents,
     notes: row.notes,
     client_request_id: row.client_request_id ?? null,
+    customer_id: row.customer_id ?? null,
+    cash_session_id: row.cash_session_id ?? null,
     created_at: row.created_at,
     cancelled_at: row.cancelled_at,
+    cancelled_by: row.cancelled_by ?? null,
+    cancel_reason: row.cancel_reason ?? null,
   };
 }
 
@@ -52,10 +65,18 @@ export function getSaleById(id) {
     )
     .all(id);
 
+  let customer = null;
+  if (sale.customer_id) {
+    customer = db
+      .prepare('SELECT id, name, document, phone, whatsapp FROM customers WHERE id = ?')
+      .get(sale.customer_id);
+  }
+
   return {
     ...mapSale(sale),
     items,
     payments,
+    customer,
     payment_method: payments[0]?.method || null,
   };
 }
@@ -75,8 +96,10 @@ export function listSales({ limit = 50 } = {}) {
   const rows = db
     .prepare(
       `SELECT s.*,
-         (SELECT method FROM sale_payments sp WHERE sp.sale_id = s.id ORDER BY sp.id LIMIT 1) AS payment_method
+         (SELECT method FROM sale_payments sp WHERE sp.sale_id = s.id ORDER BY sp.id LIMIT 1) AS payment_method,
+         c.name AS customer_name
        FROM sales s
+       LEFT JOIN customers c ON c.id = s.customer_id
        ORDER BY s.id DESC
        LIMIT ?`
     )
@@ -85,21 +108,10 @@ export function listSales({ limit = 50 } = {}) {
   return rows.map((r) => ({
     ...mapSale(r),
     payment_method: r.payment_method,
+    customer_name: r.customer_name ?? null,
   }));
 }
 
-/**
- * Finaliza uma venda.
- * Payload:
- * {
- *   items: [{ product_id?, name?, quantity, unit_price_cents?, discount_cents?, is_misc? }],
- *   discount_cents?: number,
- *   payments?: [{ method, amount_cents }],
- *   payment_method?: string,
- *   client_request_id?: string,
- *   notes?: string
- * }
- */
 export function createSale(payload = {}) {
   const db = getDb();
   const clientRequestId =
@@ -122,6 +134,15 @@ export function createSale(payload = {}) {
 
   const saleDiscount = assertNonNegativeCents(payload.discount_cents ?? 0, 'discount_cents');
   const notes = typeof payload.notes === 'string' ? payload.notes.trim() : null;
+
+  let customerId = null;
+  if (payload.customer_id != null && payload.customer_id !== '') {
+    const customer = getCustomerById(Number(payload.customer_id));
+    if (!customer.active) {
+      throw new AppError('Cliente inativo', { status: 400, code: 'CUSTOMER_INACTIVE' });
+    }
+    customerId = customer.id;
+  }
 
   const getProduct = db.prepare(
     `SELECT id, name, barcode, price_cents, stock_qty, allow_negative_stock, active
@@ -248,7 +269,6 @@ export function createSale(payload = {}) {
     });
   }
 
-  // Agrega quantidade por produto para baixa de estoque correta
   const stockDemand = new Map();
   for (const item of resolvedItems) {
     if (item.is_misc || !item.product_id) continue;
@@ -257,9 +277,11 @@ export function createSale(payload = {}) {
 
   const insertSale = db.prepare(`
     INSERT INTO sales (
-      sale_number, status, subtotal_cents, discount_cents, total_cents, notes, client_request_id
+      sale_number, status, subtotal_cents, discount_cents, total_cents, notes,
+      client_request_id, customer_id, cash_session_id
     ) VALUES (
-      @sale_number, 'completed', @subtotal_cents, @discount_cents, @total_cents, @notes, @client_request_id
+      @sale_number, 'completed', @subtotal_cents, @discount_cents, @total_cents, @notes,
+      @client_request_id, @customer_id, @cash_session_id
     )
   `);
   const insertItem = db.prepare(`
@@ -275,19 +297,6 @@ export function createSale(payload = {}) {
     INSERT INTO sale_payments (sale_id, method, amount_cents)
     VALUES (?, ?, ?)
   `);
-  const updateStock = db.prepare(`
-    UPDATE products
-    SET stock_qty = @stock_qty, updated_at = datetime('now')
-    WHERE id = @id
-  `);
-  const insertMovement = db.prepare(`
-    INSERT INTO stock_movements (
-      product_id, movement_type, quantity_delta, stock_after, reference_type, reference_id, note
-    ) VALUES (?, 'sale', ?, ?, 'sale', ?, ?)
-  `);
-  const lockProduct = db.prepare(
-    `SELECT id, name, stock_qty, allow_negative_stock FROM products WHERE id = ?`
-  );
 
   let saleId;
   try {
@@ -299,36 +308,7 @@ export function createSale(payload = {}) {
         if (again) return Number(again.id);
       }
 
-      const stockAfterByProduct = new Map();
-      for (const [productId, qty] of stockDemand.entries()) {
-        const current = lockProduct.get(productId);
-        if (!current) {
-          throw new AppError(`Produto ${productId} não encontrado`, {
-            status: 400,
-            code: 'PRODUCT_NOT_FOUND',
-          });
-        }
-        const nextQty = current.stock_qty - qty;
-        if (nextQty < 0 && !current.allow_negative_stock) {
-          throw new AppError(
-            `Estoque insuficiente para "${current.name}". Disponível: ${current.stock_qty}, solicitado: ${qty}`,
-            {
-              status: 409,
-              code: 'STOCK_INSUFFICIENT',
-              details: {
-                product_id: current.id,
-                available: current.stock_qty,
-                requested: qty,
-              },
-            }
-          );
-        }
-        stockAfterByProduct.set(productId, {
-          nextQty,
-          delta: -qty,
-          name: current.name,
-        });
-      }
+      const cashSession = requireOpenCashSession(payload.terminal_id);
 
       const sale_number = nextSaleNumber(db);
       const info = insertSale.run({
@@ -338,6 +318,8 @@ export function createSale(payload = {}) {
         total_cents: total,
         notes,
         client_request_id: clientRequestId,
+        customer_id: customerId,
+        cash_session_id: cashSession.id,
       });
       const id = Number(info.lastInsertRowid);
 
@@ -355,14 +337,18 @@ export function createSale(payload = {}) {
         });
       }
 
-      for (const [productId, infoStock] of stockAfterByProduct.entries()) {
-        updateStock.run({ id: productId, stock_qty: infoStock.nextQty });
-        insertMovement.run(
-          productId,
-          infoStock.delta,
-          infoStock.nextQty,
-          id,
-          `Venda ${sale_number}`
+      for (const [productId, qty] of stockDemand.entries()) {
+        applyStockMovement(
+          {
+            productId,
+            movementType: 'sale',
+            quantity: qty,
+            reason: `Venda ${sale_number}`,
+            referenceType: 'sale',
+            referenceId: id,
+            note: `Venda ${sale_number}`,
+          },
+          { db, skipAudit: true }
         );
       }
 
@@ -370,10 +356,28 @@ export function createSale(payload = {}) {
         insertPayment.run(id, p.method, p.amount_cents);
       }
 
+      recordSaleOnCash(db, {
+        sessionId: cashSession.id,
+        saleId: id,
+        totalCents: total,
+        payments: normalizedPayments,
+      });
+
+      writeAudit({
+        action: 'sale.create',
+        entityType: 'sale',
+        entityId: id,
+        details: {
+          sale_number,
+          total_cents: total,
+          customer_id: customerId,
+          cash_session_id: cashSession.id,
+        },
+      });
+
       return id;
     })();
   } catch (err) {
-    // Corrida rara de idempotência: outro request gravou a mesma chave
     if (clientRequestId && String(err?.message || '').includes('UNIQUE')) {
       const existing = findSaleByClientRequestId(clientRequestId);
       if (existing) return existing;
@@ -389,4 +393,83 @@ export function createSale(payload = {}) {
   }
 
   return getSaleById(saleId);
+}
+
+export function cancelSale(id, payload = {}) {
+  const db = getDb();
+  const reason = typeof payload.reason === 'string' ? payload.reason.trim() : '';
+  if (!reason) {
+    throw new AppError('Motivo do cancelamento é obrigatório', {
+      status: 400,
+      code: 'CANCEL_REASON_REQUIRED',
+    });
+  }
+  const userName = String(payload.user_name || getCurrentOperator()).trim() || getCurrentOperator();
+
+  return db.transaction(() => {
+    const sale = db.prepare('SELECT * FROM sales WHERE id = ?').get(Number(id));
+    if (!sale) {
+      throw new AppError('Venda não encontrada', { status: 404, code: 'SALE_NOT_FOUND' });
+    }
+    if (sale.status === 'cancelled') {
+      throw new AppError('Venda já está cancelada', { status: 409, code: 'SALE_ALREADY_CANCELLED' });
+    }
+
+    const items = db
+      .prepare(
+        `SELECT product_id, quantity, is_misc, name FROM sale_items WHERE sale_id = ?`
+      )
+      .all(Number(id));
+    const payments = db
+      .prepare(`SELECT method, amount_cents FROM sale_payments WHERE sale_id = ?`)
+      .all(Number(id));
+
+    for (const item of items) {
+      if (item.is_misc || !item.product_id) continue;
+      applyStockMovement(
+        {
+          productId: item.product_id,
+          movementType: 'sale_cancel',
+          quantity: item.quantity,
+          reason: `Cancelamento ${sale.sale_number}: ${reason}`,
+          userName,
+          referenceType: 'sale',
+          referenceId: Number(id),
+          note: reason,
+          allowNegative: true,
+        },
+        { db, skipAudit: true }
+      );
+    }
+
+    if (sale.cash_session_id) {
+      recordSaleCancelOnCash(db, {
+        sessionId: sale.cash_session_id,
+        saleId: Number(id),
+        totalCents: sale.total_cents,
+        payments,
+        reason,
+        userName,
+      });
+    }
+
+    db.prepare(
+      `UPDATE sales SET
+         status = 'cancelled',
+         cancelled_at = datetime('now'),
+         cancelled_by = ?,
+         cancel_reason = ?
+       WHERE id = ?`
+    ).run(userName, reason, Number(id));
+
+    writeAudit({
+      action: 'sale.cancel',
+      entityType: 'sale',
+      entityId: Number(id),
+      details: { reason, userName, sale_number: sale.sale_number },
+      userName,
+    });
+
+    return getSaleById(id);
+  })();
 }

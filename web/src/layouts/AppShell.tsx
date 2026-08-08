@@ -32,7 +32,7 @@ export default function AppShell() {
           ))}
         </nav>
 
-        <div className="sidebar-footer">Etapa 1 · Módulo Vendas ativo</div>
+        <div className="sidebar-footer">Etapa 2 · Vendas, Produtos, Estoque, Caixa e Clientes</div>
       </aside>
 
       <div className="main-area">

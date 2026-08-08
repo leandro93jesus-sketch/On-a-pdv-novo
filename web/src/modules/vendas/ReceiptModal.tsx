@@ -4,9 +4,12 @@ import { formatBRL, paymentLabel } from '../../api/client';
 interface Props {
   sale: Sale;
   onClose: () => void;
+  onCancelSale?: (sale: Sale) => void;
 }
 
-export default function ReceiptModal({ sale, onClose }: Props) {
+export default function ReceiptModal({ sale, onClose, onCancelSale }: Props) {
+  const cancelled = sale.status === 'cancelled';
+
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Comprovante da venda">
       <div className="modal">
@@ -24,8 +27,26 @@ export default function ReceiptModal({ sale, onClose }: Props) {
               <strong>Data</strong> {sale.created_at}
             </div>
             <div>
-              <strong>Status</strong> {sale.status === 'completed' ? 'Concluída' : sale.status}
+              <strong>Status</strong> {cancelled ? 'Cancelada' : 'Concluída'}
             </div>
+            {sale.customer?.name && (
+              <div>
+                <strong>Cliente</strong> {sale.customer.name}
+              </div>
+            )}
+            {cancelled && (
+              <>
+                <div>
+                  <strong>Cancelada em</strong> {sale.cancelled_at}
+                </div>
+                <div>
+                  <strong>Motivo</strong> {sale.cancel_reason}
+                </div>
+                <div>
+                  <strong>Responsável</strong> {sale.cancelled_by}
+                </div>
+              </>
+            )}
           </div>
 
           <table>
@@ -73,6 +94,11 @@ export default function ReceiptModal({ sale, onClose }: Props) {
         </div>
 
         <div className="modal-actions no-print">
+          {!cancelled && onCancelSale && (
+            <button type="button" className="btn btn-danger" onClick={() => onCancelSale(sale)}>
+              Cancelar venda
+            </button>
+          )}
           <button type="button" className="btn btn-ghost" onClick={() => window.print()}>
             Imprimir
           </button>

@@ -4,11 +4,19 @@ export interface Product {
   barcode: string | null;
   name: string;
   category: string;
+  unit?: string;
   price_cents: number;
   cost_cents: number;
   stock_qty: number;
+  min_stock_qty?: number;
   allow_negative_stock: number;
+  supplier_id?: number | null;
+  supplier_name?: string | null;
+  notes?: string | null;
   active: number;
+  created_at?: string;
+  updated_at?: string;
+  situation?: string;
 }
 
 export interface SaleItem {
@@ -39,11 +47,85 @@ export interface Sale {
   total_cents: number;
   notes: string | null;
   client_request_id?: string | null;
+  customer_id?: number | null;
+  customer_name?: string | null;
+  customer?: { id: number; name: string; document?: string | null; phone?: string | null } | null;
+  cash_session_id?: number | null;
   created_at: string;
   cancelled_at: string | null;
+  cancelled_by?: string | null;
+  cancel_reason?: string | null;
   payment_method?: string | null;
   items?: SaleItem[];
   payments?: SalePayment[];
+}
+
+export interface Customer {
+  id: number;
+  name: string;
+  document: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  address: string | null;
+  address_number: string | null;
+  neighborhood: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
+  notes: string | null;
+  active: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CashSession {
+  id: number;
+  terminal_id: string;
+  operator_name: string;
+  status: string;
+  opening_amount_cents: number;
+  opened_at: string;
+  closed_at: string | null;
+  sales_total_cents: number;
+  sales_dinheiro_cents: number;
+  sales_pix_cents: number;
+  sales_cartao_cents: number;
+  cash_in_cents: number;
+  cash_out_cents: number;
+  expected_amount_cents: number | null;
+  counted_amount_cents: number | null;
+  difference_cents: number | null;
+  close_notes: string | null;
+}
+
+export interface StockRow {
+  id: number;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  category: string;
+  unit: string;
+  stock_qty: number;
+  min_stock_qty: number;
+  situation: string;
+  last_movement_at: string | null;
+  last_movement_type: string | null;
+}
+
+export interface StockMovement {
+  id: number;
+  product_id: number;
+  product_name: string;
+  sku: string | null;
+  barcode: string | null;
+  movement_type: string;
+  quantity_delta: number;
+  stock_after: number;
+  reason: string | null;
+  user_name: string | null;
+  reference_type: string | null;
+  reference_id: number | null;
+  created_at: string;
 }
 
 export interface CreateSalePayload {
@@ -59,6 +141,7 @@ export interface CreateSalePayload {
   payment_method?: string;
   payments?: Array<{ method: string; amount_cents: number }>;
   client_request_id?: string;
+  customer_id?: number | null;
   notes?: string;
 }
 
@@ -76,12 +159,50 @@ async function handle<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export function fetchProducts(params?: { q?: string; barcode?: string }): Promise<Product[]> {
-  const qs = new URLSearchParams();
-  if (params?.q) qs.set('q', params.q);
-  if (params?.barcode) qs.set('barcode', params.barcode);
-  const query = qs.toString();
-  return fetch(`/api/products${query ? `?${query}` : ''}`).then((r) => handle<Product[]>(r));
+function qs(params: Record<string, string | number | boolean | undefined | null>) {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null || v === '') continue;
+    sp.set(k, String(v));
+  }
+  const s = sp.toString();
+  return s ? `?${s}` : '';
+}
+
+export function fetchProducts(params?: {
+  q?: string;
+  barcode?: string;
+  include_inactive?: boolean;
+}): Promise<Product[]> {
+  return fetch(
+    `/api/products${qs({
+      q: params?.q,
+      barcode: params?.barcode,
+      include_inactive: params?.include_inactive ? '1' : undefined,
+    })}`
+  ).then((r) => handle<Product[]>(r));
+}
+
+export function createProduct(payload: Record<string, unknown>): Promise<Product> {
+  return fetch('/api/products', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<Product>(r));
+}
+
+export function updateProduct(id: number, payload: Record<string, unknown>): Promise<Product> {
+  return fetch(`/api/products/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<Product>(r));
+}
+
+export function deleteProduct(id: number): Promise<{ deleted?: boolean; inactivated?: boolean }> {
+  return fetch(`/api/products/${id}`, { method: 'DELETE' }).then((r) =>
+    handle<{ deleted?: boolean; inactivated?: boolean }>(r)
+  );
 }
 
 export function fetchSales(limit = 50): Promise<Sale[]> {
@@ -100,8 +221,155 @@ export function createSale(payload: CreateSalePayload): Promise<Sale> {
   }).then((r) => handle<Sale>(r));
 }
 
+export function cancelSale(
+  id: number,
+  payload: { reason: string; user_name?: string }
+): Promise<Sale> {
+  return fetch(`/api/sales/${id}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<Sale>(r));
+}
+
+export function fetchCustomers(params?: { q?: string; include_inactive?: boolean }): Promise<Customer[]> {
+  return fetch(
+    `/api/customers${qs({
+      q: params?.q,
+      include_inactive: params?.include_inactive ? '1' : undefined,
+    })}`
+  ).then((r) => handle<Customer[]>(r));
+}
+
+export function createCustomer(payload: Record<string, unknown>): Promise<Customer> {
+  return fetch('/api/customers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<Customer>(r));
+}
+
+export function updateCustomer(id: number, payload: Record<string, unknown>): Promise<Customer> {
+  return fetch(`/api/customers/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<Customer>(r));
+}
+
+export function inactivateCustomer(id: number): Promise<Customer> {
+  return fetch(`/api/customers/${id}/inactivate`, { method: 'POST' }).then((r) =>
+    handle<Customer>(r)
+  );
+}
+
+export function fetchCustomerPurchases(id: number): Promise<Sale[]> {
+  return fetch(`/api/customers/${id}/purchases`).then((r) => handle<Sale[]>(r));
+}
+
+export function fetchStock(params?: { q?: string; alerts?: boolean }): Promise<StockRow[]> {
+  return fetch(
+    `/api/stock${qs({ q: params?.q, alerts: params?.alerts ? '1' : undefined })}`
+  ).then((r) => handle<StockRow[]>(r));
+}
+
+export function fetchStockMovements(params?: {
+  product_id?: number;
+  limit?: number;
+}): Promise<StockMovement[]> {
+  return fetch(
+    `/api/stock/movements${qs({ product_id: params?.product_id, limit: params?.limit })}`
+  ).then((r) => handle<StockMovement[]>(r));
+}
+
+export function createStockMovement(payload: Record<string, unknown>): Promise<{
+  stock_after: number;
+  movement_type: string;
+}> {
+  return fetch('/api/stock/movements', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle(r));
+}
+
+export function fetchOpenCash(): Promise<CashSession | null> {
+  return fetch('/api/cash/sessions/current').then((r) => handle<CashSession | null>(r));
+}
+
+export function fetchCashSessions(limit = 50): Promise<CashSession[]> {
+  return fetch(`/api/cash/sessions?limit=${limit}`).then((r) => handle<CashSession[]>(r));
+}
+
+export function openCash(payload: {
+  operator_name: string;
+  opening_amount_cents: number;
+  terminal_id?: string;
+}): Promise<CashSession> {
+  return fetch('/api/cash/sessions/open', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<CashSession>(r));
+}
+
+export function closeCash(payload: {
+  counted_amount_cents: number;
+  close_notes?: string;
+}): Promise<{ session: CashSession; expected_amount_cents: number; breakdown: Record<string, number> }> {
+  return fetch('/api/cash/sessions/close', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle(r));
+}
+
+export function cashMovement(payload: {
+  movement_type: string;
+  amount_cents: number;
+  reason: string;
+}): Promise<CashSession> {
+  return fetch('/api/cash/movements', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<CashSession>(r));
+}
+
+export function fetchCashConference(id: number): Promise<{
+  session: CashSession;
+  expected_amount_cents: number;
+  breakdown: Record<string, number>;
+}> {
+  return fetch(`/api/cash/sessions/${id}`).then((r) => handle(r));
+}
+
+export function fetchCashMovements(sessionId: number): Promise<
+  Array<{
+    id: number;
+    movement_type: string;
+    amount_cents: number;
+    payment_method: string | null;
+    reason: string | null;
+    user_name: string | null;
+    created_at: string;
+  }>
+> {
+  return fetch(`/api/cash/sessions/${sessionId}/movements`).then((r) => handle(r));
+}
+
 export function formatBRL(cents: number): string {
   return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+export function parseBRLToCents(input: string): number | null {
+  const trimmed = input.trim();
+  if (!trimmed) return 0;
+  if (trimmed.includes('-')) return null;
+  const normalized = trimmed.replace(/\./g, '').replace(',', '.');
+  const n = Number(normalized);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100);
 }
 
 export function paymentLabel(method: string | null | undefined): string {
@@ -112,6 +380,8 @@ export function paymentLabel(method: string | null | undefined): string {
       return 'Pix';
     case 'cartao':
       return 'Cartão';
+    case 'misto':
+      return 'Misto';
     default:
       return method || '—';
   }

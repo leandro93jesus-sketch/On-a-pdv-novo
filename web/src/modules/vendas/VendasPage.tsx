@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  cancelSale as cancelCompletedSale,
   createSale,
+  fetchOpenCash,
   fetchProducts,
   fetchSale,
   fetchSales,
   formatBRL,
   paymentLabel,
+  type CashSession,
+  type Customer,
   type Product,
   type Sale,
 } from '../../api/client';
+import CustomerPicker from './CustomerPicker';
 import MiscItemModal from './MiscItemModal';
 import ReceiptModal from './ReceiptModal';
 import {
@@ -59,6 +64,8 @@ export default function VendasPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showMisc, setShowMisc] = useState(false);
   const [receipt, setReceipt] = useState<Sale | null>(null);
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [cash, setCash] = useState<CashSession | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const searchTimer = useRef<number | null>(null);
   const submittingRef = useRef(false);
@@ -75,10 +82,14 @@ export default function VendasPage() {
     return list;
   }
 
+  async function loadCash() {
+    setCash(await fetchOpenCash());
+  }
+
   useEffect(() => {
     (async () => {
       try {
-        await Promise.all([loadProducts(), loadSales()]);
+        await Promise.all([loadProducts(), loadSales(), loadCash()]);
         setError(null);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Erro ao carregar dados');
@@ -225,6 +236,14 @@ export default function VendasPage() {
       return;
     }
 
+    await loadCash();
+    const openCashNow = await fetchOpenCash();
+    setCash(openCashNow);
+    if (!openCashNow) {
+      setError('Não há caixa aberto. Abra o caixa em Caixa antes de concluir a venda.');
+      return;
+    }
+
     submittingRef.current = true;
     setSubmitting(true);
     setError(null);
@@ -239,6 +258,7 @@ export default function VendasPage() {
         payment_method: payment,
         discount_cents: discountParse.cents,
         client_request_id: requestIdRef.current,
+        customer_id: customer?.id ?? null,
         items: cart.map((line) => ({
           product_id: line.productId,
           name: line.name,
@@ -254,13 +274,35 @@ export default function VendasPage() {
       setDiscountInput('0,00');
       requestIdRef.current = null;
       setNotice(`Venda ${full.sale_number} concluída com sucesso.`);
-      await Promise.all([loadProducts(query.trim() || undefined), loadSales()]);
+      await Promise.all([loadProducts(query.trim() || undefined), loadSales(), loadCash()]);
       searchRef.current?.focus();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erro ao finalizar a venda');
+      const err = e as Error & { code?: string };
+      if (err.code === 'CASH_SESSION_REQUIRED') {
+        setError('Não há caixa aberto. Abra o caixa antes de concluir a venda.');
+      } else {
+        setError(err.message || 'Erro ao finalizar a venda');
+      }
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
+    }
+  }
+
+  async function handleCancelSale(sale: Sale) {
+    const reason = window.prompt('Motivo do cancelamento (obrigatório):');
+    if (reason == null) return;
+    if (!reason.trim()) {
+      setError('Informe o motivo do cancelamento.');
+      return;
+    }
+    try {
+      const cancelled = await cancelCompletedSale(sale.id, { reason: reason.trim() });
+      setReceipt(cancelled);
+      setNotice(`Venda ${cancelled.sale_number} cancelada. Estoque estornado.`);
+      await Promise.all([loadProducts(query.trim() || undefined), loadSales(), loadCash()]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao cancelar venda');
     }
   }
 
@@ -276,6 +318,16 @@ export default function VendasPage() {
   return (
     <div className="sales-layout">
       <section className="sales-main">
+        <div className="sales-status-row">
+          <span className={cash ? 'status-pill status-ok' : 'status-pill status-warn'}>
+            {cash
+              ? `Caixa aberto · ${cash.operator_name}`
+              : 'Caixa fechado — abra o caixa para vender'}
+          </span>
+        </div>
+
+        <CustomerPicker selected={customer} onSelect={setCustomer} />
+
         <div className="search-row">
           <input
             ref={searchRef}
@@ -359,7 +411,11 @@ export default function VendasPage() {
               <tbody>
                 {sales.map((sale) => (
                   <tr key={sale.id}>
-                    <td>{sale.sale_number}</td>
+                    <td>
+                      {sale.sale_number}
+                      {sale.status === 'cancelled' ? ' · cancelada' : ''}
+                      {sale.customer_name ? ` · ${sale.customer_name}` : ''}
+                    </td>
                     <td>{sale.created_at}</td>
                     <td>{paymentLabel(sale.payment_method)}</td>
                     <td>{formatBRL(sale.total_cents)}</td>
@@ -490,7 +546,13 @@ export default function VendasPage() {
         />
       )}
 
-      {receipt && <ReceiptModal sale={receipt} onClose={() => setReceipt(null)} />}
+      {receipt && (
+        <ReceiptModal
+          sale={receipt}
+          onClose={() => setReceipt(null)}
+          onCancelSale={(sale) => void handleCancelSale(sale)}
+        />
+      )}
     </div>
   );
 }

@@ -11,6 +11,7 @@ process.env.PDV_SEED = '0';
 
 const { openDatabase, setDb, closeDb } = await import('./db/index.js');
 const { createApp } = await import('./app.js');
+const { openCashSession } = await import('./services/cashService.js');
 
 let server;
 let baseUrl;
@@ -19,8 +20,8 @@ let db;
 function insertProduct(overrides = {}) {
   const info = db
     .prepare(
-      `INSERT INTO products (sku, barcode, name, category, price_cents, cost_cents, stock_qty, allow_negative_stock, active)
-       VALUES (@sku, @barcode, @name, @category, @price_cents, @cost_cents, @stock_qty, @allow_negative_stock, 1)`
+      `INSERT INTO products (sku, barcode, name, category, price_cents, cost_cents, stock_qty, min_stock_qty, allow_negative_stock, active)
+       VALUES (@sku, @barcode, @name, @category, @price_cents, @cost_cents, @stock_qty, @min_stock_qty, @allow_negative_stock, 1)`
     )
     .run({
       sku: overrides.sku ?? `SKU-${Math.random().toString(36).slice(2, 8)}`,
@@ -30,6 +31,7 @@ function insertProduct(overrides = {}) {
       price_cents: overrides.price_cents ?? 1000,
       cost_cents: overrides.cost_cents ?? 400,
       stock_qty: overrides.stock_qty ?? 10,
+      min_stock_qty: overrides.min_stock_qty ?? 0,
       allow_negative_stock: overrides.allow_negative_stock ?? 0,
     });
   return Number(info.lastInsertRowid);
@@ -43,6 +45,18 @@ async function postSale(body) {
   });
   const json = await res.json();
   return { res, json };
+}
+
+function resetCash() {
+  db.exec(`
+    DELETE FROM cash_movements;
+    DELETE FROM cash_sessions;
+  `);
+  openCashSession({
+    terminal_id: 'TERM-1',
+    operator_name: 'Operador Teste',
+    opening_amount_cents: 10000,
+  });
 }
 
 before(async () => {
@@ -64,7 +78,10 @@ beforeEach(() => {
     DELETE FROM sale_items;
     DELETE FROM sales;
     DELETE FROM products;
+    DELETE FROM customers;
+    DELETE FROM audit_logs;
   `);
+  resetCash();
 });
 
 after(() => {
@@ -115,6 +132,7 @@ test('finaliza venda, persiste e baixa estoque', async () => {
   assert.equal(sale.payment_method, 'pix');
   assert.equal(sale.items.length, 1);
   assert.ok(sale.sale_number.startsWith('VD-'));
+  assert.ok(sale.cash_session_id);
 
   const product = db.prepare('SELECT stock_qty FROM products WHERE id = ?').get(id);
   assert.equal(product.stock_qty, 3);
@@ -321,4 +339,15 @@ test('comprovante e histórico contêm dados completos', async () => {
   assert.ok(row.created_at);
   assert.equal(row.total_cents, sale.total_cents);
   assert.equal(row.payment_method, 'cartao');
+});
+
+test('venda sem caixa aberto é bloqueada', async () => {
+  db.exec(`DELETE FROM cash_movements; DELETE FROM cash_sessions;`);
+  const id = insertProduct({ name: 'Sem Caixa', price_cents: 100, stock_qty: 5 });
+  const { res, json } = await postSale({
+    payment_method: 'dinheiro',
+    items: [{ product_id: id, quantity: 1 }],
+  });
+  assert.equal(res.status, 409);
+  assert.equal(json.code, 'CASH_SESSION_REQUIRED');
 });
