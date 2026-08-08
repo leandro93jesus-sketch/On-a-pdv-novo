@@ -24,6 +24,7 @@
     "review:etapa3": "node scripts/review-etapa3.mjs",
     "review:etapa4": "node scripts/review-etapa4.mjs",
     "review:etapa5": "node scripts/review-etapa5.mjs",
+    "review:fase1": "node scripts/review-fase1.mjs",
     "e2e:etapa3": "node scripts/e2e-etapa3.mjs",
     "e2e:ui:etapa3": "node scripts/e2e-ui-etapa3.mjs",
     "e2e:ui:etapa5": "node scripts/e2e-ui-etapa5.mjs",

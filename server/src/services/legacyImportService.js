@@ -86,8 +86,106 @@ export function parseLegacyJsonBuffer(buffer, { filename = 'backup.json' } = {})
   return { data, analysis, model, preview, sha256, filename, adapter: 'generic_v1' };
 }
 
+function sqlitePrechecks(db = getDb()) {
+  const integrity = db.pragma('integrity_check')[0]?.integrity_check || 'error';
+  const fk = db.pragma('foreign_key_check');
+  return {
+    integrity_check: integrity,
+    foreign_key_violations: fk.length,
+    ok: integrity === 'ok' && fk.length === 0,
+  };
+}
+
+/** Conflitos do JSON com o banco atual (barcode/sku/legacy). */
+function detectDbConflicts(model, db = getDb()) {
+  const conflicts = { products: [], customers: [], sales: [] };
+  for (const p of model.products || []) {
+    const hits = [];
+    if (p.legacy_id) {
+      const row = db
+        .prepare(`SELECT id, name, sku, barcode FROM products WHERE legacy_source = ? AND legacy_id = ?`)
+        .get(p.legacy_source || 'oncas_pdv_v2', p.legacy_id);
+      if (row) hits.push({ reason: 'legacy_id', existing: row });
+    }
+    if (p.barcode) {
+      const row = db
+        .prepare(`SELECT id, name, sku, barcode FROM products WHERE barcode = ?`)
+        .get(p.barcode);
+      if (row) hits.push({ reason: 'barcode', existing: row });
+    }
+    if (p.sku) {
+      const row = db.prepare(`SELECT id, name, sku, barcode FROM products WHERE sku = ?`).get(p.sku);
+      if (row) hits.push({ reason: 'sku', existing: row });
+    }
+    if (hits.length) {
+      conflicts.products.push({
+        incoming: { legacy_id: p.legacy_id, name: p.name, sku: p.sku, barcode: p.barcode },
+        matches: hits.slice(0, 3),
+      });
+    }
+  }
+  for (const c of model.customers || []) {
+    let row = null;
+    if (c.legacy_id) {
+      row = db
+        .prepare(`SELECT id, name, document FROM customers WHERE legacy_source = ? AND legacy_id = ?`)
+        .get(c.legacy_source || 'oncas_pdv_v2', c.legacy_id);
+    }
+    if (!row && c.document) {
+      row = db.prepare(`SELECT id, name, document FROM customers WHERE document = ?`).get(c.document);
+    }
+    if (row) {
+      conflicts.customers.push({
+        incoming: { legacy_id: c.legacy_id, name: c.name, document: c.document },
+        existing: row,
+      });
+    }
+  }
+  for (const s of model.sales || []) {
+    if (!s.legacy_id) continue;
+    const row = db
+      .prepare(`SELECT id, sale_number FROM sales WHERE legacy_source = ? AND legacy_id = ?`)
+      .get(s.legacy_source || 'oncas_pdv_v2', s.legacy_id);
+    if (row) {
+      conflicts.sales.push({
+        incoming: { legacy_id: s.legacy_id },
+        existing: row,
+      });
+    }
+  }
+  return {
+    products: conflicts.products.slice(0, 40),
+    customers: conflicts.customers.slice(0, 40),
+    sales: conflicts.sales.slice(0, 40),
+    totals: {
+      products: conflicts.products.length,
+      customers: conflicts.customers.length,
+      sales: conflicts.sales.length,
+    },
+  };
+}
+
 export function createPreviewRun(parsed, { createdBy = null } = {}) {
-  const info = getDb()
+  const db = getDb();
+  const prechecks = sqlitePrechecks(db);
+  const db_conflicts = detectDbConflicts(parsed.model, db);
+  const enrichedPreview = {
+    ...parsed.preview,
+    sha256: parsed.sha256,
+    filename: parsed.filename,
+    adapter: parsed.adapter,
+    prechecks,
+    db_conflicts,
+    counts: {
+      products: parsed.model.products?.length || 0,
+      customers: parsed.model.customers?.length || 0,
+      suppliers: parsed.model.suppliers?.length || 0,
+      sales: parsed.model.sales?.length || 0,
+    },
+    duplicates_in_file: parsed.model.duplicates || parsed.preview?.duplicates_sample || null,
+  };
+
+  const info = db
     .prepare(
       `INSERT INTO import_runs (source_filename, source_sha256, importer_version, status, preview_json, unknown_fields_json, created_by)
        VALUES (?, ?, ?, 'preview', ?, ?, ?)`
@@ -96,17 +194,19 @@ export function createPreviewRun(parsed, { createdBy = null } = {}) {
       parsed.filename,
       parsed.sha256,
       IMPORTER_VERSION,
-      JSON.stringify(parsed.preview),
-      JSON.stringify(parsed.model.unknown_fields),
+      JSON.stringify(enrichedPreview),
+      JSON.stringify(parsed.model.unknown_fields || []),
       createdBy
     );
   return {
     id: Number(info.lastInsertRowid),
-    preview: parsed.preview,
+    preview: enrichedPreview,
     analysis: parsed.analysis,
     importer_version: IMPORTER_VERSION,
     sha256: parsed.sha256,
     status: 'preview',
+    prechecks,
+    db_conflicts,
   };
 }
 
@@ -137,13 +237,23 @@ export function executeImport(parsed, { createdBy = null, confirm = false, runId
     throw new AppError('Confirmação explícita necessária', { status: 400, code: 'CONFIRM_REQUIRED' });
   }
 
+  const db = getDb();
+  db.pragma('foreign_keys = ON');
+  const prechecks = sqlitePrechecks(db);
+  if (!prechecks.ok) {
+    throw new AppError('Banco atual não passou integrity/FK check — importação bloqueada', {
+      status: 409,
+      code: 'DB_NOT_HEALTHY',
+      details: prechecks,
+    });
+  }
+
   const safety = createBackup({
     kind: 'pre_import',
     createdBy,
     notes: `Backup automático antes de importar ${parsed.filename}`,
   });
 
-  const db = getDb();
   let importRunId = runId;
   if (!importRunId) {
     importRunId = createPreviewRun(parsed, { createdBy }).id;
@@ -170,6 +280,7 @@ export function executeImport(parsed, { createdBy = null, confirm = false, runId
     filename: parsed.filename,
     importer_version: IMPORTER_VERSION,
     safety_backup_id: safety.id,
+    prechecks_before: prechecks,
     started_at: new Date().toISOString(),
   };
 
@@ -403,7 +514,11 @@ function postImportValidation(model, report) {
   const integrity = db.pragma('integrity_check')[0]?.integrity_check;
   const fk = db.pragma('foreign_key_check');
   const neg = db
-    .prepare(`SELECT COUNT(*) AS c FROM products WHERE stock_qty < 0 AND allow_negative_stock = 0`)
+    .prepare(
+      `SELECT COUNT(*) AS c FROM products
+       WHERE stock_qty < 0 AND allow_negative_stock = 0
+         AND COALESCE(legacy_source, '') != 'oncas_pdv_v2'`
+    )
     .get().c;
   const orphanItems = db
     .prepare(

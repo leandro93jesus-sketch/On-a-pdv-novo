@@ -2,6 +2,8 @@ import { getDb } from '../db/index.js';
 import { getSetting, setSetting } from './settingsService.js';
 import { writeAudit } from './auditService.js';
 import { AppError } from '../utils/errors.js';
+import { getLogoMeta } from './logoService.js';
+import { getPrinterSettings } from './printerSettingsService.js';
 
 const COMPANY_KEYS = [
   'store_name',
@@ -37,7 +39,13 @@ export function getSettingsBundle() {
   const pdv = {};
   for (const k of COMPANY_KEYS) company[k] = getSetting(k, '');
   for (const k of PDV_KEYS) pdv[k] = getSetting(k, '');
-  return { company, pdv, app_version: getSetting('app_version', '0.4.0') };
+  return {
+    company,
+    pdv,
+    logo: getLogoMeta(),
+    printers: getPrinterSettings(),
+    app_version: getSetting('app_version', '1.0.0'),
+  };
 }
 
 export function updateSettings(patch, userName) {
@@ -67,6 +75,7 @@ export function updateSettings(patch, userName) {
 }
 
 export function getCompanyForReceipt() {
+  const logo = getLogoMeta();
   return {
     store_name: getSetting('store_name', 'ONÇA PDV'),
     store_trade_name: getSetting('store_trade_name', 'ONÇA PRODUTOS DE LIMPEZA'),
@@ -75,6 +84,7 @@ export function getCompanyForReceipt() {
     store_phone: getSetting('store_phone', ''),
     store_whatsapp: getSetting('store_whatsapp', ''),
     receipt_message: getSetting('receipt_message', 'Obrigado pela preferência!'),
+    logo,
   };
 }
 

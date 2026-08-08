@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { NAV_ITEMS } from '../navigation';
 import { clearAuth, getStoredAuthUser, logoutApi } from '../api/client';
+import BrandLogo from '../components/BrandLogo';
 
 function titleForPath(pathname: string) {
   const item = NAV_ITEMS.find((n) => n.path === pathname);
@@ -27,7 +28,7 @@ export default function AppShell() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-block">
-          <div className="brand-mark">ON</div>
+          <BrandLogo size={48} />
           <h1>ONÇA PDV</h1>
           <p>Ponto de Venda</p>
         </div>

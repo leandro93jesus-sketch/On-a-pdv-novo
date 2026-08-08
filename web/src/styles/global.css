@@ -639,6 +639,13 @@ a {
   letter-spacing: 0.04em;
 }
 
+.brand-logo {
+  display: block;
+  border-radius: 8px;
+  background: #fff;
+  object-fit: contain;
+}
+
 .pay-btn.active {
   border-color: var(--brand);
   background: #e8f3ee;
@@ -732,6 +739,9 @@ a {
 }
 
 .receipt-header {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
   text-align: center;
   border-bottom: 1px dashed var(--border-strong);
   padding-bottom: 12px;

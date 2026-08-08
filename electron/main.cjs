@@ -6,7 +6,7 @@
  * - Empacotado: Node embutido em resources/node (não usa ABI do Electron)
  * - Dev: Node do PATH / process.env.PDV_NODE_PATH
  */
-const { app, BrowserWindow, dialog, shell, Menu } = require('electron');
+const { app, BrowserWindow, dialog, shell, Menu, ipcMain } = require('electron');
 const { spawn } = require('node:child_process');
 const http = require('node:http');
 const path = require('node:path');
@@ -186,11 +186,72 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+function registerPrinterIpc() {
+  ipcMain.handle('printers:list', async () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return { printers: [], error: 'Janela indisponível' };
+    }
+    try {
+      const printers = await mainWindow.webContents.getPrintersAsync();
+      return {
+        printers: (printers || []).map((p) => ({
+          name: p.name,
+          displayName: p.displayName || p.name,
+          description: p.description || '',
+          status: p.status,
+          isDefault: Boolean(p.isDefault),
+        })),
+      };
+    } catch (err) {
+      return { printers: [], error: err.message || 'Falha ao listar impressoras' };
+    }
+  });
+
+  ipcMain.handle('printers:test', async (_evt, opts = {}) => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return { ok: false, error: 'Janela indisponível' };
+    }
+    const deviceName = opts.deviceName || undefined;
+    const copies = Math.max(1, Number(opts.copies || 1));
+    return new Promise((resolve) => {
+      try {
+        mainWindow.webContents.print(
+          {
+            silent: Boolean(deviceName),
+            printBackground: true,
+            deviceName,
+            copies,
+            margins: { marginType: 'default' },
+          },
+          (success, failureReason) => {
+            if (!success) {
+              resolve({
+                ok: false,
+                error:
+                  failureReason ||
+                  'Impressora indisponível ou impressão cancelada. A venda não é afetada.',
+              });
+              return;
+            }
+            resolve({ ok: true });
+          }
+        );
+      } catch (err) {
+        resolve({
+          ok: false,
+          error: err.message || 'Falha ao imprimir. A venda não é afetada.',
+        });
+      }
+    });
+  });
+}
+
 async function boot() {
   const port = resolvePort();
   try {
     startApiServer(port);
     await waitForHealth(port);
+    registerPrinterIpc();
     buildMenu();
     await createWindow(port);
   } catch (err) {

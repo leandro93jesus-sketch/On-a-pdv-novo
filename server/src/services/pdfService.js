@@ -1,6 +1,7 @@
 import PDFDocument from 'pdfkit';
 import { getSaleById } from './salesService.js';
 import { getCompanyForReceipt } from './settingsAppService.js';
+import { readLogoBuffer } from './logoService.js';
 import { AppError } from '../utils/errors.js';
 
 function brl(cents) {
@@ -20,6 +21,7 @@ export async function buildSaleReceiptPdf(saleId) {
   const sale = getSaleById(saleId);
   if (!sale) throw new AppError('Venda não encontrada', { status: 404, code: 'NOT_FOUND' });
   const company = getCompanyForReceipt();
+  const logo = readLogoBuffer();
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 48 });
@@ -27,6 +29,17 @@ export async function buildSaleReceiptPdf(saleId) {
     doc.on('data', (c) => chunks.push(c));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
+
+    if (logo?.buffer) {
+      try {
+        const logoW = 72;
+        const x = (doc.page.width - logoW) / 2;
+        doc.image(logo.buffer, x, doc.y, { width: logoW, height: 72, fit: [72, 72], align: 'center' });
+        doc.moveDown(0.6);
+      } catch {
+        /* logo inválido — segue só com texto */
+      }
+    }
 
     const title = company.store_trade_name || company.store_name || 'ONÇA PRODUTOS DE LIMPEZA';
     doc.fontSize(16).fillColor('#0f3d2e').text(title, { align: 'center' });

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { getAuthToken, getStoredAuthUser, loginApi } from '../../api/client';
+import BrandLogo from '../../components/BrandLogo';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -39,7 +40,7 @@ export default function LoginPage() {
     <div className="login-page">
       <form className="login-card" onSubmit={(e) => void onSubmit(e)}>
         <div className="login-brand">
-          <div className="brand-mark">ON</div>
+          <BrandLogo size={56} />
           <h1>ONÇA PDV</h1>
           <p>Acesso ao sistema · v1.0.0</p>
         </div>

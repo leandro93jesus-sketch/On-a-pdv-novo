@@ -775,9 +775,32 @@ export function fetchDelivery(id: number): Promise<Delivery> {
 
 /* ─── Etapa 4: Auth, Settings, Users, Reports, Backup, Import, Audit ─── */
 
+export interface LogoMeta {
+  has_logo: boolean;
+  filename?: string | null;
+  mime?: string | null;
+  url?: string | null;
+}
+
+export interface PrinterSettings {
+  use_windows_default: boolean;
+  receipt_printer: string;
+  reports_printer: string;
+  default_printer: string;
+  profile: {
+    format: string;
+    copies: number;
+    auto_print: boolean;
+    mode: string;
+  };
+  note?: string;
+}
+
 export interface SettingsBundle {
   company: Record<string, string>;
   pdv: Record<string, string>;
+  logo?: LogoMeta;
+  printers?: PrinterSettings;
   app_version?: string;
 }
 
@@ -894,6 +917,36 @@ export function updateSettings(payload: Record<string, unknown>): Promise<Settin
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   }).then((r) => handle<SettingsBundle>(r));
+}
+
+export function fetchLogoMeta(): Promise<LogoMeta> {
+  return apiFetch('/api/settings/logo/meta').then((r) => handle<LogoMeta>(r));
+}
+
+export function uploadLogoApi(filename: string, content_base64: string): Promise<LogoMeta> {
+  return apiFetch('/api/settings/logo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, content_base64 }),
+  }).then((r) => handle<LogoMeta>(r));
+}
+
+export function removeLogoApi(): Promise<LogoMeta> {
+  return apiFetch('/api/settings/logo', { method: 'DELETE' }).then((r) => handle<LogoMeta>(r));
+}
+
+export function fetchPrinterSettings(): Promise<PrinterSettings> {
+  return apiFetch('/api/settings/printers').then((r) => handle<PrinterSettings>(r));
+}
+
+export function updatePrinterSettingsApi(
+  payload: Partial<PrinterSettings> & { profile?: Partial<PrinterSettings['profile']> }
+): Promise<PrinterSettings> {
+  return apiFetch('/api/settings/printers', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<PrinterSettings>(r));
 }
 
 export function fetchUsers(): Promise<AppUser[]> {

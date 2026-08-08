@@ -3,18 +3,26 @@ import {
   changeUserPasswordApi,
   createUserApi,
   fetchAuditLogs,
+  fetchPrinterSettings,
   fetchSettings,
   fetchUsers,
+  fileToBase64,
   getStoredAuthUser,
+  removeLogoApi,
+  updatePrinterSettingsApi,
   updateSettings,
   updateUserApi,
+  uploadLogoApi,
   type AppUser,
   type AuditLog,
+  type LogoMeta,
+  type PrinterSettings,
   type SettingsBundle,
 } from '../../api/client';
 import { ModuleToolbar, StatusPill } from '../../components/ModuleChrome';
+import BrandLogo from '../../components/BrandLogo';
 
-type Tab = 'empresa' | 'pdv' | 'usuarios' | 'auditoria';
+type Tab = 'empresa' | 'impressoras' | 'pdv' | 'usuarios' | 'auditoria' | 'sobre';
 
 const emptyUser = {
   name: '',
@@ -32,6 +40,11 @@ export default function ConfiguracoesPage() {
   const [settings, setSettings] = useState<SettingsBundle | null>(null);
   const [company, setCompany] = useState<Record<string, string>>({});
   const [pdv, setPdv] = useState<Record<string, string>>({});
+  const [logo, setLogo] = useState<LogoMeta | null>(null);
+  const [logoTick, setLogoTick] = useState(0);
+  const [printers, setPrinters] = useState<PrinterSettings | null>(null);
+  const [osPrinters, setOsPrinters] = useState<Array<{ name: string; displayName?: string; isDefault?: boolean }>>([]);
+  const [printerNote, setPrinterNote] = useState<string | null>(null);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [audit, setAudit] = useState<AuditLog[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +63,21 @@ export default function ConfiguracoesPage() {
     setSettings(bundle);
     setCompany({ ...(bundle.company || {}) });
     setPdv({ ...(bundle.pdv || {}) });
+    setLogo(bundle.logo || null);
+    setPrinters(bundle.printers || (await fetchPrinterSettings()));
+  }
+
+  async function loadOsPrinters() {
+    if (!window.oncaDesktop?.listPrinters) {
+      setOsPrinters([]);
+      setPrinterNote(
+        'Listagem de impressoras instaladas disponível no aplicativo desktop Windows. As preferências abaixo serão salvas e usadas quando o desktop estiver ativo.'
+      );
+      return;
+    }
+    const res = await window.oncaDesktop.listPrinters();
+    setOsPrinters(res.printers || []);
+    setPrinterNote(res.error || null);
   }
 
   async function loadUsers() {
@@ -72,6 +100,7 @@ export default function ConfiguracoesPage() {
     void (async () => {
       try {
         await loadSettings();
+        await loadOsPrinters();
         if (isAdmin) {
           await loadUsers();
           await loadAudit();
@@ -83,6 +112,88 @@ export default function ConfiguracoesPage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load
   }, []);
+
+  async function handleLogoUpload(file: File | null) {
+    if (!file || !isAdmin) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const b64 = await fileToBase64(file);
+      const meta = await uploadLogoApi(file.name, b64);
+      setLogo(meta);
+      setLogoTick((n) => n + 1);
+      setNotice('Logo salvo. Persistente na pasta de dados do usuário.');
+      await loadSettings();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao enviar logo');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleLogoRemove() {
+    if (!isAdmin) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const meta = await removeLogoApi();
+      setLogo(meta);
+      setLogoTick((n) => n + 1);
+      setNotice('Logo removido.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao remover logo');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function savePrinters() {
+    if (!isAdmin || !printers) {
+      setError('Apenas administradores podem alterar impressoras.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await updatePrinterSettingsApi(printers);
+      setPrinters(saved);
+      setNotice('Configurações de impressoras salvas.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao salvar impressoras');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function testPrint() {
+    setError(null);
+    setNotice(null);
+    if (!window.oncaDesktop?.testPrint) {
+      setError(
+        'Teste de impressão disponível no aplicativo desktop Windows. A venda não é afetada por falhas de impressora.'
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      const deviceName = printers?.use_windows_default
+        ? undefined
+        : printers?.receipt_printer || printers?.default_printer || undefined;
+      const res = await window.oncaDesktop.testPrint({
+        deviceName,
+        copies: printers?.profile.copies || 1,
+      });
+      if (!res.ok) {
+        setError(res.error || 'Impressora indisponível. A venda não é afetada.');
+      } else {
+        setNotice('Teste de impressão enviado.');
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha no teste de impressão');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function saveSettings(section: 'company' | 'pdv') {
     if (!isAdmin) {
@@ -182,9 +293,11 @@ export default function ConfiguracoesPage() {
         {(
           [
             ['empresa', 'Empresa'],
+            ['impressoras', 'Impressoras'],
             ['pdv', 'PDV'],
             ['usuarios', 'Usuários'],
             ['auditoria', 'Auditoria'],
+            ['sobre', 'Sobre'],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -203,6 +316,37 @@ export default function ConfiguracoesPage() {
 
       {tab === 'empresa' && (
         <>
+          <div className="side-card" style={{ marginBottom: 16 }}>
+            <h3>Logo oficial da loja</h3>
+            <p className="muted-line">
+              PNG, JPG, JPEG ou WEBP. Salvo na pasta de dados do usuário (não é apagado em
+              atualizações). Sem logo oficial, permanece a marca ON.
+            </p>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginTop: 12 }}>
+              <BrandLogo key={logoTick} size={72} />
+              <div className="modal-fields" style={{ flex: 1 }}>
+                <label>
+                  Selecionar logo
+                  <input
+                    type="file"
+                    accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                    disabled={!isAdmin || busy}
+                    onChange={(e) => void handleLogoUpload(e.target.files?.[0] || null)}
+                  />
+                </label>
+                <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={!isAdmin || busy || !logo?.has_logo}
+                    onClick={() => void handleLogoRemove()}
+                  >
+                    Remover logo
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
           <div className="form-grid">
             <label className="span-2">
               Nome da loja
@@ -291,6 +435,194 @@ export default function ConfiguracoesPage() {
             )}
           </div>
         </>
+      )}
+
+      {tab === 'impressoras' && printers && (
+        <>
+          <p className="muted-line" style={{ marginBottom: 12 }}>
+            {printerNote || printers.note}
+          </p>
+          <div className="form-grid">
+            <label className="check-inline span-2">
+              <input
+                type="checkbox"
+                checked={printers.use_windows_default}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setPrinters({ ...printers, use_windows_default: e.target.checked })
+                }
+              />
+              Usar impressora padrão do Windows
+            </label>
+            <label>
+              Impressora de comprovante
+              <select
+                className="field-input"
+                disabled={!isAdmin || printers.use_windows_default}
+                value={printers.receipt_printer}
+                onChange={(e) => setPrinters({ ...printers, receipt_printer: e.target.value })}
+              >
+                <option value="">— padrão / não definida —</option>
+                {osPrinters.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.displayName || p.name}
+                    {p.isDefault ? ' (padrão Windows)' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Impressora de relatórios
+              <select
+                className="field-input"
+                disabled={!isAdmin || printers.use_windows_default}
+                value={printers.reports_printer}
+                onChange={(e) => setPrinters({ ...printers, reports_printer: e.target.value })}
+              >
+                <option value="">— padrão / não definida —</option>
+                {osPrinters.map((p) => (
+                  <option key={`r-${p.name}`} value={p.name}>
+                    {p.displayName || p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Impressora padrão do ONÇA PDV
+              <select
+                className="field-input"
+                disabled={!isAdmin || printers.use_windows_default}
+                value={printers.default_printer}
+                onChange={(e) => setPrinters({ ...printers, default_printer: e.target.value })}
+              >
+                <option value="">— padrão Windows —</option>
+                {osPrinters.map((p) => (
+                  <option key={`d-${p.name}`} value={p.name}>
+                    {p.displayName || p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Formato
+              <select
+                className="field-input"
+                disabled={!isAdmin}
+                value={printers.profile.format}
+                onChange={(e) =>
+                  setPrinters({
+                    ...printers,
+                    profile: { ...printers.profile, format: e.target.value },
+                  })
+                }
+              >
+                <option value="A4">A4</option>
+                <option value="80mm">80 mm</option>
+                <option value="58mm">58 mm</option>
+              </select>
+            </label>
+            <label>
+              Cópias
+              <input
+                className="field-input"
+                type="number"
+                min={1}
+                max={10}
+                disabled={!isAdmin}
+                value={printers.profile.copies}
+                onChange={(e) =>
+                  setPrinters({
+                    ...printers,
+                    profile: { ...printers.profile, copies: Number(e.target.value) || 1 },
+                  })
+                }
+              />
+            </label>
+            <label>
+              Modo
+              <select
+                className="field-input"
+                disabled={!isAdmin}
+                value={printers.profile.mode}
+                onChange={(e) =>
+                  setPrinters({
+                    ...printers,
+                    profile: { ...printers.profile, mode: e.target.value },
+                  })
+                }
+              >
+                <option value="manual">Impressão manual</option>
+                <option value="auto">Impressão automática</option>
+              </select>
+            </label>
+            <label className="check-inline span-2">
+              <input
+                type="checkbox"
+                disabled={!isAdmin}
+                checked={printers.profile.auto_print}
+                onChange={(e) =>
+                  setPrinters({
+                    ...printers,
+                    profile: { ...printers.profile, auto_print: e.target.checked },
+                  })
+                }
+              />
+              Impressão automática quando aplicável
+            </label>
+          </div>
+          <div className="modal-actions" style={{ justifyContent: 'flex-start', marginTop: 12 }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={busy || !isAdmin}
+              onClick={() => void savePrinters()}
+            >
+              Salvar impressoras
+            </button>
+            <button
+              type="button"
+              className="btn btn-accent"
+              disabled={busy}
+              onClick={() => void testPrint()}
+            >
+              Testar impressão
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={busy}
+              onClick={() => void loadOsPrinters()}
+            >
+              Atualizar lista
+            </button>
+          </div>
+          <p className="muted-line" style={{ marginTop: 12 }}>
+            Se a impressora estiver desligada, a venda concluída não é cancelada nem travada — apenas
+            uma mensagem clara é exibida.
+          </p>
+        </>
+      )}
+
+      {tab === 'sobre' && (
+        <div className="side-card">
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            <BrandLogo key={`sobre-${logoTick}`} size={80} />
+            <div>
+              <h3>ONÇA PDV</h3>
+              <p className="muted-line">ONÇA Produtos de Limpeza</p>
+              <div className="kv-list" style={{ marginTop: 12 }}>
+                <div>
+                  <span>Versão</span>
+                  <strong>{settings?.app_version || '1.0.0'}</strong>
+                </div>
+                <div>
+                  <span>Logo</span>
+                  <strong>{logo?.has_logo ? 'Configurado' : 'Marca padrão (ON)'}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {tab === 'pdv' && (

@@ -6,6 +6,7 @@ import {
   paymentLabel,
   whatsappShareApi,
 } from '../../api/client';
+import BrandLogo from '../../components/BrandLogo';
 
 interface Props {
   sale: Sale;
@@ -49,6 +50,7 @@ export default function ReceiptModal({ sale, onClose, onCancelSale, companyName 
       <div className="modal">
         <div className="receipt" data-testid="receipt">
           <div className="receipt-header">
+            <BrandLogo size={40} />
             <strong>{brand}</strong>
             <span>COMPROVANTE DE VENDA</span>
           </div>

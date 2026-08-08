@@ -46,11 +46,17 @@ export function getLogsDir() {
   return join(getDataDir(), 'logs');
 }
 
+/** Pasta persistente de assets do usuário (logo etc.) — fora da instalação. */
+export function getAssetsDir() {
+  return join(getDataDir(), 'assets');
+}
+
 export function ensureDataDir() {
   const dataDir = getDataDir();
   mkdirSync(dataDir, { recursive: true });
   mkdirSync(getBackupsDir(), { recursive: true });
   mkdirSync(getLogsDir(), { recursive: true });
+  mkdirSync(getAssetsDir(), { recursive: true });
   mkdirSync(dirname(getDbPath()), { recursive: true });
   return dataDir;
 }

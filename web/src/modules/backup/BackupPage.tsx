@@ -191,14 +191,14 @@ export default function BackupPage() {
           className={`tab${tab === 'backup' ? ' active' : ''}`}
           onClick={() => setTab('backup')}
         >
-          Backup / Restauração
+          Restaurar Backup ONÇA PDV (.db)
         </button>
         <button
           type="button"
           className={`tab${tab === 'import' ? ' active' : ''}`}
           onClick={() => setTab('import')}
         >
-          Importar JSON antigo
+          Importar Backup Antigo JSON
         </button>
       </div>
 
@@ -207,6 +207,10 @@ export default function BackupPage() {
 
       {tab === 'backup' ? (
         <>
+          <p className="muted-line" style={{ marginBottom: 12 }}>
+            Esta aba trabalha apenas com backups <strong>.db</strong> do ONÇA PDV atual. JSON do
+            sistema antigo fica na outra aba.
+          </p>
           <ModuleToolbar>
             <button
               type="button"
@@ -325,9 +329,14 @@ export default function BackupPage() {
         </>
       ) : (
         <>
+          <p className="muted-line" style={{ marginBottom: 12 }}>
+            <strong>IMPORTAR SISTEMA ANTIGO</strong> — arquivo <strong>.json</strong> (não é
+            restauração SQLite). Fluxo: validar → SHA-256 → preview → backup de segurança →
+            importação em transaction (rollback em erro).
+          </p>
           <ModuleToolbar>
             <label className="toolbar-field">
-              Arquivo JSON
+              Arquivo JSON antigo
               <input
                 type="file"
                 accept=".json,application/json"
@@ -345,7 +354,7 @@ export default function BackupPage() {
               disabled={busy || !importFile}
               onClick={() => void previewImport()}
             >
-              Pré-visualizar
+              Validar e pré-visualizar
             </button>
             <button
               type="button"
@@ -353,30 +362,115 @@ export default function BackupPage() {
               disabled={busy || !importPreview || !importConfirm}
               onClick={() => void runImport()}
             >
-              Executar importação
+              Importar Backup Antigo JSON
             </button>
           </ModuleToolbar>
 
           {importPreview && (
             <div className="side-card import-preview">
               <h3>Prévia da importação #{importPreview.id}</h3>
-              <pre className="code-block">
-                {JSON.stringify(
-                  {
-                    analysis: importPreview.analysis,
-                    preview: importPreview.preview,
-                  },
-                  null,
-                  2
-                )}
-              </pre>
-              <label className="check-inline">
+              <div className="kv-list" style={{ marginBottom: 12 }}>
+                <div>
+                  <span>SHA-256</span>
+                  <strong style={{ fontSize: '0.8rem', wordBreak: 'break-all' }}>
+                    {String(importPreview.sha256 || importPreview.preview?.sha256 || '—')}
+                  </strong>
+                </div>
+                <div>
+                  <span>Adaptador</span>
+                  <strong>
+                    {String(
+                      (importPreview.preview as { adapter?: string } | undefined)?.adapter ||
+                        importPreview.analysis?.adapter ||
+                        '—'
+                    )}
+                  </strong>
+                </div>
+                <div>
+                  <span>Integridade atual</span>
+                  <strong>
+                    {String(
+                      (importPreview.prechecks as { integrity_check?: string } | undefined)
+                        ?.integrity_check ||
+                        (importPreview.preview as { prechecks?: { integrity_check?: string } })
+                          ?.prechecks?.integrity_check ||
+                        '—'
+                    )}
+                  </strong>
+                </div>
+                <div>
+                  <span>FK atuais</span>
+                  <strong>
+                    {String(
+                      (importPreview.prechecks as { foreign_key_violations?: number } | undefined)
+                        ?.foreign_key_violations ??
+                        (importPreview.preview as { prechecks?: { foreign_key_violations?: number } })
+                          ?.prechecks?.foreign_key_violations ??
+                        '—'
+                    )}
+                  </strong>
+                </div>
+              </div>
+              <div className="cash-grid" style={{ marginBottom: 12 }}>
+                <div className="side-card">
+                  <h3>Registros no arquivo</h3>
+                  <pre className="code-block">
+                    {JSON.stringify(
+                      (importPreview.preview as { counts?: unknown })?.counts ||
+                        importPreview.preview,
+                      null,
+                      2
+                    )}
+                  </pre>
+                </div>
+                <div className="side-card">
+                  <h3>Conflitos com banco atual</h3>
+                  <pre className="code-block">
+                    {JSON.stringify(
+                      (importPreview.db_conflicts as { totals?: unknown } | undefined)?.totals ||
+                        (importPreview.preview as { db_conflicts?: { totals?: unknown } })
+                          ?.db_conflicts?.totals ||
+                        {},
+                      null,
+                      2
+                    )}
+                  </pre>
+                </div>
+                <div className="side-card">
+                  <h3>Duplicidades no arquivo</h3>
+                  <pre className="code-block">
+                    {JSON.stringify(
+                      (importPreview.preview as { possiveis_duplicidades?: unknown })
+                        ?.possiveis_duplicidades ??
+                        (importPreview.preview as { duplicates_sample?: unknown })
+                          ?.duplicates_sample ??
+                        {},
+                      null,
+                      2
+                    )}
+                  </pre>
+                </div>
+              </div>
+              <details>
+                <summary>Detalhes técnicos da prévia</summary>
+                <pre className="code-block">
+                  {JSON.stringify(
+                    {
+                      analysis: importPreview.analysis,
+                      preview: importPreview.preview,
+                    },
+                    null,
+                    2
+                  )}
+                </pre>
+              </details>
+              <label className="check-inline" style={{ marginTop: 12 }}>
                 <input
                   type="checkbox"
                   checked={importConfirm}
                   onChange={(e) => setImportConfirm(e.target.checked)}
                 />
-                Confirmo a importação (será criado backup automático antes)
+                Confirmo a importação (backup automático + integrity/FK; rollback em erro crítico)
               </label>
             </div>
           )}
