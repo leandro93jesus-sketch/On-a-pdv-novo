@@ -312,3 +312,63 @@ export function closeCashSession(payload = {}) {
     return getCashConference(session.id);
   })();
 }
+
+/** Correção após fechamento: gera ajuste auditado (nunca alteração silenciosa). */
+export function adjustClosedCashSession(sessionId, payload = {}) {
+  const db = getDb();
+  const session = db.prepare(`SELECT * FROM cash_sessions WHERE id = ?`).get(Number(sessionId));
+  if (!session) {
+    throw new AppError('Sessão de caixa não encontrada', { status: 404, code: 'CASH_NOT_FOUND' });
+  }
+  if (session.status !== 'closed') {
+    throw new AppError('Ajuste pós-fechamento só se aplica a caixa fechado', {
+      status: 400,
+      code: 'CASH_NOT_CLOSED',
+    });
+  }
+  if (!payload.reason || !String(payload.reason).trim()) {
+    throw new AppError('Motivo do ajuste é obrigatório', { status: 400, code: 'REASON_REQUIRED' });
+  }
+  const amount = assertNonNegativeCents(payload.counted_amount_cents, 'counted_amount_cents');
+  const expected = session.expected_amount_cents;
+  const difference = amount - expected;
+
+  return db.transaction(() => {
+    db.prepare(
+      `UPDATE cash_sessions SET
+         counted_amount_cents = ?,
+         difference_cents = ?,
+         close_notes = TRIM(COALESCE(close_notes,'') || ' | Ajuste: ' || ?)
+       WHERE id = ?`
+    ).run(amount, difference, String(payload.reason).trim(), session.id);
+
+    db.prepare(
+      `INSERT INTO cash_session_adjustments (cash_session_id, amount_cents, reason, user_name)
+       VALUES (?, ?, ?, ?)`
+    ).run(
+      session.id,
+      amount,
+      String(payload.reason).trim(),
+      payload.user_name || getCurrentOperator()
+    );
+
+    writeAudit({
+      action: 'cash.adjust_closed',
+      entityType: 'cash_session',
+      entityId: session.id,
+      details: {
+        previous_counted: session.counted_amount_cents,
+        new_counted: amount,
+        difference,
+        reason: String(payload.reason).trim(),
+      },
+      userName: payload.user_name || getCurrentOperator(),
+    });
+
+    return getCashConference(session.id);
+  })();
+}
+
+export function reprintCashClosing(sessionId) {
+  return getCashConference(Number(sessionId));
+}

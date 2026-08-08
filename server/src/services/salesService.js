@@ -11,6 +11,7 @@ import {
 import { createCreditAccountFromSale } from './creditService.js';
 import { writeAudit } from './auditService.js';
 import { getCurrentOperator } from './settingsService.js';
+import { beginOperation, commitOperation, failOperation } from './recoveryService.js';
 
 const PAYMENT_METHODS = new Set(['dinheiro', 'pix', 'cartao', 'crediario']);
 
@@ -450,6 +451,16 @@ export function createSale(payload = {}) {
     VALUES (?, ?, ?)
   `);
 
+  const opKey = clientRequestId || `sale-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const begun = beginOperation(opKey, 'sale.create', {
+    total,
+    items: resolvedItems.length,
+  });
+  if (begun.duplicate && begun.status === 'committed') {
+    const existing = findSaleByClientRequestId(clientRequestId);
+    if (existing) return existing;
+  }
+
   let saleId;
   try {
     saleId = db.transaction(() => {
@@ -547,7 +558,9 @@ export function createSale(payload = {}) {
 
       return id;
     })();
+    commitOperation(opKey);
   } catch (err) {
+    failOperation(opKey, err?.message || String(err));
     if (clientRequestId && String(err?.message || '').includes('UNIQUE')) {
       const existing = findSaleByClientRequestId(clientRequestId);
       if (existing) return existing;

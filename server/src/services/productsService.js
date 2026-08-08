@@ -334,6 +334,22 @@ export function updateProduct(id, payload = {}) {
       Number(id)
     );
 
+    if (price_cents !== current.price_cents) {
+      db.prepare(
+        `INSERT INTO product_price_history (product_id, old_price_cents, new_price_cents, user_name)
+         VALUES (?, ?, ?, ?)`
+      ).run(Number(id), current.price_cents, price_cents, getCurrentOperator());
+      writeAudit({
+        action: 'product.price_change',
+        entityType: 'product',
+        entityId: Number(id),
+        details: {
+          old_price_cents: current.price_cents,
+          new_price_cents: price_cents,
+        },
+      });
+    }
+
     writeAudit({
       action: 'product.update',
       entityType: 'product',
@@ -343,6 +359,15 @@ export function updateProduct(id, payload = {}) {
 
     return getProductById(id);
   })();
+}
+
+export function listProductPriceHistory(productId, { limit = 50 } = {}) {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT * FROM product_price_history WHERE product_id = ? ORDER BY id DESC LIMIT ?`
+    )
+    .all(Number(productId), Math.min(Math.max(Number(limit) || 50, 1), 200));
 }
 
 export function deleteOrInactivateProduct(id) {

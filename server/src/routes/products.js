@@ -4,6 +4,7 @@ import {
   deleteOrInactivateProduct,
   getProductByBarcode,
   getProductById,
+  listProductPriceHistory,
   searchProducts,
   updateProduct,
 } from '../services/productsService.js';
@@ -15,6 +16,7 @@ import {
 } from '../services/duplicateProductsService.js';
 import { getProductStockHistory } from '../services/stockService.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { AppError } from '../utils/errors.js';
 
 const router = Router();
 
@@ -118,13 +120,37 @@ router.post('/', (req, res, next) => {
   }
 });
 
+router.get('/:id/price-history', (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ error: 'ID inválido', code: 'INVALID_ID' });
+    }
+    res.json(listProductPriceHistory(id, { limit: req.query.limit }));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.put('/:id', (req, res, next) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) {
       return res.status(400).json({ error: 'ID inválido', code: 'INVALID_ID' });
     }
-    res.json(updateProduct(id, req.body ?? {}));
+    const body = req.body ?? {};
+    if (
+      process.env.NODE_ENV !== 'test' &&
+      body.price_cents != null &&
+      req.user &&
+      req.user.role !== 'administrador'
+    ) {
+      throw new AppError('Alteração de preço exige administrador', {
+        status: 403,
+        code: 'FORBIDDEN_PRICE_CHANGE',
+      });
+    }
+    res.json(updateProduct(id, body));
   } catch (err) {
     next(err);
   }

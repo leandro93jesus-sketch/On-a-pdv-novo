@@ -88,6 +88,7 @@ export default function VendasPage() {
   const searchTimer = useRef<number | null>(null);
   const submittingRef = useRef(false);
   const requestIdRef = useRef<string | null>(null);
+  const lastBarcodeRef = useRef<{ code: string; at: number } | null>(null);
 
   async function loadSales() {
     const list = await fetchSales(30);
@@ -258,6 +259,14 @@ export default function VendasPage() {
     const looksLikeBarcode = /^[0-9]{8,14}$/.test(term);
     try {
       if (looksLikeBarcode) {
+        const now = Date.now();
+        const last = lastBarcodeRef.current;
+        if (last && last.code === term && now - last.at < 450) {
+          setQuery('');
+          searchRef.current?.focus();
+          return;
+        }
+        lastBarcodeRef.current = { code: term, at: now };
         const found = await loadProducts(undefined, term);
         if (found.length === 1) {
           addProduct(found[0]);

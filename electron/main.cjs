@@ -280,7 +280,18 @@ function stopApiServer() {
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
-  app.quit();
+  // Mensagem clara: não abrir segunda instância com o mesmo banco
+  app.whenReady().then(async () => {
+    const { dialog } = require('electron');
+    await dialog.showMessageBox({
+      type: 'warning',
+      title: 'ONÇA PDV',
+      message: 'ONÇA PDV já está em execução.',
+      detail: 'Não é permitido abrir duas instâncias no mesmo computador usando o mesmo banco.',
+      buttons: ['OK'],
+    });
+    app.quit();
+  });
 } else {
   app.on('second-instance', () => {
     if (mainWindow) {

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  adjustClosedCashSession,
   closeCashSession,
   getCashConference,
   getOpenCashSession,
@@ -7,7 +8,9 @@ import {
   listCashSessions,
   openCashSession,
   registerCashMovement,
+  reprintCashClosing,
 } from '../services/cashService.js';
+import { requireAdminSensitive } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -44,6 +47,14 @@ router.get('/sessions/:id/movements', (req, res, next) => {
   }
 });
 
+router.get('/sessions/:id/reprint', (req, res, next) => {
+  try {
+    res.json(reprintCashClosing(Number(req.params.id)));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/sessions/open', (req, res, next) => {
   try {
     res.status(201).json(openCashSession(req.body ?? {}));
@@ -55,6 +66,19 @@ router.post('/sessions/open', (req, res, next) => {
 router.post('/sessions/close', (req, res, next) => {
   try {
     res.json(closeCashSession(req.body ?? {}));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/sessions/:id/adjust', requireAdminSensitive, (req, res, next) => {
+  try {
+    res.json(
+      adjustClosedCashSession(Number(req.params.id), {
+        ...req.body,
+        user_name: req.user?.name || req.body?.user_name,
+      })
+    );
   } catch (err) {
     next(err);
   }

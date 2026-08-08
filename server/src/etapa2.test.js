@@ -59,6 +59,11 @@ beforeEach(() => {
     DELETE FROM deliveries;
     DELETE FROM purchase_items;
     DELETE FROM purchases;
+    DELETE FROM product_price_history;
+    DELETE FROM product_duplicate_reviews;
+    DELETE FROM product_merges;
+    DELETE FROM cash_session_adjustments;
+    DELETE FROM operation_journal;
     DELETE FROM stock_movements;
     DELETE FROM sale_payments;
     DELETE FROM sale_items;

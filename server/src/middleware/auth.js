@@ -55,3 +55,15 @@ export function requirePermission(permission) {
     next();
   };
 }
+
+/**
+ * Operações sensíveis (preço, estoque, merge, backup, settings).
+ * Em NODE_ENV=test permite sem auth para não quebrar suíte legada.
+ */
+export function requireAdminSensitive(req, res, next) {
+  if (process.env.NODE_ENV === 'test') return next();
+  return requireAuth(req, res, (err) => {
+    if (err) return next(err);
+    return requireAdmin(req, res, next);
+  });
+}

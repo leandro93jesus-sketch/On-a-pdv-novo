@@ -6,6 +6,7 @@ import {
   setStockBalance,
   getProductStockHistory,
 } from '../services/stockService.js';
+import { requireAdminSensitive } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -31,7 +32,7 @@ router.get('/movements', (req, res, next) => {
   }
 });
 
-router.post('/movements', (req, res, next) => {
+router.post('/movements', requireAdminSensitive, (req, res, next) => {
   try {
     const result = createManualStockMovement(req.body ?? {});
     res.status(201).json(result);
@@ -40,7 +41,7 @@ router.post('/movements', (req, res, next) => {
   }
 });
 
-router.post('/set-balance', (req, res, next) => {
+router.post('/set-balance', requireAdminSensitive, (req, res, next) => {
   try {
     const result = setStockBalance(req.body ?? {});
     res.status(201).json(result);
