@@ -180,7 +180,7 @@ export function executeImport(parsed, { createdBy = null, confirm = false, runId
         if (p.stock_qty) {
           db.prepare(
             `INSERT INTO stock_movements (product_id, movement_type, quantity_delta, stock_after, reference_type, reference_id, note, reason, user_name)
-             VALUES (?, 'adjustment', ?, ?, 'import', ?, 'Importação JSON legado', 'importacao_legado', ?)`
+             VALUES (?, 'entry', ?, ?, 'import', ?, 'Importação JSON legado', 'importacao_legado', ?)`
           ).run(id, p.stock_qty, p.stock_qty, importRunId, createdBy || 'import');
         }
         report.imported.products += 1;

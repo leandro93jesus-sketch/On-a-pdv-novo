@@ -35,9 +35,9 @@ function sha256File(path) {
 
 function schemaVersion() {
   const row = getDb()
-    .prepare(`SELECT filename FROM schema_migrations ORDER BY id DESC LIMIT 1`)
+    .prepare(`SELECT name FROM schema_migrations ORDER BY id DESC LIMIT 1`)
     .get();
-  return row?.filename || 'unknown';
+  return row?.name || 'unknown';
 }
 
 function stampName() {
@@ -161,20 +161,23 @@ export function validateBackupFile(filePath) {
   }
 
   const hash = createHash('sha256').update(fd).digest('hex');
-  const manifestPath = filePath.replace(/\.db$/i, '.manifest.json');
   let manifest = null;
-  if (existsSync(manifestPath)) {
-    try {
-      manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-      if (manifest.sha256 && manifest.sha256 !== hash) {
-        throw new AppError('Hash SHA-256 do backup não confere com o manifesto', {
-          status: 400,
-          code: 'BACKUP_HASH_MISMATCH',
-        });
+  // Só procura manifesto para arquivos *.db definitivos (não temporários *.restore-tmp)
+  if (/\.db$/i.test(filePath)) {
+    const manifestPath = filePath.replace(/\.db$/i, '.manifest.json');
+    if (existsSync(manifestPath)) {
+      try {
+        manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+        if (manifest.sha256 && manifest.sha256 !== hash) {
+          throw new AppError('Hash SHA-256 do backup não confere com o manifesto', {
+            status: 400,
+            code: 'BACKUP_HASH_MISMATCH',
+          });
+        }
+      } catch (err) {
+        if (err instanceof AppError) throw err;
+        throw new AppError('Manifesto de backup inválido', { status: 400, code: 'BACKUP_INVALID' });
       }
-    } catch (err) {
-      if (err instanceof AppError) throw err;
-      throw new AppError('Manifesto de backup inválido', { status: 400, code: 'BACKUP_INVALID' });
     }
   }
 

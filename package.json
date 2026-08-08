@@ -20,9 +20,12 @@
     "review:etapa1": "node scripts/review-etapa1.mjs",
     "review:etapa2": "node scripts/review-etapa2.mjs",
     "review:etapa3": "node scripts/review-etapa3.mjs",
+    "review:etapa4": "node scripts/review-etapa4.mjs",
     "e2e:etapa3": "node scripts/e2e-etapa3.mjs",
     "e2e:ui:etapa3": "node scripts/e2e-ui-etapa3.mjs",
-    "validate:etapa3": "npm test && npm run lint && npm run build && npm run review:etapa1 && npm run review:etapa2 && npm run review:etapa3 && npm run e2e:etapa3 && npm run e2e:ui:etapa3"
+    "e2e:etapa4": "node scripts/e2e-etapa4.mjs",
+    "validate:etapa3": "npm test && npm run lint && npm run build && npm run review:etapa1 && npm run review:etapa2 && npm run review:etapa3 && npm run e2e:etapa3 && npm run e2e:ui:etapa3",
+    "validate:etapa4": "npm test && npm run lint && npm run build && npm run review:etapa1 && npm run review:etapa2 && npm run review:etapa3 && npm run review:etapa4 && npm run e2e:etapa4"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

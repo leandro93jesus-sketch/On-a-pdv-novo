@@ -69,7 +69,7 @@ ONÇA PDV é um sistema de ponto de venda local-first, modular e preparado para 
 | Vendas | **Implementado** (Etapa 1 + vínculos Etapa 2) |
 | Produtos, Estoque, Caixa, Clientes | **Implementado** (Etapa 2) |
 | Fornecedores, Compras, Crediário, Devoluções, Entregas | **Implementado** (Etapa 3) |
-| Relatórios, Backup, Configurações | Shell/placeholder (próximas etapas) |
+| Relatórios, Backup/Restauração, Importador JSON, Configurações, Usuários, Auditoria, PDF, WhatsApp | **Implementado** (Etapa 4) |
 
 ## Domínio de Vendas
 
