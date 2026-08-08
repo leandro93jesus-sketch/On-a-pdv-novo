@@ -227,7 +227,7 @@ export function createProduct(payload = {}) {
           productId: id,
           movementType: 'entry',
           quantity: initialStock,
-          reason: 'Estoque inicial no cadastro',
+          reason: 'Estoque inicial',
           referenceType: 'product',
           referenceId: id,
         },

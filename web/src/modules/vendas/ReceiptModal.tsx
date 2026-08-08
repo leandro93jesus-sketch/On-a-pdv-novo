@@ -13,14 +13,23 @@ interface Props {
   onClose: () => void;
   onCancelSale?: (sale: Sale) => void;
   companyName?: string;
+  /** Destaca conclusão bem-sucedida e botão Nova venda. */
+  successBanner?: boolean;
 }
 
-export default function ReceiptModal({ sale, onClose, onCancelSale, companyName }: Props) {
+export default function ReceiptModal({
+  sale,
+  onClose,
+  onCancelSale,
+  companyName,
+  successBanner = false,
+}: Props) {
   const cancelled = sale.status === 'cancelled';
   const [waNote, setWaNote] = useState<string | null>(null);
   const [waBusy, setWaBusy] = useState(false);
   const [waPhone, setWaPhone] = useState(sale.customer?.phone || sale.customer?.whatsapp || '');
   const brand = companyName?.trim() || 'ONÇA PRODUTOS DE LIMPEZA';
+  const showSuccess = successBanner && !cancelled;
 
   function openPdf() {
     window.open(buildReceiptPdfUrl(sale.id), '_blank', 'noopener,noreferrer');
@@ -48,6 +57,14 @@ export default function ReceiptModal({ sale, onClose, onCancelSale, companyName 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Comprovante da venda">
       <div className="modal">
+        {showSuccess && (
+          <div className="alert alert-ok" style={{ marginBottom: 12 }}>
+            <strong>Venda concluída com sucesso</strong>
+            <div>
+              Venda nº {sale.sale_number} · Total {formatBRL(sale.total_cents)}
+            </div>
+          </div>
+        )}
         <div className="receipt" data-testid="receipt">
           <div className="receipt-header">
             <BrandLogo size={40} />
@@ -158,7 +175,7 @@ export default function ReceiptModal({ sale, onClose, onCancelSale, companyName 
         {waNote && <div className="alert alert-ok no-print">{waNote}</div>}
 
         <div className="modal-actions no-print">
-          {!cancelled && onCancelSale && (
+          {!cancelled && onCancelSale && !showSuccess && (
             <button type="button" className="btn btn-danger" onClick={() => onCancelSale(sale)}>
               Cancelar venda
             </button>
@@ -172,13 +189,13 @@ export default function ReceiptModal({ sale, onClose, onCancelSale, companyName 
             disabled={waBusy || cancelled}
             onClick={() => void sendWhatsApp()}
           >
-            Enviar pelo WhatsApp
+            Enviar no WhatsApp
           </button>
           <button type="button" className="btn btn-ghost" onClick={() => window.print()}>
             Imprimir
           </button>
           <button type="button" className="btn btn-primary" onClick={onClose}>
-            Fechar
+            {showSuccess ? 'Nova venda' : 'Fechar'}
           </button>
         </div>
       </div>

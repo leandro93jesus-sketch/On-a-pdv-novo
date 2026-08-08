@@ -1,68 +1,38 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  createStockMovement,
   fetchProductHistory,
-  fetchProducts,
   fetchStock,
   fetchStockMovements,
   formatBRL,
-  setStockBalanceApi,
-  type Product,
+  getStoredAuthUser,
   type ProductHistory,
   type StockMovement,
   type StockRow,
 } from '../../api/client';
 import { ModuleToolbar, StatusPill } from '../../components/ModuleChrome';
-
-type AdjustMode = 'entry' | 'exit' | 'set_balance';
+import StockAdjustModal from './StockAdjustModal';
 
 export default function EstoquePage() {
+  const me = getStoredAuthUser();
+  const canAdjust = me?.role === 'administrador';
   const [rows, setRows] = useState<StockRow[]>([]);
   const [movements, setMovements] = useState<StockMovement[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [q, setQ] = useState('');
   const [onlyAlerts, setOnlyAlerts] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showAdjust, setShowAdjust] = useState(false);
-  const [form, setForm] = useState({
-    product_id: '',
-    mode: 'entry' as AdjustMode,
-    quantity: '1',
-    new_qty: '',
-    reason: '',
-    note: '',
-  });
+  const [adjustProductId, setAdjustProductId] = useState<number | null>(null);
   const [history, setHistory] = useState<ProductHistory | null>(null);
-
-  const selectedProduct = useMemo(
-    () => products.find((p) => String(p.id) === form.product_id) || null,
-    [products, form.product_id]
-  );
-
-  const previewNewStock = useMemo(() => {
-    if (!selectedProduct) return null;
-    if (form.mode === 'set_balance') {
-      const n = Number(form.new_qty);
-      return Number.isInteger(n) ? n : null;
-    }
-    const qty = Number(form.quantity);
-    if (!Number.isInteger(qty) || qty <= 0) return null;
-    return form.mode === 'entry'
-      ? selectedProduct.stock_qty + qty
-      : selectedProduct.stock_qty - qty;
-  }, [selectedProduct, form]);
 
   async function load() {
     try {
-      const [stock, movs, prods] = await Promise.all([
+      const [stock, movs] = await Promise.all([
         fetchStock({ q: q.trim() || undefined, alerts: onlyAlerts }),
         fetchStockMovements({ limit: 80 }),
-        fetchProducts(),
       ]);
       setRows(stock);
       setMovements(movs);
-      setProducts(prods);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar estoque');
@@ -77,52 +47,6 @@ export default function EstoquePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, onlyAlerts]);
 
-  async function submitAdjust() {
-    if (!form.product_id || !form.reason.trim()) {
-      setError('Produto e motivo são obrigatórios');
-      return;
-    }
-    try {
-      if (form.mode === 'set_balance') {
-        const newQty = Number(form.new_qty);
-        if (!Number.isInteger(newQty) || newQty < 0) {
-          setError('Novo saldo inválido');
-          return;
-        }
-        const res = await setStockBalanceApi({
-          product_id: Number(form.product_id),
-          new_qty: newQty,
-          reason: form.reason.trim(),
-          note: form.note.trim() || undefined,
-        });
-        setNotice(
-          `Saldo definido: ${res.stock_before} → ${res.stock_after} (Δ ${res.quantity_delta})`
-        );
-      } else {
-        await createStockMovement({
-          product_id: Number(form.product_id),
-          movement_type: form.mode,
-          quantity: Number(form.quantity),
-          reason: form.reason.trim(),
-          note: form.note.trim() || undefined,
-        });
-        setNotice(form.mode === 'entry' ? 'Entrada registrada.' : 'Saída registrada.');
-      }
-      setShowAdjust(false);
-      setForm({
-        product_id: '',
-        mode: 'entry',
-        quantity: '1',
-        new_qty: '',
-        reason: '',
-        note: '',
-      });
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erro no ajuste');
-    }
-  }
-
   async function openHistory(productId: number) {
     try {
       setHistory(await fetchProductHistory(productId));
@@ -130,6 +54,16 @@ export default function EstoquePage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar histórico');
     }
+  }
+
+  function openAdjust(productId?: number) {
+    if (!canAdjust) {
+      setError('Somente administrador pode ajustar estoque.');
+      return;
+    }
+    setAdjustProductId(productId ?? null);
+    setShowAdjust(true);
+    setError(null);
   }
 
   return (
@@ -149,16 +83,11 @@ export default function EstoquePage() {
           />
           Somente alertas
         </label>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => {
-            setShowAdjust(true);
-            setError(null);
-          }}
-        >
-          Ajustar estoque
-        </button>
+        {canAdjust && (
+          <button type="button" className="btn btn-primary" onClick={() => openAdjust()}>
+            Ajustar estoque
+          </button>
+        )}
       </ModuleToolbar>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -199,7 +128,16 @@ export default function EstoquePage() {
                     </StatusPill>
                   </td>
                   <td>{r.last_movement_at || '—'}</td>
-                  <td>
+                  <td className="row-actions">
+                    {canAdjust && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => openAdjust(r.id)}
+                      >
+                        Ajustar
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn btn-ghost"
@@ -226,6 +164,7 @@ export default function EstoquePage() {
                   <th>Antes</th>
                   <th>Δ</th>
                   <th>Saldo</th>
+                  <th>Motivo</th>
                 </tr>
               </thead>
               <tbody>
@@ -240,6 +179,7 @@ export default function EstoquePage() {
                     </td>
                     <td>{m.quantity_delta}</td>
                     <td>{m.stock_after}</td>
+                    <td>{m.reason || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -249,103 +189,22 @@ export default function EstoquePage() {
       </div>
 
       {showAdjust && (
-        <div className="modal-backdrop">
-          <form
-            className="modal"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void submitAdjust();
-            }}
-          >
-            <h3>Ajustar estoque</h3>
-            <div className="modal-fields">
-              <label>
-                Produto
-                <select
-                  className="field-input"
-                  value={form.product_id}
-                  onChange={(e) => setForm({ ...form, product_id: e.target.value })}
-                >
-                  <option value="">Selecione…</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} (est. {p.stock_qty})
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {selectedProduct && (
-                <div className="muted-line">
-                  Código: {selectedProduct.sku || '—'} · Barras: {selectedProduct.barcode || '—'} ·
-                  Estoque atual: <strong>{selectedProduct.stock_qty}</strong>
-                </div>
-              )}
-              <label>
-                Operação
-                <select
-                  className="field-input"
-                  value={form.mode}
-                  onChange={(e) => setForm({ ...form, mode: e.target.value as AdjustMode })}
-                >
-                  <option value="entry">Entrada</option>
-                  <option value="exit">Saída</option>
-                  <option value="set_balance">Definir saldo</option>
-                </select>
-              </label>
-              {form.mode === 'set_balance' ? (
-                <label>
-                  Novo saldo
-                  <input
-                    className="field-input"
-                    value={form.new_qty}
-                    onChange={(e) => setForm({ ...form, new_qty: e.target.value })}
-                  />
-                </label>
-              ) : (
-                <label>
-                  Quantidade
-                  <input
-                    className="field-input"
-                    value={form.quantity}
-                    onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-                  />
-                </label>
-              )}
-              {previewNewStock != null && selectedProduct && (
-                <div className="muted-line">
-                  Novo estoque previsto: <strong>{previewNewStock}</strong>
-                  {form.mode === 'set_balance'
-                    ? ` (movimentação Δ ${previewNewStock - selectedProduct.stock_qty})`
-                    : ''}
-                </div>
-              )}
-              <label>
-                Motivo *
-                <input
-                  className="field-input"
-                  value={form.reason}
-                  onChange={(e) => setForm({ ...form, reason: e.target.value })}
-                />
-              </label>
-              <label>
-                Observação
-                <input
-                  className="field-input"
-                  value={form.note}
-                  onChange={(e) => setForm({ ...form, note: e.target.value })}
-                />
-              </label>
-            </div>
-            <div className="modal-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => setShowAdjust(false)}>
-                Cancelar
-              </button>
-              <button type="submit" className="btn btn-primary">
-                Confirmar
-              </button>
-            </div>
-          </form>
-        </div>
+        <StockAdjustModal
+          initialProductId={adjustProductId}
+          onClose={() => {
+            setShowAdjust(false);
+            setAdjustProductId(null);
+          }}
+          onDone={async (result) => {
+            setShowAdjust(false);
+            setAdjustProductId(null);
+            setNotice(
+              `Estoque ajustado: ${result.stock_before} → ${result.stock_after}`
+            );
+            await load();
+          }}
+          onError={(msg) => setError(msg)}
+        />
       )}
 
       {history && (
@@ -353,30 +212,43 @@ export default function EstoquePage() {
           <div className="modal modal-wide" style={{ width: 'min(920px, 100%)' }}>
             <h3>Histórico do produto</h3>
             <p>
-              <strong>{history.product.name}</strong> · estoque {history.product.stock_qty} ·{' '}
+              <strong>{history.product.name}</strong> · estoque atual {history.product.stock_qty} ·{' '}
               {formatBRL(history.product.price_cents)}
             </p>
             <div className="cash-grid">
               <div className="side-card">
                 <h3>Movimentações</h3>
-                <pre className="code-block" style={{ maxHeight: 220, overflow: 'auto' }}>
-                  {JSON.stringify(history.movements.slice(0, 30), null, 2)}
-                </pre>
+                <div className="product-table-wrap compact" style={{ maxHeight: 240, overflow: 'auto' }}>
+                  <table className="history-table">
+                    <thead>
+                      <tr>
+                        <th>Data</th>
+                        <th>Tipo</th>
+                        <th>Antes</th>
+                        <th>Δ</th>
+                        <th>Depois</th>
+                        <th>Motivo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {history.movements.slice(0, 40).map((m) => (
+                        <tr key={m.id}>
+                          <td>{m.created_at}</td>
+                          <td>{m.movement_type}</td>
+                          <td>{m.stock_before ?? m.stock_after - m.quantity_delta}</td>
+                          <td>{m.quantity_delta}</td>
+                          <td>{m.stock_after}</td>
+                          <td>{m.reason || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
               <div className="side-card">
-                <h3>Vendas</h3>
+                <h3>Vendas recentes</h3>
                 <pre className="code-block" style={{ maxHeight: 220, overflow: 'auto' }}>
-                  {JSON.stringify(history.sales.slice(0, 30), null, 2)}
-                </pre>
-              </div>
-              <div className="side-card">
-                <h3>Compras / Devoluções</h3>
-                <pre className="code-block" style={{ maxHeight: 220, overflow: 'auto' }}>
-                  {JSON.stringify(
-                    { purchases: history.purchases.slice(0, 20), returns: history.returns.slice(0, 20) },
-                    null,
-                    2
-                  )}
+                  {JSON.stringify(history.sales.slice(0, 20), null, 2)}
                 </pre>
               </div>
             </div>

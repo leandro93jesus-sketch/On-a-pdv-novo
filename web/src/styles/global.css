@@ -1257,6 +1257,95 @@ select.field-input {
   margin-top: 12px;
 }
 
+/* Estoque — painel atual vs mínimo + modal unificado */
+.stock-edit-panel {
+  border: 1px solid var(--border, #d7dde5);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(245, 248, 252, 0.95));
+}
+
+.stock-edit-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 16px;
+  align-items: start;
+}
+
+.stock-edit-label {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+  margin-bottom: 4px;
+}
+
+.stock-edit-value {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--brand, #0b6e4f);
+}
+
+.field-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.82rem;
+  opacity: 0.75;
+}
+
+.stock-mode-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stock-mode-row .btn {
+  min-height: 44px;
+}
+
+.stock-current-line,
+.stock-preview-box {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(11, 110, 79, 0.06);
+}
+
+.stock-preview-box {
+  display: grid;
+  gap: 4px;
+  font-size: 1rem;
+}
+
+.stock-flag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.stock-flag-low {
+  background: #fff3cd;
+  color: #7a5b00;
+}
+
+.stock-flag-out {
+  background: #f8d7da;
+  color: #842029;
+}
+
+.history-hint {
+  margin: 0 0 8px;
+}
+
+@media (max-height: 820px) {
+  .sales-recent-history {
+    display: none;
+  }
+}
+
 /* Fase 6 — responsividade (1366 / 1600 / 1920, escalas Windows) */
 @media (max-width: 1366px) {
   :root {
@@ -1307,6 +1396,14 @@ select.field-input {
 
   .payment-options {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .stock-edit-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sales-recent-history {
+    display: none;
   }
 }
 

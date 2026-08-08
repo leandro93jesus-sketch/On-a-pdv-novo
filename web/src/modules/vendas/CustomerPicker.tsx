@@ -4,14 +4,31 @@ import { createCustomer, fetchCustomers, type Customer } from '../../api/client'
 interface Props {
   selected: Customer | null;
   onSelect: (customer: Customer | null) => void;
+  /** Incrementar para abrir o seletor (atalho F4). */
+  openRequest?: number;
+  onClosed?: () => void;
 }
 
-export default function CustomerPicker({ selected, onSelect }: Props) {
+export default function CustomerPicker({
+  selected,
+  onSelect,
+  openRequest = 0,
+  onClosed,
+}: Props) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Customer[]>([]);
   const [open, setOpen] = useState(false);
   const [quickName, setQuickName] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (openRequest > 0) setOpen(true);
+  }, [openRequest]);
+
+  function closePicker() {
+    setOpen(false);
+    onClosed?.();
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -31,7 +48,7 @@ export default function CustomerPicker({ selected, onSelect }: Props) {
       const c = await createCustomer({ name: quickName.trim() });
       onSelect(c);
       setQuickName('');
-      setOpen(false);
+      closePicker();
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao cadastrar');
@@ -78,7 +95,7 @@ export default function CustomerPicker({ selected, onSelect }: Props) {
                     type="button"
                     onClick={() => {
                       onSelect(c);
-                      setOpen(false);
+                      closePicker();
                     }}
                   >
                     <strong>{c.name}</strong>
@@ -99,7 +116,7 @@ export default function CustomerPicker({ selected, onSelect }: Props) {
               </label>
             </div>
             <div className="modal-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>
+              <button type="button" className="btn btn-ghost" onClick={closePicker}>
                 Fechar
               </button>
               <button type="button" className="btn btn-accent" onClick={() => void quickCreate()}>

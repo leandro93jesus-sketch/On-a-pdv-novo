@@ -84,11 +84,19 @@ export default function VendasPage() {
   const [receipt, setReceipt] = useState<Sale | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [cash, setCash] = useState<CashSession | null>(null);
+  const [customerOpenReq, setCustomerOpenReq] = useState(0);
+  const [receiptFromHistory, setReceiptFromHistory] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const searchTimer = useRef<number | null>(null);
   const submittingRef = useRef(false);
   const requestIdRef = useRef<string | null>(null);
   const lastBarcodeRef = useRef<{ code: string; at: number } | null>(null);
+
+  function focusSearch() {
+    window.setTimeout(() => searchRef.current?.focus(), 0);
+  }
+
+  const anyModalOpen = showMisc || showMixed || showHistory || Boolean(receipt);
 
   async function loadSales() {
     const list = await fetchSales(30);
@@ -132,6 +140,70 @@ export default function VendasPage() {
       if (searchTimer.current) window.clearTimeout(searchTimer.current);
     };
   }, [query]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      const inEditable =
+        tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target as HTMLElement)?.isContentEditable;
+
+      if (e.key === 'Escape') {
+        if (showMisc) {
+          setShowMisc(false);
+          focusSearch();
+          return;
+        }
+        if (showMixed) {
+          setShowMixed(false);
+          if (!mixedDraft) setPayment('dinheiro');
+          focusSearch();
+          return;
+        }
+        if (showHistory) {
+          setShowHistory(false);
+          focusSearch();
+          return;
+        }
+        if (receipt) {
+          setReceipt(null);
+          focusSearch();
+          return;
+        }
+        return;
+      }
+
+      if (anyModalOpen) return;
+      if (e.key === 'F2') {
+        e.preventDefault();
+        focusSearch();
+        return;
+      }
+      if (e.key === 'F4') {
+        e.preventDefault();
+        setCustomerOpenReq((n) => n + 1);
+        return;
+      }
+      if (e.key === 'F8') {
+        e.preventDefault();
+        setShowHistory(true);
+        return;
+      }
+      if (e.key === 'F9') {
+        e.preventDefault();
+        setShowMisc(true);
+        return;
+      }
+      if (e.key === 'F10') {
+        e.preventDefault();
+        if (!inEditable || tag === 'INPUT') {
+          void finalizeSale();
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anyModalOpen, showMisc, showMixed, showHistory, receipt, mixedDraft, cart, payment, discountInput, customer]);
 
   const subtotal = useMemo(() => cart.reduce((sum, line) => sum + lineTotal(line), 0), [cart]);
   const parsedDiscount = parseDiscountInput(discountInput);
@@ -412,6 +484,7 @@ export default function VendasPage() {
             : undefined,
       });
       const full = await fetchSale(sale.id);
+      setReceiptFromHistory(false);
       setReceipt(full);
       setCart([]);
       setDiscountInput('0,00');
@@ -458,9 +531,10 @@ export default function VendasPage() {
     }
   }
 
-  async function openSaleReceipt(id: number) {
+  async function openSaleReceipt(id: number, fromHistory = false) {
     try {
       const sale = await fetchSale(id);
+      setReceiptFromHistory(fromHistory);
       setReceipt(sale);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao abrir comprovante');
@@ -478,7 +552,12 @@ export default function VendasPage() {
           </span>
         </div>
 
-        <CustomerPicker selected={customer} onSelect={setCustomer} />
+        <CustomerPicker
+          selected={customer}
+          onSelect={setCustomer}
+          openRequest={customerOpenReq}
+          onClosed={focusSearch}
+        />
 
         <div className="search-row">
           <input
@@ -523,17 +602,26 @@ export default function VendasPage() {
               </tr>
             </thead>
             <tbody>
-              {products.map((product) => (
-                <tr key={product.id} onClick={() => addProduct(product)}>
-                  <td>{product.name}</td>
-                  <td>{product.barcode || product.sku || '—'}</td>
-                  <td>{product.category}</td>
-                  <td className={product.stock_qty <= 5 ? 'stock stock-low' : 'stock stock-ok'}>
-                    {product.stock_qty}
-                  </td>
-                  <td className="price">{formatBRL(product.price_cents)}</td>
-                </tr>
-              ))}
+              {products.map((product) => {
+                const min = product.min_stock_qty ?? 0;
+                const noStock = product.stock_qty <= 0;
+                const lowStock = !noStock && product.stock_qty <= min;
+                return (
+                  <tr key={product.id} onClick={() => addProduct(product)}>
+                    <td>
+                      {product.name}
+                      {noStock && <span className="stock-flag stock-flag-out">Sem estoque</span>}
+                      {lowStock && <span className="stock-flag stock-flag-low">Estoque baixo</span>}
+                    </td>
+                    <td>{product.barcode || product.sku || '—'}</td>
+                    <td>{product.category}</td>
+                    <td className={noStock || lowStock ? 'stock stock-low' : 'stock stock-ok'}>
+                      {product.stock_qty}
+                    </td>
+                    <td className="price">{formatBRL(product.price_cents)}</td>
+                  </tr>
+                );
+              })}
               {!loading && products.length === 0 && (
                 <tr>
                   <td colSpan={5}>Nenhum produto encontrado para a busca.</td>
@@ -543,8 +631,11 @@ export default function VendasPage() {
           </table>
         </div>
 
-        <div className="history-block">
-          <h3>Histórico de vendas</h3>
+        <div className="history-block sales-recent-history">
+          <h3>Histórico recente</h3>
+          <p className="muted-line history-hint">
+            Acesso completo: botão Histórico (F8). Esta lista some em telas baixas para priorizar a venda.
+          </p>
           {sales.length === 0 ? (
             <p className="cart-empty" style={{ padding: '8px 0' }}>
               Nenhuma venda registrada ainda.
@@ -572,7 +663,11 @@ export default function VendasPage() {
                     <td>{paymentLabel(sale.payment_method)}</td>
                     <td>{formatBRL(sale.total_cents)}</td>
                     <td>
-                      <button type="button" className="linkish" onClick={() => void openSaleReceipt(sale.id)}>
+                      <button
+                        type="button"
+                        className="linkish"
+                        onClick={() => void openSaleReceipt(sale.id, true)}
+                      >
                         Comprovante
                       </button>
                     </td>
@@ -813,12 +908,16 @@ export default function VendasPage() {
 
       {showMisc && (
         <MiscItemModal
-          onCancel={() => setShowMisc(false)}
+          onCancel={() => {
+            setShowMisc(false);
+            focusSearch();
+          }}
           onConfirm={(name, priceCents) => {
             setCart((prev) => [...prev, miscLine(name, priceCents)]);
             setShowMisc(false);
             setNotice(null);
             setError(null);
+            focusSearch();
           }}
         />
       )}
@@ -830,6 +929,7 @@ export default function VendasPage() {
           onCancel={() => {
             setShowMixed(false);
             if (!mixedDraft) setPayment('dinheiro');
+            focusSearch();
           }}
           onConfirm={(payload) => {
             setMixedDraft(payload);
@@ -842,9 +942,13 @@ export default function VendasPage() {
 
       {showHistory && (
         <SalesHistoryModal
-          onClose={() => setShowHistory(false)}
+          onClose={() => {
+            setShowHistory(false);
+            focusSearch();
+          }}
           onOpenSale={(sale) => {
             setShowHistory(false);
+            setReceiptFromHistory(true);
             setReceipt(sale);
           }}
         />
@@ -853,8 +957,15 @@ export default function VendasPage() {
       {receipt && (
         <ReceiptModal
           sale={receipt}
-          onClose={() => setReceipt(null)}
-          onCancelSale={(sale) => void handleCancelSale(sale)}
+          successBanner={!receiptFromHistory && receipt.status !== 'cancelled'}
+          onClose={() => {
+            setReceipt(null);
+            setReceiptFromHistory(false);
+            focusSearch();
+          }}
+          onCancelSale={
+            receiptFromHistory ? undefined : (sale) => void handleCancelSale(sale)
+          }
         />
       )}
     </div>

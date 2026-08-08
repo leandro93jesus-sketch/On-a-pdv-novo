@@ -15,6 +15,7 @@ import {
   type Product,
 } from '../../api/client';
 import { ModuleToolbar, StatusPill } from '../../components/ModuleChrome';
+import StockAdjustModal from '../estoque/StockAdjustModal';
 
 const emptyForm = {
   name: '',
@@ -56,6 +57,8 @@ export default function ProdutosPage() {
     data: Awaited<ReturnType<typeof previewMergeApi>>;
   }>(null);
   const [mergeConfirm, setMergeConfirm] = useState(false);
+  const [showStockAdjust, setShowStockAdjust] = useState(false);
+  const [adjustProduct, setAdjustProduct] = useState<Product | null>(null);
 
   async function load() {
     try {
@@ -386,17 +389,63 @@ export default function ProdutosPage() {
                     className="field-input"
                     value={form.stock_qty}
                     onChange={(e) => setForm({ ...form, stock_qty: e.target.value })}
+                    inputMode="numeric"
+                  />
+                  <span className="field-hint">
+                    Saldo inicial do produto (gera movimentação &quot;Estoque inicial&quot;).
+                  </span>
+                </label>
+              )}
+              {editing && (
+                <div className="span-2 stock-edit-panel">
+                  <div className="stock-edit-row">
+                    <div>
+                      <div className="stock-edit-label">Estoque atual</div>
+                      <div className="stock-edit-value">
+                        {editing.stock_qty} {editing.unit || 'UN'}
+                      </div>
+                      <div className="field-hint">
+                        Saldo real do produto. Não confundir com estoque mínimo.
+                      </div>
+                    </div>
+                    <div>
+                      <div className="stock-edit-label">Estoque mínimo</div>
+                      <input
+                        className="field-input"
+                        value={form.min_stock_qty}
+                        onChange={(e) => setForm({ ...form, min_stock_qty: e.target.value })}
+                        inputMode="numeric"
+                      />
+                      <div className="field-hint">Alerta quando o saldo ficar neste nível ou abaixo.</div>
+                    </div>
+                    {isAdmin && (
+                      <div className="stock-edit-actions">
+                        <button
+                          type="button"
+                          className="btn btn-accent"
+                          onClick={() => {
+                            setAdjustProduct(editing);
+                            setShowStockAdjust(true);
+                          }}
+                        >
+                          Ajustar estoque
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {!editing && (
+                <label>
+                  Estoque mínimo
+                  <input
+                    className="field-input"
+                    value={form.min_stock_qty}
+                    onChange={(e) => setForm({ ...form, min_stock_qty: e.target.value })}
+                    inputMode="numeric"
                   />
                 </label>
               )}
-              <label>
-                Estoque mínimo
-                <input
-                  className="field-input"
-                  value={form.min_stock_qty}
-                  onChange={(e) => setForm({ ...form, min_stock_qty: e.target.value })}
-                />
-              </label>
               <label className="span-2">
                 Observações
                 <input
@@ -535,6 +584,32 @@ export default function ProdutosPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showStockAdjust && adjustProduct && (
+        <StockAdjustModal
+          product={adjustProduct}
+          onClose={() => {
+            setShowStockAdjust(false);
+            setAdjustProduct(null);
+          }}
+          onDone={async (result) => {
+            setShowStockAdjust(false);
+            setAdjustProduct(null);
+            setNotice(
+              `Estoque ajustado: ${result.stock_before} → ${result.stock_after}`
+            );
+            await load();
+            if (editing && editing.id === result.product_id) {
+              setEditing({
+                ...editing,
+                stock_qty: result.stock_after,
+              });
+              setForm((f) => ({ ...f, stock_qty: String(result.stock_after) }));
+            }
+          }}
+          onError={(msg) => setError(msg)}
+        />
       )}
 
       {mergePreview && (
