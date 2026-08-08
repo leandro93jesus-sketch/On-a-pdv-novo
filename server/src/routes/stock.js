@@ -3,6 +3,8 @@ import {
   createManualStockMovement,
   listStock,
   listStockMovements,
+  setStockBalance,
+  getProductStockHistory,
 } from '../services/stockService.js';
 
 const router = Router();
@@ -33,6 +35,27 @@ router.post('/movements', (req, res, next) => {
   try {
     const result = createManualStockMovement(req.body ?? {});
     res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/set-balance', (req, res, next) => {
+  try {
+    const result = setStockBalance(req.body ?? {});
+    res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/history/:productId', (req, res, next) => {
+  try {
+    const id = Number(req.params.productId);
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ error: 'ID inválido', code: 'INVALID_ID' });
+    }
+    res.json(getProductStockHistory(id, { limit: req.query.limit }));
   } catch (err) {
     next(err);
   }

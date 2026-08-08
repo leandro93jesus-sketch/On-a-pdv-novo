@@ -127,11 +127,13 @@ export interface StockMovement {
   barcode: string | null;
   movement_type: string;
   quantity_delta: number;
+  stock_before?: number | null;
   stock_after: number;
   reason: string | null;
   user_name: string | null;
   reference_type: string | null;
   reference_id: number | null;
+  note?: string | null;
   created_at: string;
 }
 
@@ -409,7 +411,7 @@ export function fetchProducts(params?: {
 }
 
 export function createProduct(payload: Record<string, unknown>): Promise<Product> {
-  return fetch('/api/products', {
+  return apiFetch('/api/products', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -417,7 +419,7 @@ export function createProduct(payload: Record<string, unknown>): Promise<Product
 }
 
 export function updateProduct(id: number, payload: Record<string, unknown>): Promise<Product> {
-  return fetch(`/api/products/${id}`, {
+  return apiFetch(`/api/products/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -509,9 +511,101 @@ export function fetchStockMovements(params?: {
 
 export function createStockMovement(payload: Record<string, unknown>): Promise<{
   stock_after: number;
+  stock_before?: number;
+  quantity_delta?: number;
   movement_type: string;
 }> {
-  return fetch('/api/stock/movements', {
+  return apiFetch('/api/stock/movements', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle(r));
+}
+
+export function setStockBalanceApi(payload: {
+  product_id: number;
+  new_qty: number;
+  reason: string;
+  note?: string;
+}): Promise<{
+  stock_before: number;
+  stock_after: number;
+  quantity_delta: number;
+  operation: string;
+}> {
+  return apiFetch('/api/stock/set-balance', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle(r));
+}
+
+export interface ProductHistory {
+  product: Product;
+  movements: Array<StockMovement & { stock_before?: number; reason?: string; user_name?: string }>;
+  sales: Array<Record<string, unknown>>;
+  purchases: Array<Record<string, unknown>>;
+  returns: Array<Record<string, unknown>>;
+  summary: Record<string, number>;
+}
+
+export function fetchProductHistory(productId: number, limit = 200): Promise<ProductHistory> {
+  return apiFetch(`/api/products/${productId}/history${qs({ limit })}`).then((r) =>
+    handle<ProductHistory>(r)
+  );
+}
+
+export interface DuplicateCandidate {
+  product_a_id: number;
+  product_b_id: number;
+  match_type: string;
+  score: number;
+  status: string;
+  label: string;
+  product_a: Product & { sales_count?: number };
+  product_b: Product & { sales_count?: number };
+}
+
+export function fetchDuplicateProducts(includeInactive = false): Promise<{
+  totals: Record<string, unknown>;
+  candidates: DuplicateCandidate[];
+}> {
+  return apiFetch(
+    `/api/products/duplicates${qs({ include_inactive: includeInactive ? '1' : undefined })}`
+  ).then((r) => handle(r));
+}
+
+export function reviewDuplicateApi(payload: {
+  product_a_id: number;
+  product_b_id: number;
+  match_type: string;
+  status: 'pending' | 'not_duplicate' | 'review' | 'merged';
+  notes?: string;
+}): Promise<Record<string, unknown>> {
+  return apiFetch('/api/products/duplicates/review', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle(r));
+}
+
+export function previewMergeApi(primaryId: number, secondaryId: number): Promise<{
+  primary: Record<string, unknown>;
+  secondary: Record<string, unknown>;
+  stock_rules: { sum: number; keep_primary: number; keep_secondary: number };
+}> {
+  return apiFetch(
+    `/api/products/merge/preview${qs({ primary_id: primaryId, secondary_id: secondaryId })}`
+  ).then((r) => handle(r));
+}
+
+export function mergeProductsApi(payload: {
+  primary_id: number;
+  secondary_id: number;
+  stock_rule: 'sum' | 'keep_primary' | 'keep_secondary';
+  confirm: boolean;
+}): Promise<Record<string, unknown>> {
+  return apiFetch('/api/products/merge', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

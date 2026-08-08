@@ -4,6 +4,7 @@ import { assertNonNegativeCents } from '../utils/money.js';
 import { applyStockMovement } from './stockService.js';
 import { writeAudit } from './auditService.js';
 import { getCurrentOperator } from './settingsService.js';
+import { findSimilarNameConflicts } from './duplicateProductsService.js';
 
 const PRODUCT_FIELDS = `
   p.id, p.sku, p.barcode, p.name, p.category, p.unit,
@@ -178,6 +179,22 @@ export function createProduct(payload = {}) {
   const notes = normalizeOptionalText(payload.notes);
   const allow_negative_stock = payload.allow_negative_stock ? 1 : 0;
   const active = payload.active === 0 || payload.active === false ? 0 : 1;
+  const confirmSimilar =
+    payload.confirm_similar_name === true ||
+    payload.confirm_similar_name === 1 ||
+    payload.confirm_similar_name === '1';
+
+  const similar = findSimilarNameConflicts(name);
+  if (similar.length && !confirmSimilar) {
+    throw new AppError(
+      'Existe produto com nome semelhante. Confirme para continuar.',
+      {
+        status: 409,
+        code: 'SIMILAR_NAME',
+        details: { similar },
+      }
+    );
+  }
 
   return db.transaction(() => {
     assertUniqueCodes(db, { sku, barcode });
@@ -273,6 +290,24 @@ export function updateProduct(id, payload = {}) {
         : 0;
   const active =
     payload.active == null ? current.active : payload.active === 0 || payload.active === false ? 0 : 1;
+  const confirmSimilar =
+    payload.confirm_similar_name === true ||
+    payload.confirm_similar_name === 1 ||
+    payload.confirm_similar_name === '1';
+
+  if (name !== current.name) {
+    const similar = findSimilarNameConflicts(name, { excludeId: Number(id) });
+    if (similar.length && !confirmSimilar) {
+      throw new AppError(
+        'Existe produto com nome semelhante. Confirme para continuar.',
+        {
+          status: 409,
+          code: 'SIMILAR_NAME',
+          details: { similar },
+        }
+      );
+    }
+  }
 
   return db.transaction(() => {
     assertUniqueCodes(db, { sku, barcode, excludeId: Number(id) });
