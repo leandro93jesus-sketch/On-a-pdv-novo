@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-08-08T20:20:12.663Z",
+  "created_at": "2026-08-08T21:28:46.230Z",
   "results": [
     {
       "id": "health",
@@ -143,7 +143,7 @@
       "id": "stock",
       "title": "Baixa estoque produto normal",
       "ok": true,
-      "detail": "992 → 991"
+      "detail": "991 → 990"
     },
     {
       "id": "cash-register",
@@ -182,10 +182,16 @@
       "detail": ""
     },
     {
+      "id": "credit-sale",
+      "title": "Venda crediário (criação)",
+      "ok": true,
+      "detail": "201 id=115"
+    },
+    {
       "id": "credit-flow",
       "title": "Fluxo crediário / pagamento parcial",
       "ok": true,
-      "detail": "account=3 pago=200 saldo=300"
+      "detail": "account=5 pago=200 saldo=300"
     },
     {
       "id": "cash-close",
@@ -197,7 +203,7 @@
       "id": "backup",
       "title": "Backup",
       "ok": true,
-      "detail": "onca-pdv-backup-2026-08-08-202012.db"
+      "detail": "onca-pdv-backup-2026-08-08-212846.db"
     },
     {
       "id": "sqlite-integrity",

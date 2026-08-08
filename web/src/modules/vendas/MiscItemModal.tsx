@@ -2,12 +2,13 @@ import { useState, type FormEvent } from 'react';
 
 interface Props {
   onCancel: () => void;
-  onConfirm: (name: string, priceCents: number) => void;
+  onConfirm: (name: string, priceCents: number, quantity: number) => void;
 }
 
 export default function MiscItemModal({ onCancel, onConfirm }: Props) {
   const [name, setName] = useState('Item Diversos');
   const [price, setPrice] = useState('0,00');
+  const [quantity, setQuantity] = useState('1');
   const [error, setError] = useState<string | null>(null);
 
   function parseBRL(input: string): number | null {
@@ -20,6 +21,7 @@ export default function MiscItemModal({ onCancel, onConfirm }: Props) {
   function submit(e: FormEvent) {
     e.preventDefault();
     const cents = parseBRL(price);
+    const qty = Number(String(quantity).replace(',', '.'));
     if (cents === null) {
       setError('Informe um preço válido.');
       return;
@@ -28,7 +30,11 @@ export default function MiscItemModal({ onCancel, onConfirm }: Props) {
       setError('Informe a descrição do item.');
       return;
     }
-    onConfirm(name.trim(), cents);
+    if (!Number.isInteger(qty) || qty <= 0) {
+      setError('Quantidade inválida.');
+      return;
+    }
+    onConfirm(name.trim(), cents, qty);
   }
 
   return (
@@ -53,6 +59,15 @@ export default function MiscItemModal({ onCancel, onConfirm }: Props) {
               onChange={(e) => setPrice(e.target.value)}
               inputMode="decimal"
               placeholder="0,00"
+            />
+          </label>
+          <label>
+            Quantidade
+            <input
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              inputMode="numeric"
+              onFocus={(e) => e.currentTarget.select()}
             />
           </label>
         </div>

@@ -6,6 +6,7 @@ export interface CartLine {
   key: string;
   productId: number | null;
   name: string;
+  sku: string | null;
   barcode: string | null;
   unitPriceCents: number;
   quantity: number;
@@ -13,6 +14,11 @@ export interface CartLine {
   isMisc: boolean;
   stockQty: number | null;
   allowNegative: boolean;
+}
+
+/** Código de exibição: barras → SKU → traço. */
+export function lineCode(line: CartLine): string {
+  return line.barcode || line.sku || '—';
 }
 
 export function lineTotal(line: CartLine): number {
@@ -24,6 +30,7 @@ export function productToLine(product: Product, quantity = 1): CartLine {
     key: `p-${product.id}`,
     productId: product.id,
     name: product.name,
+    sku: product.sku ?? null,
     barcode: product.barcode,
     unitPriceCents: product.price_cents,
     quantity,
@@ -39,6 +46,7 @@ export function miscLine(name: string, unitPriceCents: number, quantity = 1): Ca
     key: `misc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     productId: null,
     name: name.trim() || 'Item Diversos',
+    sku: null,
     barcode: null,
     unitPriceCents,
     quantity,

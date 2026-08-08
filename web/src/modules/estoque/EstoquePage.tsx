@@ -5,6 +5,7 @@ import {
   fetchStockMovements,
   formatBRL,
   getStoredAuthUser,
+  updateProduct,
   type ProductHistory,
   type StockMovement,
   type StockRow,
@@ -24,6 +25,7 @@ export default function EstoquePage() {
   const [showAdjust, setShowAdjust] = useState(false);
   const [adjustProductId, setAdjustProductId] = useState<number | null>(null);
   const [history, setHistory] = useState<ProductHistory | null>(null);
+  const [minDrafts, setMinDrafts] = useState<Record<number, string>>({});
 
   async function load() {
     try {
@@ -66,6 +68,30 @@ export default function EstoquePage() {
     setError(null);
   }
 
+  async function saveMinStock(row: StockRow) {
+    const raw = minDrafts[row.id] ?? String(row.min_stock_qty);
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 0) {
+      setError('Estoque mínimo inválido.');
+      return;
+    }
+    try {
+      await updateProduct(row.id, {
+        min_stock_qty: n,
+        confirm_similar_name: true,
+      });
+      setMinDrafts((d) => {
+        const next = { ...d };
+        delete next[row.id];
+        return next;
+      });
+      setNotice(`Estoque mínimo de "${row.name}" atualizado para ${n}.`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao salvar estoque mínimo');
+    }
+  }
+
   return (
     <section className="module-panel">
       <ModuleToolbar>
@@ -85,10 +111,15 @@ export default function EstoquePage() {
         </label>
         {canAdjust && (
           <button type="button" className="btn btn-primary" onClick={() => openAdjust()}>
-            Ajustar estoque
+            Ajustar estoque atual
           </button>
         )}
       </ModuleToolbar>
+
+      <p className="muted-line" style={{ margin: '0 0 10px' }}>
+        <strong>Estoque atual</strong> = saldo real (entrada/saída/definir quantidade com
+        movimentação). <strong>Estoque mínimo</strong> = alerta — não altera o saldo.
+      </p>
 
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-ok">{notice}</div>}
@@ -101,8 +132,8 @@ export default function EstoquePage() {
                 <th>Produto</th>
                 <th>Código</th>
                 <th>Categoria</th>
-                <th>Atual</th>
-                <th>Mínimo</th>
+                <th>Estoque atual</th>
+                <th>Estoque mínimo</th>
                 <th>Situação</th>
                 <th>Última mov.</th>
                 <th></th>
@@ -115,9 +146,41 @@ export default function EstoquePage() {
                   <td>{r.barcode || r.sku || '—'}</td>
                   <td>{r.category}</td>
                   <td className={r.situation === 'ok' ? 'stock stock-ok' : 'stock stock-low'}>
-                    {r.stock_qty} {r.unit}
+                    <strong>
+                      {r.stock_qty} {r.unit}
+                    </strong>
                   </td>
-                  <td>{r.min_stock_qty}</td>
+                  <td>
+                    <div className="min-stock-edit">
+                      <input
+                        className="field-input"
+                        style={{ width: 72, padding: '6px 8px' }}
+                        value={minDrafts[r.id] ?? String(r.min_stock_qty)}
+                        onChange={(e) =>
+                          setMinDrafts((d) => ({ ...d, [r.id]: e.target.value }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            void saveMinStock(r);
+                          }
+                        }}
+                        inputMode="numeric"
+                        aria-label={`Estoque mínimo de ${r.name}`}
+                      />
+                      {(minDrafts[r.id] != null &&
+                        minDrafts[r.id] !== String(r.min_stock_qty)) && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          style={{ padding: '4px 8px' }}
+                          onClick={() => void saveMinStock(r)}
+                        >
+                          Salvar
+                        </button>
+                      )}
+                    </div>
+                  </td>
                   <td>
                     <StatusPill
                       tone={
@@ -132,10 +195,10 @@ export default function EstoquePage() {
                     {canAdjust && (
                       <button
                         type="button"
-                        className="btn btn-ghost"
+                        className="btn btn-accent"
                         onClick={() => openAdjust(r.id)}
                       >
-                        Ajustar
+                        Editar atual
                       </button>
                     )}
                     <button
