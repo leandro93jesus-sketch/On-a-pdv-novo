@@ -19,7 +19,9 @@
     "seed": "npm run seed -w server",
     "review:etapa1": "node scripts/review-etapa1.mjs",
     "review:etapa2": "node scripts/review-etapa2.mjs",
-    "review:etapa3": "node scripts/review-etapa3.mjs"
+    "review:etapa3": "node scripts/review-etapa3.mjs",
+    "e2e:etapa3": "node scripts/e2e-etapa3.mjs",
+    "validate:etapa3": "npm test && npm run lint && npm run build && npm run review:etapa1 && npm run review:etapa2 && npm run review:etapa3 && npm run e2e:etapa3"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
