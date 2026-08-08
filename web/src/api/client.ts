@@ -62,6 +62,8 @@ export interface Sale {
   cancelled_by?: string | null;
   cancel_reason?: string | null;
   payment_method?: string | null;
+  amount_received_cents?: number;
+  change_cents?: number;
   items?: SaleItem[];
   payments?: SalePayment[];
 }
@@ -149,6 +151,8 @@ export interface CreateSalePayload {
   discount_cents?: number;
   payment_method?: string;
   payments?: Array<{ method: string; amount_cents: number }>;
+  amount_received_cents?: number;
+  change_cents?: number;
   client_request_id?: string;
   customer_id?: number | null;
   notes?: string;
@@ -432,8 +436,30 @@ export function deleteProduct(id: number): Promise<{ deleted?: boolean; inactiva
   );
 }
 
-export function fetchSales(limit = 50): Promise<Sale[]> {
-  return fetch(`/api/sales?limit=${limit}`).then((r) => handle<Sale[]>(r));
+export function fetchSales(
+  limitOrParams: number | {
+    limit?: number;
+    q?: string;
+    from?: string;
+    to?: string;
+    period?: string;
+    payment_method?: string;
+    status?: string;
+  } = 50
+): Promise<Sale[]> {
+  const params =
+    typeof limitOrParams === 'number'
+      ? { limit: limitOrParams }
+      : {
+          limit: limitOrParams.limit ?? 50,
+          q: limitOrParams.q,
+          from: limitOrParams.from,
+          to: limitOrParams.to,
+          period: limitOrParams.period,
+          payment_method: limitOrParams.payment_method,
+          status: limitOrParams.status,
+        };
+  return apiFetch(`/api/sales${qs(params)}`).then((r) => handle<Sale[]>(r));
 }
 
 export function fetchSale(id: number): Promise<Sale> {

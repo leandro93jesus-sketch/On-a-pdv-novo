@@ -536,6 +536,20 @@ a {
   font-weight: 700;
 }
 
+.qty-control .qty-input {
+  width: 52px;
+  min-height: 30px;
+  border: none;
+  border-left: 1px solid var(--border-strong);
+  border-right: 1px solid var(--border-strong);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 0 4px;
+  background: #fff;
+}
+
 .cart-line-total {
   font-weight: 700;
   font-variant-numeric: tabular-nums;

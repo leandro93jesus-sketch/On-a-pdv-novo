@@ -15,7 +15,9 @@ import {
 } from '../../api/client';
 import CustomerPicker from './CustomerPicker';
 import MiscItemModal from './MiscItemModal';
+import MixedPaymentModal, { type MixedAmounts } from './MixedPaymentModal';
 import ReceiptModal from './ReceiptModal';
+import SalesHistoryModal from './SalesHistoryModal';
 import {
   lineTotal,
   miscLine,
@@ -24,11 +26,14 @@ import {
   type PaymentMethod,
 } from './types';
 
-const PAYMENTS: { id: PaymentMethod; label: string }[] = [
+const PAYMENTS_ROW1: { id: PaymentMethod; label: string }[] = [
   { id: 'dinheiro', label: 'Dinheiro' },
   { id: 'pix', label: 'Pix' },
   { id: 'cartao', label: 'Cartão' },
+];
+const PAYMENTS_ROW2: { id: PaymentMethod; label: string }[] = [
   { id: 'crediario', label: 'Crediário' },
+  { id: 'misto', label: 'Misto' },
 ];
 
 function parseDiscountInput(value: string): { ok: true; cents: number } | { ok: false; error: string } {
@@ -65,12 +70,17 @@ export default function VendasPage() {
     d.setMonth(d.getMonth() + 1);
     return d.toISOString().slice(0, 10);
   });
+  const [cashReceivedInput, setCashReceivedInput] = useState('');
   const [discountInput, setDiscountInput] = useState('0,00');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showMisc, setShowMisc] = useState(false);
+  const [showMixed, setShowMixed] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [mixedDraft, setMixedDraft] = useState<MixedAmounts | null>(null);
+  const [qtyDrafts, setQtyDrafts] = useState<Record<string, string>>({});
   const [receipt, setReceipt] = useState<Sale | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [cash, setCash] = useState<CashSession | null>(null);
@@ -175,10 +185,53 @@ export default function VendasPage() {
             setError(`Estoque insuficiente para "${line.name}". Disponível: ${line.stockQty}`);
             return line;
           }
+          setQtyDrafts((d) => {
+            const next = { ...d };
+            delete next[key];
+            return next;
+          });
           return { ...line, quantity: nextQty };
         })
         .filter((l) => l.quantity > 0)
     );
+  }
+
+  function applyQtyInput(key: string) {
+    const raw = qtyDrafts[key];
+    if (raw == null) return;
+    const n = Number(String(raw).replace(',', '.'));
+    setError(null);
+    if (!Number.isInteger(n) || n <= 0) {
+      setError('Quantidade inválida.');
+      setQtyDrafts((d) => {
+        const next = { ...d };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+    setCart((prev) =>
+      prev
+        .map((line) => {
+          if (line.key !== key) return line;
+          if (
+            !line.isMisc &&
+            line.stockQty != null &&
+            n > line.stockQty &&
+            !line.allowNegative
+          ) {
+            setError(`Estoque insuficiente para "${line.name}". Disponível: ${line.stockQty}`);
+            return line;
+          }
+          return { ...line, quantity: n };
+        })
+        .filter((l) => l.quantity > 0)
+    );
+    setQtyDrafts((d) => {
+      const next = { ...d };
+      delete next[key];
+      return next;
+    });
   }
 
   function removeLine(key: string) {
@@ -231,7 +284,7 @@ export default function VendasPage() {
     }
   }
 
-  async function finalizeSale() {
+  async function finalizeSale(mixedOverride?: MixedAmounts) {
     if (cart.length === 0 || submittingRef.current) return;
 
     const discountParse = parseDiscountInput(discountInput);
@@ -244,11 +297,18 @@ export default function VendasPage() {
       return;
     }
 
-    if (payment === 'crediario' && !customer) {
+    const mode = mixedOverride ? 'misto' : payment;
+    if (mode === 'misto' && !mixedOverride && !mixedDraft) {
+      setShowMixed(true);
+      return;
+    }
+    const mixed = mixedOverride || mixedDraft;
+
+    if ((mode === 'crediario' || (mixed && mixed.crediario > 0)) && !customer) {
       setError('Venda no crediário exige cliente selecionado.');
       return;
     }
-    if (payment === 'crediario') {
+    if (mode === 'crediario') {
       const entryNorm = creditEntryInput.trim().replace(/\./g, '').replace(',', '.');
       const entryN = Number(entryNorm || '0');
       if (!Number.isFinite(entryN) || entryN < 0) {
@@ -258,6 +318,23 @@ export default function VendasPage() {
       if (!Number.isInteger(creditInstallments) || creditInstallments < 1) {
         setError('Número de parcelas inválido.');
         return;
+      }
+    }
+
+    let amountReceivedCents: number | undefined;
+    if (mode === 'dinheiro') {
+      const raw = cashReceivedInput.trim();
+      if (raw) {
+        const n = Number(raw.replace(/\./g, '').replace(',', '.'));
+        if (!Number.isFinite(n) || n < 0) {
+          setError('Valor recebido inválido.');
+          return;
+        }
+        amountReceivedCents = Math.round(n * 100);
+        if (amountReceivedCents < total) {
+          setError('Valor recebido menor que o total.');
+          return;
+        }
       }
     }
 
@@ -280,13 +357,31 @@ export default function VendasPage() {
 
     try {
       const entryCents =
-        payment === 'crediario'
+        mode === 'crediario'
           ? Math.round(
               Number(creditEntryInput.trim().replace(/\./g, '').replace(',', '.') || '0') * 100
             )
           : 0;
+
+      const payments =
+        mode === 'misto' && mixed
+          ? (
+              [
+                { method: 'dinheiro', amount_cents: mixed.dinheiro },
+                { method: 'pix', amount_cents: mixed.pix },
+                { method: 'cartao', amount_cents: mixed.cartao },
+                { method: 'crediario', amount_cents: mixed.crediario },
+              ] as Array<{ method: string; amount_cents: number }>
+            ).filter((p) => p.amount_cents > 0)
+          : undefined;
+
       const sale = await createSale({
-        payment_method: payment,
+        payment_method: mode === 'misto' ? undefined : mode,
+        payments,
+        amount_received_cents:
+          mode === 'misto' && mixed
+            ? mixed.amount_received_cents
+            : amountReceivedCents,
         discount_cents: discountParse.cents,
         client_request_id: requestIdRef.current,
         customer_id: customer?.id ?? null,
@@ -299,11 +394,11 @@ export default function VendasPage() {
           is_misc: line.isMisc,
         })),
         credit:
-          payment === 'crediario'
+          mode === 'crediario' || (mixed && mixed.crediario > 0)
             ? {
-                entry_cents: entryCents,
-                installment_count: creditInstallments,
-                first_due_date: creditFirstDue,
+                entry_cents: mode === 'crediario' ? entryCents : 0,
+                installment_count: mode === 'crediario' ? creditInstallments : 1,
+                first_due_date: mode === 'crediario' ? creditFirstDue : undefined,
               }
             : undefined,
       });
@@ -314,6 +409,10 @@ export default function VendasPage() {
       setPayment('dinheiro');
       setCreditEntryInput('0,00');
       setCreditInstallments(1);
+      setCashReceivedInput('');
+      setMixedDraft(null);
+      setShowMixed(false);
+      setQtyDrafts({});
       requestIdRef.current = null;
       setNotice(`Venda ${full.sale_number} concluída com sucesso.`);
       await Promise.all([loadProducts(query.trim() || undefined), loadSales(), loadCash()]);
@@ -504,7 +603,23 @@ export default function VendasPage() {
                     <button type="button" aria-label="Diminuir" onClick={() => changeQty(line.key, -1)}>
                       −
                     </button>
-                    <span>{line.quantity}</span>
+                    <input
+                      className="qty-input"
+                      aria-label="Quantidade"
+                      value={qtyDrafts[line.key] ?? String(line.quantity)}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onChange={(e) =>
+                        setQtyDrafts((d) => ({ ...d, [line.key]: e.target.value }))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          applyQtyInput(line.key);
+                        }
+                      }}
+                      onBlur={() => applyQtyInput(line.key)}
+                      inputMode="numeric"
+                    />
                     <button type="button" aria-label="Aumentar" onClick={() => changeQty(line.key, 1)}>
                       +
                     </button>
@@ -544,17 +659,92 @@ export default function VendasPage() {
               <span>Forma de pagamento</span>
             </div>
             <div className="payment-options">
-              {PAYMENTS.map((m) => (
+              {PAYMENTS_ROW1.map((m) => (
                 <button
                   key={m.id}
                   type="button"
                   className={m.id === payment ? 'pay-btn active' : 'pay-btn'}
-                  onClick={() => setPayment(m.id)}
+                  onClick={() => {
+                    setPayment(m.id);
+                    setMixedDraft(null);
+                  }}
                 >
                   {m.label}
                 </button>
               ))}
             </div>
+            <div className="payment-options" style={{ marginTop: 8 }}>
+              {PAYMENTS_ROW2.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  className={m.id === payment ? 'pay-btn active' : 'pay-btn'}
+                  onClick={() => {
+                    if (m.id === 'misto') {
+                      setPayment('misto');
+                      setShowMixed(true);
+                      return;
+                    }
+                    setPayment(m.id);
+                    setMixedDraft(null);
+                  }}
+                >
+                  {m.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="pay-btn"
+                onClick={() => setShowHistory(true)}
+              >
+                Histórico
+              </button>
+            </div>
+            {payment === 'dinheiro' ? (
+              <div className="credit-fields" style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                <label>
+                  Valor recebido (R$)
+                  <input
+                    value={cashReceivedInput}
+                    onChange={(e) => setCashReceivedInput(e.target.value)}
+                    inputMode="decimal"
+                    placeholder={(total / 100).toFixed(2).replace('.', ',')}
+                  />
+                </label>
+                {cashReceivedInput.trim() &&
+                Number.isFinite(Number(cashReceivedInput.replace(/\./g, '').replace(',', '.'))) ? (
+                  <div className="muted-line">
+                    Troco:{' '}
+                    <strong>
+                      {formatBRL(
+                        Math.max(
+                          0,
+                          Math.round(
+                            Number(cashReceivedInput.replace(/\./g, '').replace(',', '.')) * 100
+                          ) - total
+                        )
+                      )}
+                    </strong>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {payment === 'misto' && mixedDraft ? (
+              <div className="muted-line" style={{ marginTop: 8 }}>
+                Misto configurado · informado{' '}
+                {formatBRL(
+                  mixedDraft.dinheiro + mixedDraft.pix + mixedDraft.cartao + mixedDraft.crediario
+                )}
+                <button
+                  type="button"
+                  className="linkish"
+                  style={{ marginLeft: 8 }}
+                  onClick={() => setShowMixed(true)}
+                >
+                  Editar
+                </button>
+              </div>
+            ) : null}
             {payment === 'crediario' ? (
               <div className="credit-fields" style={{ marginTop: 10, display: 'grid', gap: 8 }}>
                 <label>
@@ -620,6 +810,33 @@ export default function VendasPage() {
             setShowMisc(false);
             setNotice(null);
             setError(null);
+          }}
+        />
+      )}
+
+      {showMixed && (
+        <MixedPaymentModal
+          totalCents={total}
+          hasCustomer={Boolean(customer)}
+          onCancel={() => {
+            setShowMixed(false);
+            if (!mixedDraft) setPayment('dinheiro');
+          }}
+          onConfirm={(payload) => {
+            setMixedDraft(payload);
+            setPayment('misto');
+            setShowMixed(false);
+            void finalizeSale(payload);
+          }}
+        />
+      )}
+
+      {showHistory && (
+        <SalesHistoryModal
+          onClose={() => setShowHistory(false)}
+          onOpenSale={(sale) => {
+            setShowHistory(false);
+            setReceipt(sale);
           }}
         />
       )}

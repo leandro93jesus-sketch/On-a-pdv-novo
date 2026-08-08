@@ -33,6 +33,8 @@ function mapSale(row) {
     subtotal_cents: row.subtotal_cents,
     discount_cents: row.discount_cents,
     total_cents: row.total_cents,
+    amount_received_cents: row.amount_received_cents ?? 0,
+    change_cents: row.change_cents ?? 0,
     notes: row.notes,
     client_request_id: row.client_request_id ?? null,
     customer_id: row.customer_id ?? null,
@@ -42,6 +44,48 @@ function mapSale(row) {
     cancelled_by: row.cancelled_by ?? null,
     cancel_reason: row.cancel_reason ?? null,
   };
+}
+
+function resolvePaymentLabel(payments) {
+  if (!payments?.length) return null;
+  if (payments.length > 1) return 'misto';
+  return payments[0].method || null;
+}
+
+function periodRange(period) {
+  const now = new Date();
+  const startOfDay = (d) => {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
+  };
+  const iso = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  if (period === 'today') {
+    const s = startOfDay(now);
+    return { from: iso(s), to: iso(s) };
+  }
+  if (period === 'yesterday') {
+    const s = startOfDay(now);
+    s.setDate(s.getDate() - 1);
+    return { from: iso(s), to: iso(s) };
+  }
+  if (period === 'last7') {
+    const e = startOfDay(now);
+    const s = new Date(e);
+    s.setDate(s.getDate() - 6);
+    return { from: iso(s), to: iso(e) };
+  }
+  if (period === 'month') {
+    const s = new Date(now.getFullYear(), now.getMonth(), 1);
+    const e = startOfDay(now);
+    return { from: iso(s), to: iso(e) };
+  }
+  return null;
 }
 
 export function getSaleById(id) {
@@ -78,7 +122,7 @@ export function getSaleById(id) {
     items,
     payments,
     customer,
-    payment_method: payments[0]?.method || null,
+    payment_method: resolvePaymentLabel(payments),
   };
 }
 
@@ -91,25 +135,86 @@ function findSaleByClientRequestId(clientRequestId) {
   return row ? getSaleById(row.id) : null;
 }
 
-export function listSales({ limit = 50 } = {}) {
+export function listSales({
+  limit = 50,
+  q = null,
+  from = null,
+  to = null,
+  period = null,
+  payment_method = null,
+  status = null,
+} = {}) {
   const db = getDb();
   const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+  const where = [];
+  const params = {};
+
+  const range = period ? periodRange(period) : null;
+  const fromDate = from || range?.from || null;
+  const toDate = to || range?.to || null;
+
+  if (fromDate) {
+    where.push(`date(s.created_at) >= date(@from)`);
+    params.from = String(fromDate).slice(0, 10);
+  }
+  if (toDate) {
+    where.push(`date(s.created_at) <= date(@to)`);
+    params.to = String(toDate).slice(0, 10);
+  }
+  if (status && String(status).trim()) {
+    where.push(`s.status = @status`);
+    params.status = String(status).trim();
+  }
+  if (q && String(q).trim()) {
+    const term = `%${String(q).trim()}%`;
+    where.push(`(
+      s.sale_number LIKE @term
+      OR IFNULL(c.name,'') LIKE @term
+      OR IFNULL(c.phone,'') LIKE @term
+      OR IFNULL(c.whatsapp,'') LIKE @term
+      OR EXISTS (
+        SELECT 1 FROM sale_items si
+        WHERE si.sale_id = s.id AND si.name LIKE @term
+      )
+      OR CAST(s.total_cents AS TEXT) LIKE @term
+    )`);
+    params.term = term;
+  }
+  if (payment_method && String(payment_method).trim()) {
+    const pm = String(payment_method).trim().toLowerCase();
+    if (pm === 'misto') {
+      where.push(`(SELECT COUNT(*) FROM sale_payments sp WHERE sp.sale_id = s.id) > 1`);
+    } else {
+      where.push(`EXISTS (
+        SELECT 1 FROM sale_payments sp
+        WHERE sp.sale_id = s.id AND sp.method = @payment_method
+      )`);
+      params.payment_method = pm;
+    }
+  }
+
+  params.limit = safeLimit;
   const rows = db
     .prepare(
       `SELECT s.*,
-         (SELECT method FROM sale_payments sp WHERE sp.sale_id = s.id ORDER BY sp.id LIMIT 1) AS payment_method,
-         c.name AS customer_name
+         (SELECT COUNT(*) FROM sale_payments spc WHERE spc.sale_id = s.id) AS payments_count,
+         (SELECT method FROM sale_payments sp WHERE sp.sale_id = s.id ORDER BY sp.id LIMIT 1) AS first_payment_method,
+         c.name AS customer_name,
+         c.phone AS customer_phone
        FROM sales s
        LEFT JOIN customers c ON c.id = s.customer_id
+       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
        ORDER BY s.id DESC
-       LIMIT ?`
+       LIMIT @limit`
     )
-    .all(safeLimit);
+    .all(params);
 
   return rows.map((r) => ({
     ...mapSale(r),
-    payment_method: r.payment_method,
+    payment_method:
+      Number(r.payments_count) > 1 ? 'misto' : r.first_payment_method || null,
     customer_name: r.customer_name ?? null,
+    customer_phone: r.customer_phone ?? null,
   }));
 }
 
@@ -258,16 +363,49 @@ export function createSale(payload = {}) {
         code: 'INVALID_PAYMENT_METHOD',
       });
     }
-    const amount = assertNonNegativeCents(p.amount_cents ?? total, 'payment.amount_cents');
+    const amount = assertNonNegativeCents(p.amount_cents ?? 0, 'payment.amount_cents');
+    if (amount <= 0) {
+      throw new AppError(`Valor inválido no pagamento ${idx + 1}`, {
+        status: 400,
+        code: 'INVALID_PAYMENT_AMOUNT',
+      });
+    }
     paymentsSum += amount;
     return { method, amount_cents: amount };
   });
 
-  if (paymentsSum < total) {
-    throw new AppError('Valor pago insuficiente para cobrir o total da venda', {
-      status: 400,
-      code: 'PAYMENT_INSUFFICIENT',
-    });
+  if (paymentsSum !== total) {
+    throw new AppError(
+      paymentsSum < total
+        ? 'A soma dos pagamentos é menor que o total da venda'
+        : 'A soma dos pagamentos é maior que o total da venda',
+      {
+        status: 400,
+        code: paymentsSum < total ? 'PAYMENT_INSUFFICIENT' : 'PAYMENT_OVERPAID',
+        details: { total_cents: total, payments_sum_cents: paymentsSum },
+      }
+    );
+  }
+
+  const dinheiroPart = normalizedPayments
+    .filter((p) => p.method === 'dinheiro')
+    .reduce((s, p) => s + p.amount_cents, 0);
+  let amountReceived = assertNonNegativeCents(
+    payload.amount_received_cents ?? dinheiroPart,
+    'amount_received_cents'
+  );
+  let changeCents = assertNonNegativeCents(payload.change_cents ?? 0, 'change_cents');
+  if (dinheiroPart > 0) {
+    if (amountReceived < dinheiroPart) {
+      throw new AppError('Valor recebido em dinheiro menor que a parte em dinheiro', {
+        status: 400,
+        code: 'CASH_RECEIVED_INSUFFICIENT',
+      });
+    }
+    changeCents = amountReceived - dinheiroPart;
+  } else {
+    amountReceived = 0;
+    changeCents = 0;
   }
 
   const hasCredit = normalizedPayments.some((p) => p.method === 'crediario');
@@ -289,10 +427,12 @@ export function createSale(payload = {}) {
 
   const insertSale = db.prepare(`
     INSERT INTO sales (
-      sale_number, status, subtotal_cents, discount_cents, total_cents, notes,
+      sale_number, status, subtotal_cents, discount_cents, total_cents,
+      amount_received_cents, change_cents, notes,
       client_request_id, customer_id, cash_session_id
     ) VALUES (
-      @sale_number, 'completed', @subtotal_cents, @discount_cents, @total_cents, @notes,
+      @sale_number, 'completed', @subtotal_cents, @discount_cents, @total_cents,
+      @amount_received_cents, @change_cents, @notes,
       @client_request_id, @customer_id, @cash_session_id
     )
   `);
@@ -328,6 +468,8 @@ export function createSale(payload = {}) {
         subtotal_cents: subtotal,
         discount_cents: saleDiscount,
         total_cents: total,
+        amount_received_cents: amountReceived,
+        change_cents: changeCents,
         notes,
         client_request_id: clientRequestId,
         customer_id: customerId,

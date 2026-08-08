@@ -5,7 +5,17 @@ const router = Router();
 
 router.get('/', (req, res, next) => {
   try {
-    res.json(listSales({ limit: req.query.limit }));
+    res.json(
+      listSales({
+        limit: req.query.limit,
+        q: req.query.q,
+        from: req.query.from,
+        to: req.query.to,
+        period: req.query.period,
+        payment_method: req.query.payment_method,
+        status: req.query.status,
+      })
+    );
   } catch (err) {
     next(err);
   }
