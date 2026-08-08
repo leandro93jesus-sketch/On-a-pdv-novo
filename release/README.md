@@ -12,10 +12,14 @@ Sistema de ponto de venda local-first para **ONÇA Produtos de Limpeza**.
 
 ## Artefatos
 
-- `dist/ONCA-PDV-Setup-1.0.0.exe` — instalador Windows (NSIS), quando gerado nesta máquina/CI
-- Pasta portátil Linux (smoke interno): `dist/linux-unpacked/` quando gerada
+- `dist/ONCA-PDV-Setup-1.0.0.exe` — instalador Windows (NSIS)
+- `dist/ONCA-PDV-1.0.0-win-x64.zip` — pacote portátil (pasta `win-unpacked`)
+- `dist/ONCA-PDV-Setup-1.0.0.zip` — zip gerado pelo electron-builder
+- Pasta Linux de smoke interno: `dist/linux-unpacked/` (não é entrega ao cliente Windows)
 
 O instalador **não** embute backups reais nem o banco do estabelecimento.
+
+> Antes do go-live, validar o Setup.exe em um Windows 10/11 limpo (abrir app, login, venda, PDF, backup).
 
 ## Instalação (Windows)
 

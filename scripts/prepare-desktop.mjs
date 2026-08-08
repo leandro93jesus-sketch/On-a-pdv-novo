@@ -5,7 +5,7 @@
  *
  * Env:
  *   PDV_DESKTOP_PLATFORM=win|linux|darwin (default: host)
- *   PDV_NODE_VERSION=20.18.1
+ *   PDV_NODE_VERSION — default: mesma versão do Node atual (evita mismatch de ABI)
  */
 import {
   cpSync,
@@ -25,7 +25,7 @@ import { pipeline } from 'node:stream/promises';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, 'desktop-resources');
 const webDist = join(root, 'web', 'dist');
-const NODE_VERSION = process.env.PDV_NODE_VERSION || '20.18.1';
+const NODE_VERSION = process.env.PDV_NODE_VERSION || process.versions.node;
 const platformMap = {
   win: 'win',
   win32: 'win',
@@ -38,6 +38,7 @@ const targetPlatform =
   platformMap[String(process.env.PDV_DESKTOP_PLATFORM || process.platform).toLowerCase()] ||
   'linux';
 const arch = process.env.PDV_DESKTOP_ARCH || 'x64';
+const isWin = targetPlatform === 'win';
 
 if (!existsSync(webDist)) {
   console.error('web/dist ausente. Execute npm run build antes.');
@@ -69,16 +70,27 @@ writeFileSync(
   )
 );
 
+await downloadNodeRuntime({
+  version: NODE_VERSION,
+  platform: targetPlatform,
+  arch,
+  destDir: join(out, 'node'),
+});
+
+const nodeBin = join(out, 'node', isWin ? 'node.exe' : 'node');
 console.log('Instalando dependências de produção do servidor desktop…');
-const npm = spawnSync(
-  'npm',
-  ['install', '--omit=dev', '--no-audit', '--no-fund'],
-  {
-    cwd: join(out, 'app-server'),
-    stdio: 'inherit',
-    env: process.env,
-  }
-);
+
+const npmEnv = {
+  ...process.env,
+  npm_config_platform: isWin ? 'win32' : targetPlatform === 'darwin' ? 'darwin' : 'linux',
+  npm_config_arch: arch,
+};
+
+const npm = spawnSync('npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], {
+  cwd: join(out, 'app-server'),
+  stdio: 'inherit',
+  env: npmEnv,
+});
 if (npm.status !== 0) {
   console.error('Falha ao instalar deps do desktop');
   process.exit(npm.status || 1);
@@ -86,12 +98,22 @@ if (npm.status !== 0) {
 
 rmSync(join(out, 'app-server', 'data'), { recursive: true, force: true });
 
-await downloadNodeRuntime({
-  version: NODE_VERSION,
-  platform: targetPlatform,
-  arch,
-  destDir: join(out, 'node'),
-});
+if (!isWin && targetPlatform === process.platform) {
+  const check = spawnSync(
+    nodeBin,
+    [
+      '-e',
+      "require('better-sqlite3'); console.log('better-sqlite3 ok modules=' + process.versions.modules)",
+    ],
+    { cwd: join(out, 'app-server'), encoding: 'utf8' }
+  );
+  if (check.status !== 0) {
+    console.error(check.stderr || check.stdout);
+    console.error('Falha: better-sqlite3 incompatível com Node embutido');
+    process.exit(1);
+  }
+  console.log(check.stdout.trim());
+}
 
 writeFileSync(
   join(out, 'README.txt'),
@@ -106,8 +128,8 @@ writeFileSync(
 console.log('desktop-resources pronto:', out);
 
 async function downloadNodeRuntime({ version, platform, arch, destDir }) {
-  const isWin = platform === 'win';
-  const ext = isWin ? 'zip' : 'tar.gz';
+  const win = platform === 'win';
+  const ext = win ? 'zip' : 'tar.gz';
   const folder = `node-v${version}-${platform}-${arch}`;
   const url = `https://nodejs.org/dist/v${version}/${folder}.${ext}`;
   const archivePath = join(out, `${folder}.${ext}`);
@@ -115,14 +137,13 @@ async function downloadNodeRuntime({ version, platform, arch, destDir }) {
   console.log('Baixando Node runtime:', url);
   const res = await fetch(url);
   if (!res.ok) {
-    throw new Error(`Falha ao baixar Node: HTTP ${res.status}`);
+    throw new Error(`Falha ao baixar Node: HTTP ${res.status} (${url})`);
   }
   await pipeline(res.body, createWriteStream(archivePath));
 
-  if (isWin) {
+  if (win) {
     const unzip = spawnSync('unzip', ['-q', archivePath, '-d', out], { stdio: 'inherit' });
     if (unzip.status !== 0) {
-      // fallback: PowerShell not available; try bsdtar
       const tar = spawnSync('tar', ['-xf', archivePath, '-C', out], { stdio: 'inherit' });
       if (tar.status !== 0) {
         throw new Error('Não foi possível extrair Node Windows (zip). Instale unzip.');

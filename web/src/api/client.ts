@@ -49,7 +49,13 @@ export interface Sale {
   client_request_id?: string | null;
   customer_id?: number | null;
   customer_name?: string | null;
-  customer?: { id: number; name: string; document?: string | null; phone?: string | null } | null;
+  customer?: {
+    id: number;
+    name: string;
+    document?: string | null;
+    phone?: string | null;
+    whatsapp?: string | null;
+  } | null;
   cash_session_id?: number | null;
   created_at: string;
   cancelled_at: string | null;

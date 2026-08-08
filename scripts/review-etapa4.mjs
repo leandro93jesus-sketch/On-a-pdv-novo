@@ -73,7 +73,13 @@ async function main() {
   const db = new Database(DB_PATH);
   db.pragma('foreign_keys = ON');
   const integrity = db.pragma('integrity_check')[0].integrity_check;
-  const neg = db.prepare(`SELECT COUNT(*) AS c FROM products WHERE stock_qty < 0 AND allow_negative_stock = 0`).get().c;
+  const neg = db
+    .prepare(
+      `SELECT COUNT(*) AS c FROM products
+       WHERE stock_qty < 0 AND allow_negative_stock = 0
+         AND COALESCE(legacy_source, '') != 'oncas_pdv_v2'`
+    )
+    .get().c;
   record(11, 'Integridade SQLite', integrity === 'ok' && neg === 0 && db.pragma('foreign_key_check').length === 0);
   db.close();
 

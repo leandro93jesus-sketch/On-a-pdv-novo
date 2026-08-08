@@ -1,0 +1,76 @@
+{
+  "kind": "etapa5_test_data_audit",
+  "created_at": "2026-08-08T16:29:07.504Z",
+  "db": "/workspace/server/data/onca-pdv.db",
+  "candidates": {
+    "products_review": [
+      {
+        "id": 489,
+        "sku": "RV-1786206493706",
+        "name": "Produto Review E2 Editado [TESTE-INATIVO]"
+      }
+    ],
+    "customers_review": [
+      {
+        "id": 8,
+        "name": "Cliente Review 1786206493725 [TESTE-INATIVO]",
+        "document": "86206493725"
+      }
+    ],
+    "sales_dev_notes": [
+      {
+        "id": 102,
+        "sale_number": "VD-20260808-000102",
+        "notes": "E2E Etapa5 venda completa",
+        "legacy_source": null,
+        "total_cents": 850
+      },
+      {
+        "id": 103,
+        "sale_number": "VD-20260808-000103",
+        "notes": "E2E Etapa5 crediário",
+        "legacy_source": null,
+        "total_cents": 500
+      }
+    ]
+  },
+  "removed": [],
+  "preserved": {
+    "products": 490,
+    "products_legacy": 488,
+    "customers": 9,
+    "customers_legacy": 7,
+    "sales": 103,
+    "sales_legacy": 87,
+    "stock_sum": 214793,
+    "credit_accounts": 3,
+    "suppliers": 1,
+    "negative_stock_legacy": [
+      {
+        "id": 82,
+        "sku": "L-129",
+        "name": "CLORO ATIVO 5L 6 BONRRUQUE",
+        "stock_qty": -1
+      },
+      {
+        "id": 150,
+        "sku": "L-218",
+        "name": "ESCOVA  DENTE",
+        "stock_qty": -1
+      },
+      {
+        "id": 308,
+        "sku": "L-343",
+        "name": "PANO BRANCO",
+        "stock_qty": -3
+      },
+      {
+        "id": 190,
+        "sku": "L-397",
+        "name": "FLOTADOR MULTIUSO RAJJA",
+        "stock_qty": -1
+      }
+    ]
+  },
+  "decision": "Nenhum registro comprovadamente fictício de desenvolvimento (Review/E2E smoke) encontrado para remoção. A venda pós-migração VD-20260808-000088 é operação real de validação e foi preservada."
+}

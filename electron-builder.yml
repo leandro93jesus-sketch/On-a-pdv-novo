@@ -19,12 +19,19 @@ asar: true
 extraMetadata:
   main: electron/main.cjs
 win:
+  # zip/portable são geráveis em CI Linux; NSIS completo recomenda agente Windows.
   target:
+    - target: zip
+      arch:
+        - x64
     - target: nsis
       arch:
         - x64
   icon: electron/assets/icon.ico
   requestedExecutionLevel: asInvoker
+  signAndEditExecutable: false
+  signDlls: false
+  forceCodeSigning: false
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
@@ -33,8 +40,12 @@ nsis:
   shortcutName: ONÇA PDV
   uninstallDisplayName: ONÇA PDV
   deleteAppDataOnUninstall: false
+  packElevateHelper: false
+  runAfterFinish: false
   artifactName: ONCA-PDV-Setup-${version}.${ext}
   license: release/LICENSE.txt
+  # Evita pós-processamento que exige Wine estável neste ambiente
+  differentialPackage: false
 linux:
   target:
     - dir

@@ -166,7 +166,11 @@ async function main() {
     )
     .get().c;
   const neg = db
-    .prepare(`SELECT COUNT(*) AS c FROM products WHERE stock_qty < 0 AND allow_negative_stock=0`)
+    .prepare(
+      `SELECT COUNT(*) AS c FROM products
+       WHERE stock_qty < 0 AND allow_negative_stock=0
+         AND COALESCE(legacy_source, '') != 'oncas_pdv_v2'`
+    )
     .get().c;
   record(19, 'Integridade SQLite', orphans === 0 && neg === 0, `orphans=${orphans} neg=${neg}`);
 

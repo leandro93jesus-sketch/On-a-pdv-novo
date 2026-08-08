@@ -2,6 +2,7 @@
   "name": "onca-pdv",
   "version": "1.0.0",
   "private": true,
+  "author": "ONÇA Produtos de Limpeza",
   "description": "ONÇA PDV — sistema profissional de ponto de venda local-first.",
   "main": "electron/main.cjs",
   "workspaces": [
@@ -25,8 +26,10 @@
     "review:etapa5": "node scripts/review-etapa5.mjs",
     "e2e:etapa3": "node scripts/e2e-etapa3.mjs",
     "e2e:ui:etapa3": "node scripts/e2e-ui-etapa3.mjs",
+    "e2e:ui:etapa5": "node scripts/e2e-ui-etapa5.mjs",
     "e2e:etapa4": "node scripts/e2e-etapa4.mjs",
     "e2e:etapa5": "node scripts/e2e-etapa5.mjs",
+    "etapa5:purge-review": "node scripts/etapa5-purge-review-data.mjs",
     "simulate:oncas-v2": "node scripts/simulate-oncas-v2.mjs",
     "import:oncas-v2": "node scripts/import-oncas-v2-real.mjs",
     "etapa5:test-data": "node scripts/etapa5-test-data-report.mjs",
@@ -37,7 +40,7 @@
     "desktop:pack": "npm run build && npm run desktop:prepare && npm run desktop:dist:linux",
     "validate:etapa3": "npm test && npm run lint && npm run build && npm run review:etapa1 && npm run review:etapa2 && npm run review:etapa3 && npm run e2e:etapa3 && npm run e2e:ui:etapa3",
     "validate:etapa4": "npm test && npm run lint && npm run build && npm run review:etapa1 && npm run review:etapa2 && npm run review:etapa3 && npm run review:etapa4 && npm run e2e:etapa4",
-    "validate:etapa5": "npm test && npm run lint && npm run build && npm run review:etapa1 && npm run review:etapa2 && npm run review:etapa3 && npm run review:etapa4 && npm run review:etapa5 && npm run etapa5:test-data && npm run etapa5:restore-isolated && npm run e2e:etapa5"
+    "validate:etapa5": "npm test && npm run lint && npm run build && npm run review:etapa1 && npm run review:etapa2 && npm run review:etapa3 && npm run review:etapa4 && npm run review:etapa5 && npm run etapa5:test-data && npm run etapa5:restore-isolated && npm run e2e:etapa5 && npm run e2e:ui:etapa5"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

@@ -249,28 +249,22 @@ async function main() {
   record('credit-summary', 'Crediário summary', creditSummary.status === 200);
 
   let creditOk = false;
-  if ((creditSummary.json?.open_accounts || creditSummary.json?.total_balance_cents || 0) > 0) {
-    const accounts = await req('GET', `${API}/api/credit/accounts?status=open`, null, token);
-    const acc = accounts.json?.[0];
-    if (acc) {
-      const pay = await req(
-        'POST',
-        `${API}/api/credit/payments`,
-        {
-          credit_account_id: acc.id,
-          amount_cents: Math.min(100, acc.balance_cents || 100),
-          method: 'dinheiro',
-        },
-        token
-      );
-      creditOk = pay.status === 201 || pay.status === 200;
-    }
-  } else if (product && customer) {
+  let creditDetail = '';
+  const openBalance = Number(creditSummary.json?.total_open_cents || 0);
+  let accounts = await req('GET', `${API}/api/credit/accounts?status=aberto`, null, token);
+  let acc = (accounts.json || []).find((a) => (a.balance_cents || 0) > 0);
+
+  if (!acc) {
+    // Usa cliente legado real (não o auxiliar de review) quando possível
+    const custList = await req('GET', `${API}/api/customers?limit=50`, null, token);
+    const creditCustomer =
+      (custList.json || []).find((c) => c.legacy_source === 'oncas_pdv_v2' && c.id) ||
+      customer;
     const creditSale = await req(
       'POST',
       `${API}/api/sales`,
       {
-        customer_id: customer.id,
+        customer_id: creditCustomer?.id,
         payment_method: 'crediario',
         payments: [{ method: 'crediario', amount_cents: 500 }],
         credit: { installment_count: 2, entry_cents: 0 },
@@ -279,33 +273,41 @@ async function main() {
       },
       token
     );
-    if (creditSale.status < 400 && creditSale.json?.id) {
-      const accounts = await req('GET', `${API}/api/credit/accounts?status=open`, null, token);
-      const acc = (accounts.json || []).find((a) => a.sale_id === creditSale.json.id) || accounts.json?.[0];
-      if (acc) {
-        const pay = await req(
-          'POST',
-          `${API}/api/credit/payments`,
-          {
-            credit_account_id: acc.id,
-            amount_cents: 200,
-            method: 'pix',
-          },
-          token
-        );
-        creditOk = pay.status === 201 || pay.status === 200;
-      }
-    } else {
-      creditOk = false;
-      record(
-        'credit-sale',
-        'Venda crediário (criação)',
-        false,
-        `${creditSale.status} ${creditSale.json?.error || ''}`
-      );
-    }
+    record(
+      'credit-sale',
+      'Venda crediário (criação)',
+      creditSale.status === 201 || creditSale.status === 200,
+      `${creditSale.status} id=${creditSale.json?.id || ''}`
+    );
+    accounts = await req('GET', `${API}/api/credit/accounts?status=aberto`, null, token);
+    acc =
+      (accounts.json || []).find((a) => a.sale_id === creditSale.json?.id) ||
+      (accounts.json || []).find((a) => (a.balance_cents || 0) > 0);
   }
-  record('credit-flow', 'Fluxo crediário / pagamento parcial', creditOk, creditOk ? 'ok' : 'parcial/indisponível');
+
+  if (acc) {
+    const amount = Math.min(200, acc.balance_cents || 200);
+    const pay = await req(
+      'POST',
+      `${API}/api/credit/payments`,
+      {
+        credit_account_id: acc.id,
+        amount_cents: amount,
+        method: 'pix',
+      },
+      token
+    );
+    const after = await req('GET', `${API}/api/credit/accounts/${acc.id}`, null, token);
+    creditOk =
+      (pay.status === 201 || pay.status === 200) &&
+      Number(after.json?.balance_cents) === Number(acc.balance_cents) - amount;
+    creditDetail = creditOk
+      ? `account=${acc.id} pago=${amount} saldo=${after.json?.balance_cents}`
+      : `${pay.status} ${pay.json?.error || ''} openBalance=${openBalance}`;
+  } else {
+    creditDetail = 'nenhuma conta aberta';
+  }
+  record('credit-flow', 'Fluxo crediário / pagamento parcial', creditOk, creditDetail);
 
   const current = await req('GET', `${API}/api/cash/sessions/current`, null, token);
   const expected =

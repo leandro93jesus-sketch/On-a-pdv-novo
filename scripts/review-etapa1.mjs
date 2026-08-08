@@ -77,7 +77,12 @@ async function main() {
 
   // --- 12/13 busca e barcode ---
   const products = (await api('GET', '/api/products')).json;
-  const agua = products.find((p) => p.barcode === '7891000100103') || products[0];
+  // Com dados reais migrados, o 1º produto pode ter estoque baixo — exige margem para qty=2 + testes.
+  const agua =
+    products.find((p) => p.barcode === '7891000100103' && p.stock_qty >= 5) ||
+    products.find((p) => p.stock_qty >= 5 && p.barcode) ||
+    products.find((p) => p.stock_qty >= 5) ||
+    products[0];
   const barcodeRes = await api('GET', `/api/products?barcode=${encodeURIComponent(agua.barcode)}`);
   record(
     12,
@@ -202,8 +207,15 @@ async function main() {
     pays.length === 1 && pays[0].method === 'dinheiro' && pays[0].amount_cents === expectedTotal
   );
 
-  // Pix e Cartão
-  const other = products.filter((p) => p.id !== agua.id && p.stock_qty > 0).slice(0, 2);
+  // Pix e Cartão — recarrega estoque atual (lista inicial pode estar desatualizada)
+  const freshProducts = (await api('GET', '/api/products')).json;
+  const other = freshProducts
+    .filter((p) => p.id !== agua.id && p.stock_qty > 0)
+    .slice(0, 2);
+  if (other.length < 2) {
+    console.error('Produtos insuficientes com estoque para revisão Pix/Cartão');
+    process.exit(1);
+  }
   const pixSale = await api('POST', '/api/sales', {
     client_request_id: `review-pix-${Date.now()}`,
     payment_method: 'pix',
@@ -324,10 +336,12 @@ async function main() {
        LEFT JOIN sales s ON s.id = sp.sale_id WHERE s.id IS NULL`
     )
     .get().c;
+  // Negativos do backup legado (oncas_pdv_v2) são preservados de propósito — não são "indevidos".
   const negativeBlocked = db
     .prepare(
       `SELECT COUNT(*) AS c FROM products
-       WHERE stock_qty < 0 AND allow_negative_stock = 0`
+       WHERE stock_qty < 0 AND allow_negative_stock = 0
+         AND COALESCE(legacy_source, '') != 'oncas_pdv_v2'`
     )
     .get().c;
   record(
