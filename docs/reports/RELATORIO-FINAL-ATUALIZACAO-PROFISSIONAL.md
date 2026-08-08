@@ -76,6 +76,11 @@
 Build Windows via `PDV_DESKTOP_PLATFORM=win` (Node Windows/`node.exe` no empacotamento).  
 `desktop-resources/server/data` **não** está embutido no instalador.
 
+SHA-256:
+
+- Setup: `a8ba6e290cc98d44e508372eea498c133f43642b84a466de27ec54956590ffbe`
+- Zip: `38fe5dd903fa63d2c212a293b5af761543b6c3d7eb2d8fe2d4fe440eeb9514e6`
+
 ## Item Diversos
 
 Não alterado. Regressão automatizada OK (venda avulsa sem baixa de estoque).
