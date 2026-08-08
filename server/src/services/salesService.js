@@ -5,8 +5,8 @@ import { assertNonNegativeCents } from '../utils/money.js';
 const PAYMENT_METHODS = new Set(['dinheiro', 'pix', 'cartao']);
 
 function nextSaleNumber(db) {
-  const row = db.prepare(`SELECT COUNT(*) AS c FROM sales`).get();
-  const seq = (row?.c || 0) + 1;
+  const row = db.prepare(`SELECT COALESCE(MAX(id), 0) AS max_id FROM sales`).get();
+  const seq = Number(row?.max_id || 0) + 1;
   const date = new Date();
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -24,6 +24,7 @@ function mapSale(row) {
     discount_cents: row.discount_cents,
     total_cents: row.total_cents,
     notes: row.notes,
+    client_request_id: row.client_request_id ?? null,
     created_at: row.created_at,
     cancelled_at: row.cancelled_at,
   };
@@ -59,6 +60,15 @@ export function getSaleById(id) {
   };
 }
 
+function findSaleByClientRequestId(clientRequestId) {
+  if (!clientRequestId) return null;
+  const db = getDb();
+  const row = db
+    .prepare('SELECT id FROM sales WHERE client_request_id = ?')
+    .get(clientRequestId);
+  return row ? getSaleById(row.id) : null;
+}
+
 export function listSales({ limit = 50 } = {}) {
   const db = getDb();
   const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
@@ -85,12 +95,23 @@ export function listSales({ limit = 50 } = {}) {
  *   items: [{ product_id?, name?, quantity, unit_price_cents?, discount_cents?, is_misc? }],
  *   discount_cents?: number,
  *   payments?: [{ method, amount_cents }],
- *   payment_method?: string, // atalho etapa 1
+ *   payment_method?: string,
+ *   client_request_id?: string,
  *   notes?: string
  * }
  */
 export function createSale(payload = {}) {
   const db = getDb();
+  const clientRequestId =
+    typeof payload.client_request_id === 'string' && payload.client_request_id.trim()
+      ? payload.client_request_id.trim().slice(0, 100)
+      : null;
+
+  if (clientRequestId) {
+    const existing = findSaleByClientRequestId(clientRequestId);
+    if (existing) return existing;
+  }
+
   const itemsInput = payload.items;
   if (!Array.isArray(itemsInput) || itemsInput.length === 0) {
     throw new AppError('A venda precisa ter ao menos um item', {
@@ -141,7 +162,6 @@ export function createSale(payload = {}) {
         discount_cents: itemDiscount,
         line_total_cents: lineTotal,
         is_misc: 1,
-        product: null,
       });
       continue;
     }
@@ -177,7 +197,6 @@ export function createSale(payload = {}) {
       discount_cents: itemDiscount,
       line_total_cents: lineTotal,
       is_misc: 0,
-      product,
     });
   }
 
@@ -189,8 +208,13 @@ export function createSale(payload = {}) {
     });
   }
   const total = subtotal - saleDiscount;
+  if (total < 0) {
+    throw new AppError('Total da venda não pode ser negativo', {
+      status: 400,
+      code: 'INVALID_TOTAL',
+    });
+  }
 
-  // Pagamentos: aceita array ou atalho payment_method (etapa 1)
   let payments = Array.isArray(payload.payments) ? payload.payments : null;
   if (!payments || payments.length === 0) {
     const method = String(payload.payment_method || 'dinheiro').trim().toLowerCase();
@@ -224,9 +248,19 @@ export function createSale(payload = {}) {
     });
   }
 
+  // Agrega quantidade por produto para baixa de estoque correta
+  const stockDemand = new Map();
+  for (const item of resolvedItems) {
+    if (item.is_misc || !item.product_id) continue;
+    stockDemand.set(item.product_id, (stockDemand.get(item.product_id) || 0) + item.quantity);
+  }
+
   const insertSale = db.prepare(`
-    INSERT INTO sales (sale_number, status, subtotal_cents, discount_cents, total_cents, notes)
-    VALUES (@sale_number, 'completed', @subtotal_cents, @discount_cents, @total_cents, @notes)
+    INSERT INTO sales (
+      sale_number, status, subtotal_cents, discount_cents, total_cents, notes, client_request_id
+    ) VALUES (
+      @sale_number, 'completed', @subtotal_cents, @discount_cents, @total_cents, @notes, @client_request_id
+    )
   `);
   const insertItem = db.prepare(`
     INSERT INTO sale_items (
@@ -255,76 +289,104 @@ export function createSale(payload = {}) {
     `SELECT id, name, stock_qty, allow_negative_stock FROM products WHERE id = ?`
   );
 
-  const saleId = db.transaction(() => {
-    // Valida e baixa estoque
-    for (const item of resolvedItems) {
-      if (item.is_misc || !item.product_id) continue;
-      const current = lockProduct.get(item.product_id);
-      if (!current) {
-        throw new AppError(`Produto ${item.product_id} não encontrado`, {
-          status: 400,
-          code: 'PRODUCT_NOT_FOUND',
+  let saleId;
+  try {
+    saleId = db.transaction(() => {
+      if (clientRequestId) {
+        const again = db
+          .prepare('SELECT id FROM sales WHERE client_request_id = ?')
+          .get(clientRequestId);
+        if (again) return Number(again.id);
+      }
+
+      const stockAfterByProduct = new Map();
+      for (const [productId, qty] of stockDemand.entries()) {
+        const current = lockProduct.get(productId);
+        if (!current) {
+          throw new AppError(`Produto ${productId} não encontrado`, {
+            status: 400,
+            code: 'PRODUCT_NOT_FOUND',
+          });
+        }
+        const nextQty = current.stock_qty - qty;
+        if (nextQty < 0 && !current.allow_negative_stock) {
+          throw new AppError(
+            `Estoque insuficiente para "${current.name}". Disponível: ${current.stock_qty}, solicitado: ${qty}`,
+            {
+              status: 409,
+              code: 'STOCK_INSUFFICIENT',
+              details: {
+                product_id: current.id,
+                available: current.stock_qty,
+                requested: qty,
+              },
+            }
+          );
+        }
+        stockAfterByProduct.set(productId, {
+          nextQty,
+          delta: -qty,
+          name: current.name,
         });
       }
-      const nextQty = current.stock_qty - item.quantity;
-      if (nextQty < 0 && !current.allow_negative_stock) {
-        throw new AppError(
-          `Estoque insuficiente para "${current.name}". Disponível: ${current.stock_qty}, solicitado: ${item.quantity}`,
-          {
-            status: 409,
-            code: 'STOCK_INSUFFICIENT',
-            details: {
-              product_id: current.id,
-              available: current.stock_qty,
-              requested: item.quantity,
-            },
-          }
-        );
-      }
-      item._stock_after = nextQty;
-    }
 
-    const sale_number = nextSaleNumber(db);
-    const info = insertSale.run({
-      sale_number,
-      subtotal_cents: subtotal,
-      discount_cents: saleDiscount,
-      total_cents: total,
-      notes,
-    });
-    const id = Number(info.lastInsertRowid);
-
-    for (const item of resolvedItems) {
-      insertItem.run({
-        sale_id: id,
-        product_id: item.product_id,
-        name: item.name,
-        barcode: item.barcode,
-        unit_price_cents: item.unit_price_cents,
-        quantity: item.quantity,
-        discount_cents: item.discount_cents,
-        line_total_cents: item.line_total_cents,
-        is_misc: item.is_misc,
+      const sale_number = nextSaleNumber(db);
+      const info = insertSale.run({
+        sale_number,
+        subtotal_cents: subtotal,
+        discount_cents: saleDiscount,
+        total_cents: total,
+        notes,
+        client_request_id: clientRequestId,
       });
+      const id = Number(info.lastInsertRowid);
 
-      if (!item.is_misc && item.product_id) {
-        updateStock.run({ id: item.product_id, stock_qty: item._stock_after });
+      for (const item of resolvedItems) {
+        insertItem.run({
+          sale_id: id,
+          product_id: item.product_id,
+          name: item.name,
+          barcode: item.barcode,
+          unit_price_cents: item.unit_price_cents,
+          quantity: item.quantity,
+          discount_cents: item.discount_cents,
+          line_total_cents: item.line_total_cents,
+          is_misc: item.is_misc,
+        });
+      }
+
+      for (const [productId, infoStock] of stockAfterByProduct.entries()) {
+        updateStock.run({ id: productId, stock_qty: infoStock.nextQty });
         insertMovement.run(
-          item.product_id,
-          -item.quantity,
-          item._stock_after,
+          productId,
+          infoStock.delta,
+          infoStock.nextQty,
           id,
           `Venda ${sale_number}`
         );
       }
-    }
 
-    for (const p of normalizedPayments) {
-      insertPayment.run(id, p.method, p.amount_cents);
-    }
+      for (const p of normalizedPayments) {
+        insertPayment.run(id, p.method, p.amount_cents);
+      }
 
-    return id;
-  })();
+      return id;
+    })();
+  } catch (err) {
+    // Corrida rara de idempotência: outro request gravou a mesma chave
+    if (clientRequestId && String(err?.message || '').includes('UNIQUE')) {
+      const existing = findSaleByClientRequestId(clientRequestId);
+      if (existing) return existing;
+    }
+    if (err?.code && String(err.code).startsWith('SQLITE_')) {
+      throw new AppError('Falha ao gravar a venda; nenhuma alteração foi mantida', {
+        status: 500,
+        code: 'TRANSACTION_FAILED',
+        details: { sqlite: err.code, message: err.message },
+      });
+    }
+    throw err;
+  }
 
   return getSaleById(saleId);
 }

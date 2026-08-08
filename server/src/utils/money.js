@@ -1,3 +1,5 @@
+import { AppError } from './errors.js';
+
 /** Arredonda para centavos inteiros de forma segura. */
 export function toCents(value) {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -13,10 +15,10 @@ export function toCents(value) {
 export function assertNonNegativeCents(value, field) {
   const cents = toCents(value);
   if (cents === null || !Number.isInteger(cents) || cents < 0) {
-    const err = new Error(`${field} deve ser um inteiro >= 0 (centavos)`);
-    err.status = 400;
-    err.code = 'INVALID_MONEY';
-    throw err;
+    throw new AppError(`${field} deve ser um inteiro >= 0 (centavos)`, {
+      status: 400,
+      code: 'INVALID_MONEY',
+    });
   }
   return cents;
 }

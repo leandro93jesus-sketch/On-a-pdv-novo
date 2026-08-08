@@ -25,12 +25,25 @@ const PAYMENTS: { id: PaymentMethod; label: string }[] = [
   { id: 'cartao', label: 'Cartão' },
 ];
 
-function parseDiscountInput(value: string): number {
-  const normalized = value.replace(/\./g, '').replace(',', '.').trim();
-  if (!normalized) return 0;
+function parseDiscountInput(value: string): { ok: true; cents: number } | { ok: false; error: string } {
+  const trimmed = value.trim();
+  if (!trimmed) return { ok: true, cents: 0 };
+  if (trimmed.includes('-')) {
+    return { ok: false, error: 'Desconto não pode ser negativo.' };
+  }
+  const normalized = trimmed.replace(/\./g, '').replace(',', '.');
   const n = Number(normalized);
-  if (!Number.isFinite(n) || n < 0) return 0;
-  return Math.round(n * 100);
+  if (!Number.isFinite(n) || n < 0) {
+    return { ok: false, error: 'Desconto inválido.' };
+  }
+  return { ok: true, cents: Math.round(n * 100) };
+}
+
+function newRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export default function VendasPage() {
@@ -48,6 +61,8 @@ export default function VendasPage() {
   const [receipt, setReceipt] = useState<Sale | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const searchTimer = useRef<number | null>(null);
+  const submittingRef = useRef(false);
+  const requestIdRef = useRef<string | null>(null);
 
   async function loadSales() {
     const list = await fetchSales(30);
@@ -89,7 +104,9 @@ export default function VendasPage() {
   }, [query]);
 
   const subtotal = useMemo(() => cart.reduce((sum, line) => sum + lineTotal(line), 0), [cart]);
-  const discountCents = Math.min(parseDiscountInput(discountInput), subtotal);
+  const parsedDiscount = parseDiscountInput(discountInput);
+  const discountCents =
+    parsedDiscount.ok ? Math.min(parsedDiscount.cents, subtotal) : 0;
   const total = Math.max(subtotal - discountCents, 0);
 
   function addProduct(product: Product) {
@@ -157,6 +174,7 @@ export default function VendasPage() {
     setError(null);
     setNotice('Venda cancelada antes da conclusão. Nada foi registrado.');
     setReceipt(null);
+    requestIdRef.current = null;
     searchRef.current?.focus();
   }
 
@@ -195,14 +213,32 @@ export default function VendasPage() {
   }
 
   async function finalizeSale() {
-    if (cart.length === 0 || submitting) return;
+    if (cart.length === 0 || submittingRef.current) return;
+
+    const discountParse = parseDiscountInput(discountInput);
+    if (!discountParse.ok) {
+      setError(discountParse.error);
+      return;
+    }
+    if (discountParse.cents > subtotal) {
+      setError('Desconto não pode ser maior que o subtotal.');
+      return;
+    }
+
+    submittingRef.current = true;
     setSubmitting(true);
     setError(null);
     setNotice(null);
+
+    if (!requestIdRef.current) {
+      requestIdRef.current = newRequestId();
+    }
+
     try {
       const sale = await createSale({
         payment_method: payment,
-        discount_cents: discountCents,
+        discount_cents: discountParse.cents,
+        client_request_id: requestIdRef.current,
         items: cart.map((line) => ({
           product_id: line.productId,
           name: line.name,
@@ -216,12 +252,14 @@ export default function VendasPage() {
       setReceipt(full);
       setCart([]);
       setDiscountInput('0,00');
+      requestIdRef.current = null;
       setNotice(`Venda ${full.sale_number} concluída com sucesso.`);
       await Promise.all([loadProducts(query.trim() || undefined), loadSales()]);
       searchRef.current?.focus();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao finalizar a venda');
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }

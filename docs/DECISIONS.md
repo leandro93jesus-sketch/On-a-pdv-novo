@@ -26,3 +26,9 @@ Produtos demo só entram se o catálogo estiver vazio (`PDV_SEED` diferente de `
 
 ## 9. UI comercial clara
 Shell com navegação completa desde o dia 1; módulos não prontos ficam como placeholder explícito (“Em breve”), sem fingir funcionalidade.
+
+## 10. Idempotência de finalização (`client_request_id`)
+Reenvio/duplo clique reutiliza a mesma chave gerada no cliente. Índice único parcial em `sales.client_request_id` evita vendas duplicadas e segunda baixa de estoque.
+
+## 11. Baixa de estoque agregada por produto
+Quantidades do mesmo `product_id` em várias linhas são somadas antes da validação/baixa, evitando estoque inconsistente dentro da mesma venda.

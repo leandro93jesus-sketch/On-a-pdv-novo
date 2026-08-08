@@ -35,6 +35,16 @@ function insertProduct(overrides = {}) {
   return Number(info.lastInsertRowid);
 }
 
+async function postSale(body) {
+  const res = await fetch(`${baseUrl}/api/sales`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json();
+  return { res, json };
+}
+
 before(async () => {
   db = openDatabase(process.env.PDV_DB_PATH);
   setDb(db);
@@ -71,13 +81,17 @@ test('health responde ok', async () => {
   assert.equal(body.name, 'ONÇA PDV');
 });
 
-test('busca produto por código de barras', async () => {
-  insertProduct({ barcode: '7891000100103', name: 'Água', price_cents: 350, stock_qty: 5 });
-  const res = await fetch(`${baseUrl}/api/products?barcode=7891000100103`);
-  assert.equal(res.status, 200);
-  const products = await res.json();
-  assert.equal(products.length, 1);
-  assert.equal(products[0].name, 'Água');
+test('busca produto por código de barras e por nome', async () => {
+  insertProduct({ barcode: '7891000100103', name: 'Água Mineral', sku: 'BEB-001', price_cents: 350, stock_qty: 5 });
+  const byBarcode = await fetch(`${baseUrl}/api/products?barcode=7891000100103`).then((r) => r.json());
+  assert.equal(byBarcode.length, 1);
+  assert.equal(byBarcode[0].name, 'Água Mineral');
+
+  const byName = await fetch(`${baseUrl}/api/products?q=Água`).then((r) => r.json());
+  assert.ok(byName.some((p) => p.name === 'Água Mineral'));
+
+  const bySku = await fetch(`${baseUrl}/api/products?q=BEB-001`).then((r) => r.json());
+  assert.equal(bySku.length, 1);
 });
 
 test('finaliza venda, persiste e baixa estoque', async () => {
@@ -88,18 +102,12 @@ test('finaliza venda, persiste e baixa estoque', async () => {
     stock_qty: 5,
   });
 
-  const res = await fetch(`${baseUrl}/api/sales`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      payment_method: 'pix',
-      discount_cents: 100,
-      items: [{ product_id: id, quantity: 2 }],
-    }),
+  const { res, json: sale } = await postSale({
+    payment_method: 'pix',
+    discount_cents: 100,
+    items: [{ product_id: id, quantity: 2 }],
   });
-  const saleBody = await res.json();
-  assert.equal(res.status, 201, JSON.stringify(saleBody));
-  const sale = saleBody;
+  assert.equal(res.status, 201, JSON.stringify(sale));
 
   assert.equal(sale.subtotal_cents, 2000);
   assert.equal(sale.discount_cents, 100);
@@ -126,22 +134,32 @@ test('finaliza venda, persiste e baixa estoque', async () => {
 test('bloqueia estoque negativo sem regra explícita', async () => {
   const id = insertProduct({ name: 'Arroz', price_cents: 2000, stock_qty: 1 });
 
-  const res = await fetch(`${baseUrl}/api/sales`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      payment_method: 'dinheiro',
-      items: [{ product_id: id, quantity: 3 }],
-    }),
+  const { res, json: body } = await postSale({
+    payment_method: 'dinheiro',
+    items: [{ product_id: id, quantity: 3 }],
   });
   assert.equal(res.status, 409);
-  const body = await res.json();
   assert.equal(body.code, 'STOCK_INSUFFICIENT');
 
   const product = db.prepare('SELECT stock_qty FROM products WHERE id = ?').get(id);
   assert.equal(product.stock_qty, 1);
   const salesCount = db.prepare('SELECT COUNT(*) AS c FROM sales').get().c;
   assert.equal(salesCount, 0);
+});
+
+test('agrega estoque quando o mesmo produto aparece em várias linhas', async () => {
+  const id = insertProduct({ name: 'Biscoito', price_cents: 200, stock_qty: 5 });
+  const { res, json } = await postSale({
+    payment_method: 'dinheiro',
+    items: [
+      { product_id: id, quantity: 3 },
+      { product_id: id, quantity: 3 },
+    ],
+  });
+  assert.equal(res.status, 409);
+  assert.equal(json.code, 'STOCK_INSUFFICIENT');
+  assert.equal(db.prepare('SELECT stock_qty FROM products WHERE id = ?').get(id).stock_qty, 5);
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM sales').get().c, 0);
 });
 
 test('permite estoque negativo quando allow_negative_stock = 1', async () => {
@@ -152,96 +170,155 @@ test('permite estoque negativo quando allow_negative_stock = 1', async () => {
     allow_negative_stock: 1,
   });
 
-  const res = await fetch(`${baseUrl}/api/sales`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      payment_method: 'cartao',
-      items: [{ product_id: id, quantity: 3 }],
-    }),
+  const { res } = await postSale({
+    payment_method: 'cartao',
+    items: [{ product_id: id, quantity: 3 }],
   });
   assert.equal(res.status, 201);
   const product = db.prepare('SELECT stock_qty FROM products WHERE id = ?').get(id);
   assert.equal(product.stock_qty, -2);
 });
 
-test('item diversos não altera estoque', async () => {
+test('item diversos não altera estoque e fica registrado', async () => {
   const id = insertProduct({ name: 'Queijo', price_cents: 650, stock_qty: 10 });
 
-  const res = await fetch(`${baseUrl}/api/sales`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      payment_method: 'dinheiro',
-      items: [
-        { product_id: id, quantity: 1 },
-        {
-          is_misc: true,
-          name: 'Embalagem especial',
-          unit_price_cents: 200,
-          quantity: 1,
-        },
-      ],
-    }),
+  const { res, json: sale } = await postSale({
+    payment_method: 'dinheiro',
+    items: [
+      { product_id: id, quantity: 1 },
+      {
+        is_misc: true,
+        name: 'Embalagem especial',
+        unit_price_cents: 200,
+        quantity: 1,
+      },
+    ],
   });
   assert.equal(res.status, 201);
-  const sale = await res.json();
   assert.equal(sale.total_cents, 850);
   assert.equal(sale.items.filter((i) => i.is_misc).length, 1);
+  assert.equal(sale.items.find((i) => i.is_misc).name, 'Embalagem especial');
 
   const product = db.prepare('SELECT stock_qty FROM products WHERE id = ?').get(id);
   assert.equal(product.stock_qty, 9);
 });
 
 test('rejeita venda vazia', async () => {
-  const res = await fetch(`${baseUrl}/api/sales`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items: [] }),
-  });
+  const { res, json: body } = await postSale({ items: [] });
   assert.equal(res.status, 400);
-  const body = await res.json();
   assert.equal(body.code, 'EMPTY_CART');
 });
 
-test('aceita múltiplas formas de pagamento (preparado para o futuro)', async () => {
-  const id = insertProduct({ name: 'Feijão', price_cents: 1000, stock_qty: 5 });
-  const res = await fetch(`${baseUrl}/api/sales`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      items: [{ product_id: id, quantity: 1 }],
-      payments: [
-        { method: 'dinheiro', amount_cents: 400 },
-        { method: 'pix', amount_cents: 600 },
-      ],
-    }),
+test('rejeita desconto inválido e total negativo', async () => {
+  const id = insertProduct({ name: 'Leite', price_cents: 500, stock_qty: 10 });
+
+  const neg = await postSale({
+    payment_method: 'pix',
+    discount_cents: -10,
+    items: [{ product_id: id, quantity: 1 }],
   });
-  assert.equal(res.status, 201);
-  const sale = await res.json();
-  assert.equal(sale.payments.length, 2);
+  assert.equal(neg.res.status, 400);
+  assert.equal(neg.json.code, 'INVALID_MONEY');
+
+  const over = await postSale({
+    payment_method: 'pix',
+    discount_cents: 9999,
+    items: [{ product_id: id, quantity: 1 }],
+  });
+  assert.equal(over.res.status, 400);
+  assert.equal(over.json.code, 'INVALID_DISCOUNT');
+  assert.equal(db.prepare('SELECT stock_qty FROM products WHERE id = ?').get(id).stock_qty, 10);
+});
+
+test('grava dinheiro, pix e cartão corretamente', async () => {
+  for (const method of ['dinheiro', 'pix', 'cartao']) {
+    const id = insertProduct({ name: `Prod ${method}`, price_cents: 100, stock_qty: 5 });
+    const { res, json: sale } = await postSale({
+      payment_method: method,
+      items: [{ product_id: id, quantity: 1 }],
+    });
+    assert.equal(res.status, 201);
+    assert.equal(sale.payment_method, method);
+    const pay = db.prepare('SELECT method FROM sale_payments WHERE sale_id = ?').get(sale.id);
+    assert.equal(pay.method, method);
+  }
+});
+
+test('reenvio com client_request_id não duplica venda nem estoque', async () => {
+  const id = insertProduct({ name: 'Sabão', price_cents: 300, stock_qty: 10 });
+  const payload = {
+    client_request_id: 'idem-abc-123',
+    payment_method: 'pix',
+    items: [{ product_id: id, quantity: 2 }],
+  };
+
+  const first = await postSale(payload);
+  const second = await postSale(payload);
+  assert.equal(first.res.status, 201);
+  assert.equal(second.res.status, 201);
+  assert.equal(first.json.id, second.json.id);
+  assert.equal(first.json.sale_number, second.json.sale_number);
+
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM sales').get().c, 1);
+  assert.equal(db.prepare('SELECT stock_qty FROM products WHERE id = ?').get(id).stock_qty, 8);
   assert.equal(
-    sale.payments.reduce((s, p) => s + p.amount_cents, 0),
-    1000
+    db.prepare('SELECT COUNT(*) AS c FROM stock_movements WHERE product_id = ?').get(id).c,
+    1
   );
 });
 
-test('comprovante contém itens e pagamentos', async () => {
-  const id = insertProduct({ name: 'Detergente', price_cents: 390, stock_qty: 8 });
-  const createRes = await fetch(`${baseUrl}/api/sales`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      payment_method: 'cartao',
-      items: [{ product_id: id, quantity: 2 }],
-    }),
+test('falha no meio da gravação faz rollback completo', async () => {
+  const id = insertProduct({ name: 'TriggerFail', price_cents: 400, stock_qty: 10 });
+  db.exec(`
+    CREATE TRIGGER fail_after_stock
+    AFTER UPDATE ON products
+    BEGIN
+      SELECT RAISE(ABORT, 'falha simulada após baixa de estoque');
+    END;
+  `);
+
+  const { res, json } = await postSale({
+    payment_method: 'dinheiro',
+    items: [{ product_id: id, quantity: 2 }],
   });
-  const created = await createRes.json();
-  const res = await fetch(`${baseUrl}/api/sales/${created.id}`);
-  assert.equal(res.status, 200);
-  const sale = await res.json();
+
+  db.exec('DROP TRIGGER fail_after_stock');
+
+  assert.equal(res.status, 500);
+  assert.equal(json.code, 'TRANSACTION_FAILED');
+  assert.ok(json.error);
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM sales').get().c, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM sale_items').get().c, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM sale_payments').get().c, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM stock_movements').get().c, 0);
+  assert.equal(db.prepare('SELECT stock_qty FROM products WHERE id = ?').get(id).stock_qty, 10);
+});
+
+test('comprovante e histórico contêm dados completos', async () => {
+  const id = insertProduct({ name: 'Detergente', barcode: '999', price_cents: 390, stock_qty: 8 });
+  const { json: created } = await postSale({
+    payment_method: 'cartao',
+    discount_cents: 40,
+    items: [
+      { product_id: id, quantity: 2 },
+      { is_misc: true, name: 'Sacola', unit_price_cents: 100, quantity: 1 },
+    ],
+  });
+
+  const sale = await fetch(`${baseUrl}/api/sales/${created.id}`).then((r) => r.json());
+  assert.equal(sale.items.length, 2);
   assert.equal(sale.items[0].name, 'Detergente');
   assert.equal(sale.items[0].quantity, 2);
+  assert.equal(sale.items[1].name, 'Sacola');
+  assert.equal(sale.discount_cents, 40);
+  assert.equal(sale.total_cents, 390 * 2 + 100 - 40);
   assert.equal(sale.payments[0].method, 'cartao');
-  assert.equal(sale.total_cents, 780);
+
+  const list = await fetch(`${baseUrl}/api/sales`).then((r) => r.json());
+  const row = list.find((s) => s.id === sale.id);
+  assert.ok(row);
+  assert.equal(row.sale_number, sale.sale_number);
+  assert.ok(row.created_at);
+  assert.equal(row.total_cents, sale.total_cents);
+  assert.equal(row.payment_method, 'cartao');
 });

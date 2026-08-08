@@ -38,6 +38,7 @@ export interface Sale {
   discount_cents: number;
   total_cents: number;
   notes: string | null;
+  client_request_id?: string | null;
   created_at: string;
   cancelled_at: string | null;
   payment_method?: string | null;
@@ -57,6 +58,7 @@ export interface CreateSalePayload {
   discount_cents?: number;
   payment_method?: string;
   payments?: Array<{ method: string; amount_cents: number }>;
+  client_request_id?: string;
   notes?: string;
 }
 
