@@ -1,0 +1,37 @@
+{
+  "name": "onca-pdv",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ONÇA PDV — sistema profissional de ponto de venda local-first.",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm run dev -w server",
+    "dev:web": "npm run dev -w web",
+    "build": "npm run build -w web",
+    "start:server": "npm run start -w server",
+    "test": "npm run test -w server",
+    "lint": "npm run lint -w web",
+    "migrate": "npm run migrate -w server",
+    "seed": "npm run seed -w server",
+    "review:etapa1": "node scripts/review-etapa1.mjs",
+    "review:etapa2": "node scripts/review-etapa2.mjs",
+    "review:etapa3": "node scripts/review-etapa3.mjs",
+    "review:etapa4": "node scripts/review-etapa4.mjs",
+    "e2e:etapa3": "node scripts/e2e-etapa3.mjs",
+    "e2e:ui:etapa3": "node scripts/e2e-ui-etapa3.mjs",
+    "e2e:etapa4": "node scripts/e2e-etapa4.mjs",
+    "simulate:oncas-v2": "node scripts/simulate-oncas-v2.mjs",
+    "validate:etapa3": "npm test && npm run lint && npm run build && npm run review:etapa1 && npm run review:etapa2 && npm run review:etapa3 && npm run e2e:etapa3 && npm run e2e:ui:etapa3",
+    "validate:etapa4": "npm test && npm run lint && npm run build && npm run review:etapa1 && npm run review:etapa2 && npm run review:etapa3 && npm run review:etapa4 && npm run e2e:etapa4"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
