@@ -1,0 +1,156 @@
+import { useState } from 'react';
+import type { Sale } from '../../api/client';
+import {
+  buildReceiptPdfUrl,
+  formatBRL,
+  paymentLabel,
+  whatsappShareApi,
+} from '../../api/client';
+
+interface Props {
+  sale: Sale;
+  onClose: () => void;
+  onCancelSale?: (sale: Sale) => void;
+  companyName?: string;
+}
+
+export default function ReceiptModal({ sale, onClose, onCancelSale, companyName }: Props) {
+  const cancelled = sale.status === 'cancelled';
+  const [waNote, setWaNote] = useState<string | null>(null);
+  const [waBusy, setWaBusy] = useState(false);
+  const brand = companyName?.trim() || 'ONÇA PDV';
+
+  function openPdf() {
+    window.open(buildReceiptPdfUrl(sale.id), '_blank', 'noopener,noreferrer');
+  }
+
+  async function sendWhatsApp() {
+    setWaBusy(true);
+    setWaNote(null);
+    try {
+      const share = await whatsappShareApi(sale.id);
+      setWaNote(
+        share.note ||
+          'O PDF não é anexado automaticamente. Gere o PDF e anexe manualmente se necessário.'
+      );
+      window.open(share.url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      setWaNote(e instanceof Error ? e.message : 'Falha ao montar link do WhatsApp');
+    } finally {
+      setWaBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Comprovante da venda">
+      <div className="modal">
+        <div className="receipt" data-testid="receipt">
+          <div className="receipt-header">
+            <strong>{brand}</strong>
+            <span>COMPROVANTE DE VENDA</span>
+          </div>
+
+          <div className="receipt-meta">
+            <div>
+              <strong>Nº</strong> {sale.sale_number}
+            </div>
+            <div>
+              <strong>Data</strong> {sale.created_at}
+            </div>
+            <div>
+              <strong>Status</strong> {cancelled ? 'Cancelada' : 'Concluída'}
+            </div>
+            {sale.customer?.name && (
+              <div>
+                <strong>Cliente</strong> {sale.customer.name}
+              </div>
+            )}
+            {cancelled && (
+              <>
+                <div>
+                  <strong>Cancelada em</strong> {sale.cancelled_at}
+                </div>
+                <div>
+                  <strong>Motivo</strong> {sale.cancel_reason}
+                </div>
+                <div>
+                  <strong>Responsável</strong> {sale.cancelled_by}
+                </div>
+              </>
+            )}
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Qtd</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(sale.items ?? []).map((item) => (
+                <tr key={item.id}>
+                  <td>
+                    {item.name}
+                    {item.is_misc ? ' (Diversos)' : ''}
+                  </td>
+                  <td>{item.quantity}</td>
+                  <td>{formatBRL(item.line_total_cents)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="receipt-totals">
+            <div className="summary-row">
+              <span>Subtotal</span>
+              <span>{formatBRL(sale.subtotal_cents)}</span>
+            </div>
+            <div className="summary-row">
+              <span>Desconto</span>
+              <span>{formatBRL(sale.discount_cents)}</span>
+            </div>
+            <div className="summary-row big">
+              <span>Total</span>
+              <span>{formatBRL(sale.total_cents)}</span>
+            </div>
+            {(sale.payments ?? []).map((p) => (
+              <div className="summary-row" key={p.id}>
+                <span>{paymentLabel(p.method)}</span>
+                <span>{formatBRL(p.amount_cents)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {waNote && <div className="alert alert-ok no-print">{waNote}</div>}
+
+        <div className="modal-actions no-print">
+          {!cancelled && onCancelSale && (
+            <button type="button" className="btn btn-danger" onClick={() => onCancelSale(sale)}>
+              Cancelar venda
+            </button>
+          )}
+          <button type="button" className="btn btn-ghost" onClick={openPdf}>
+            PDF
+          </button>
+          <button
+            type="button"
+            className="btn btn-accent"
+            disabled={waBusy}
+            onClick={() => void sendWhatsApp()}
+          >
+            Enviar pelo WhatsApp
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={() => window.print()}>
+            Imprimir
+          </button>
+          <button type="button" className="btn btn-primary" onClick={onClose}>
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
