@@ -8,8 +8,9 @@ Documento do **mapeamento REAL** do backup JSON do PDV antigo.
 > App legado: **Oncas PDV** · `backup.version = 2` · criado em `2026-08-07T23:37:02.422Z`  
 > JSON válido: **sim** · Arquivo original: **não modificado** · Banco principal: **não alterado nesta etapa**
 
-**IMPORTAÇÃO DEFINITIVA NÃO AUTORIZADA NESTA ETAPA.**  
-Foi feita apenas **simulação em banco temporário**.
+**Status:** importação definitiva **autorizada e concluída** (Etapa 4C).  
+Backup pré-importação: `onca-pdv-backup-2026-08-08-160524.db`.  
+Relatório: `docs/reports/RELATORIO-FINAL-MIGRACAO-REAL.md`.
 
 ---
 
@@ -219,3 +220,4 @@ Produtos com estoque muito alto observados (ex.: 10 000 / 99 98 / 100 000)
 - Etapa 3: tabelas alvo preparadas.
 - Etapa 4: arquitetura genérica do importador.
 - **Etapa 4B: mapeamento REAL Oncas PDV v2 + adaptador + simulação consistente.**
+- **Etapa 4C: importação definitiva autorizada no banco principal — validada.**
