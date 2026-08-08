@@ -6,6 +6,7 @@ Sistema profissional de **Ponto de Venda** local-first.
 - **Frontend** (`web/`): React + TypeScript + Vite
 - **Etapa 1**: arquitetura, shell de navegação e módulo de **Vendas** completo
 - **Etapa 2**: **Produtos**, **Estoque**, **Caixa** e **Clientes** (+ cancelamento pós-venda)
+- **Etapa 3**: **Fornecedores**, **Compras**, **Crediário**, **Devoluções** e **Entregas**
 
 Documentação: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/DECISIONS.md](docs/DECISIONS.md)
 
@@ -34,6 +35,10 @@ Scripts úteis:
 | `npm run build` | Build de produção do frontend |
 | `npm run migrate` | Lista/aplica migrations |
 | `npm run seed` | Seed de catálogo (se vazio) |
+| `npm run review:etapa3` | Revisão API + SQLite da Etapa 3 |
+| `npm run e2e:etapa3` | E2E API/UI HTTP (timeout ≤ 5 min) |
+| `npm run e2e:ui:etapa3` | E2E UI headless Chrome (timeout ≤ 5 min) |
+| `npm run validate:etapa3` | Suíte completa de validação da Etapa 3 |
 
 ## Módulo Vendas (etapa 1)
 
