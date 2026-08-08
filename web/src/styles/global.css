@@ -1060,3 +1060,190 @@ select.field-input {
     grid-column: auto;
   }
 }
+
+/* ─── Etapa 4: tabs, login, reports ─── */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.tab {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 8px 14px;
+  border-radius: 8px 8px 0 0;
+  font-weight: 600;
+}
+
+.tab:hover {
+  color: var(--brand);
+  background: rgba(15, 61, 46, 0.06);
+}
+
+.tab.active {
+  color: var(--brand);
+  background: #fff;
+  border-color: var(--border);
+  border-bottom-color: #fff;
+  box-shadow: 0 1px 0 #fff;
+}
+
+.login-page {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(900px 420px at 20% 0%, rgba(196, 122, 18, 0.14), transparent 55%),
+    radial-gradient(800px 400px at 100% 10%, rgba(15, 61, 46, 0.16), transparent 50%),
+    linear-gradient(180deg, var(--bg-1), var(--bg-0));
+}
+
+.login-card {
+  width: min(400px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 28px 26px 22px;
+  display: grid;
+  gap: 12px;
+}
+
+.login-brand {
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.login-brand .brand-mark {
+  margin: 0 auto 10px;
+}
+
+.login-brand h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  color: var(--brand);
+  letter-spacing: 0.04em;
+}
+
+.login-brand p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+}
+
+.login-card label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.login-card .btn-primary {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.login-hint {
+  margin: 4px 0 0;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 0.82rem;
+}
+
+.sidebar-logout {
+  color: #edf4f0 !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  padding: 4px 10px !important;
+  font-size: 0.78rem !important;
+}
+
+.sidebar-logout:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.toolbar-field {
+  display: grid;
+  gap: 4px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.toolbar-field .field-input,
+.toolbar-field input[type='file'] {
+  min-width: 140px;
+}
+
+.report-result {
+  display: grid;
+  gap: 14px;
+}
+
+.report-heading h3 {
+  margin: 0;
+}
+
+.report-totals {
+  margin-bottom: 4px;
+}
+
+.code-block {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  max-height: 280px;
+  overflow: auto;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.import-preview {
+  margin-top: 12px;
+}
+
+@media print {
+  .sidebar,
+  .topbar,
+  .module-toolbar,
+  .tabs,
+  .no-print,
+  .alert {
+    display: none !important;
+  }
+
+  .app-shell {
+    display: block;
+  }
+
+  .main-area,
+  .content,
+  .module-panel {
+    padding: 0;
+    margin: 0;
+    background: #fff;
+    box-shadow: none;
+    border: none;
+  }
+
+  .report-table {
+    font-size: 11px;
+  }
+}
+

@@ -15,8 +15,8 @@ export const NAV_ITEMS: NavItem[] = [
   { path: '/compras', label: 'Compras', ready: true, description: 'Entrada de mercadorias' },
   { path: '/crediario', label: 'Crediário', ready: true, description: 'Contas a receber' },
   { path: '/devolucoes', label: 'Devoluções', ready: true, description: 'Trocas e devoluções' },
-  { path: '/relatorios', label: 'Relatórios', ready: false, description: 'Indicadores e exportações' },
+  { path: '/relatorios', label: 'Relatórios', ready: true, description: 'Vendas, estoque e indicadores' },
   { path: '/entregas', label: 'Entregas', ready: true, description: 'Pedidos para entrega' },
-  { path: '/backup', label: 'Backup', ready: false, description: 'Cópia e restauração' },
-  { path: '/configuracoes', label: 'Configurações', ready: false, description: 'Preferências do sistema' },
+  { path: '/backup', label: 'Backup', ready: true, description: 'Cópia, restauração e importação' },
+  { path: '/configuracoes', label: 'Configurações', ready: true, description: 'Empresa, PDV, usuários e auditoria' },
 ];

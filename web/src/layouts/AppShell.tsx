@@ -1,5 +1,6 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { NAV_ITEMS } from '../navigation';
+import { clearAuth, getStoredAuthUser, logoutApi } from '../api/client';
 
 function titleForPath(pathname: string) {
   const item = NAV_ITEMS.find((n) => n.path === pathname);
@@ -8,7 +9,19 @@ function titleForPath(pathname: string) {
 
 export default function AppShell() {
   const location = useLocation();
+  const navigate = useNavigate();
   const current = titleForPath(location.pathname);
+  const user = getStoredAuthUser();
+
+  async function handleLogout() {
+    try {
+      await logoutApi();
+    } catch {
+      /* limpa sessão local mesmo se a API falhar */
+    }
+    clearAuth();
+    navigate('/login', { replace: true });
+  }
 
   return (
     <div className="app-shell">
@@ -33,7 +46,15 @@ export default function AppShell() {
         </nav>
 
         <div className="sidebar-footer">
-          Etapa 3 · Fornecedores, Compras, Crediário, Devoluções e Entregas
+          <div>Etapa 4 · Relatórios, Backup, Configurações e Usuários</div>
+          {user ? (
+            <div className="sidebar-user">
+              <span>{user.name || user.login}</span>
+              <button type="button" className="btn btn-ghost sidebar-logout" onClick={() => void handleLogout()}>
+                Sair
+              </button>
+            </div>
+          ) : null}
         </div>
       </aside>
 

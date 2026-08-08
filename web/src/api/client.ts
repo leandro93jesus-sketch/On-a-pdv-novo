@@ -274,6 +274,66 @@ export interface Delivery {
   }>;
 }
 
+const AUTH_KEY = 'onca_auth';
+
+export interface AuthUser {
+  id: number;
+  name: string;
+  login: string;
+  role: string;
+  active?: number;
+  must_change_password?: number;
+  last_login_at?: string | null;
+}
+
+export interface AuthSession {
+  token: string;
+  user: AuthUser;
+  expires_at?: string;
+}
+
+export function getStoredAuth(): AuthSession | null {
+  try {
+    const raw = localStorage.getItem(AUTH_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AuthSession;
+    if (!parsed?.token) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function getAuthToken(): string | null {
+  return getStoredAuth()?.token ?? null;
+}
+
+export function getStoredAuthUser(): AuthUser | null {
+  return getStoredAuth()?.user ?? null;
+}
+
+export function setAuthToken(token: string | null, user?: AuthUser | null): void {
+  if (!token) {
+    localStorage.removeItem(AUTH_KEY);
+    return;
+  }
+  const prev = getStoredAuth();
+  const next: AuthSession = {
+    token,
+    user: user ?? prev?.user ?? { id: 0, name: '', login: '', role: '' },
+    expires_at: prev?.expires_at,
+  };
+  localStorage.setItem(AUTH_KEY, JSON.stringify(next));
+}
+
+export function setAuthSession(session: AuthSession): void {
+  localStorage.setItem(AUTH_KEY, JSON.stringify(session));
+}
+
+export function clearAuth(): void {
+  localStorage.removeItem(AUTH_KEY);
+}
+
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
@@ -285,7 +345,36 @@ async function handle<T>(res: Response): Promise<T> {
     err.details = body.details;
     throw err;
   }
+  if (res.status === 204) return undefined as T;
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+function authHeaders(extra?: HeadersInit): HeadersInit {
+  const headers: Record<string, string> = {};
+  if (extra) {
+    if (extra instanceof Headers) {
+      extra.forEach((v, k) => {
+        headers[k] = v;
+      });
+    } else if (Array.isArray(extra)) {
+      for (const [k, v] of extra) headers[k] = v;
+    } else {
+      Object.assign(headers, extra);
+    }
+  }
+  const token = getAuthToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+/** Fetch wrapper that attaches Bearer token when present. */
+export function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  return fetch(input, {
+    ...init,
+    headers: authHeaders(init.headers),
+  });
 }
 
 function qs(params: Record<string, string | number | boolean | undefined | null>) {
@@ -675,4 +764,287 @@ export function updateDeliveryStatus(
 
 export function fetchDelivery(id: number): Promise<Delivery> {
   return fetch(`/api/deliveries/${id}`).then((r) => handle<Delivery>(r));
+}
+
+/* ─── Etapa 4: Auth, Settings, Users, Reports, Backup, Import, Audit ─── */
+
+export interface SettingsBundle {
+  company: Record<string, string>;
+  pdv: Record<string, string>;
+  app_version?: string;
+}
+
+export interface AppUser {
+  id: number;
+  name: string;
+  login: string;
+  role: string;
+  active: number;
+  must_change_password?: number;
+  last_login_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ReportCatalogItem {
+  id: string;
+  title: string;
+}
+
+export interface ReportResult {
+  id: string;
+  title: string;
+  filters?: Record<string, unknown>;
+  generated_at?: string;
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+  totals?: Record<string, unknown>;
+}
+
+export interface BackupRecord {
+  id: number;
+  filename: string;
+  filepath: string;
+  size_bytes?: number;
+  sha256?: string;
+  app_version?: string;
+  db_schema_version?: string;
+  kind?: string;
+  created_by?: string | null;
+  notes?: string | null;
+  created_at?: string;
+  valid?: number | boolean;
+  exists?: boolean;
+}
+
+export interface ImportRun {
+  id: number;
+  source_filename?: string;
+  status?: string;
+  preview?: Record<string, unknown>;
+  analysis?: Record<string, unknown>;
+  report_json?: string | Record<string, unknown> | null;
+  created_at?: string;
+  created_by?: string | null;
+  importer_version?: string;
+  sha256?: string;
+  [key: string]: unknown;
+}
+
+export interface AuditLog {
+  id: number;
+  action: string;
+  entity_type?: string | null;
+  entity_id?: number | null;
+  details?: unknown;
+  user_name?: string | null;
+  user_id?: number | null;
+  result?: string | null;
+  created_at: string;
+}
+
+export function loginApi(login: string, password: string): Promise<AuthSession> {
+  return apiFetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login, password }),
+  })
+    .then((r) => handle<AuthSession>(r))
+    .then((session) => {
+      setAuthSession(session);
+      return session;
+    });
+}
+
+export function logoutApi(): Promise<{ ok: boolean }> {
+  return apiFetch('/api/auth/logout', { method: 'POST' }).then((r) =>
+    handle<{ ok: boolean }>(r)
+  );
+}
+
+export function fetchMe(): Promise<{ user: AuthUser }> {
+  return apiFetch('/api/auth/me').then((r) => handle<{ user: AuthUser }>(r));
+}
+
+export function fetchSettings(): Promise<SettingsBundle> {
+  return apiFetch('/api/settings').then((r) => handle<SettingsBundle>(r));
+}
+
+export function updateSettings(payload: Record<string, unknown>): Promise<SettingsBundle> {
+  return apiFetch('/api/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<SettingsBundle>(r));
+}
+
+export function fetchUsers(): Promise<AppUser[]> {
+  return apiFetch('/api/auth/users').then((r) => handle<AppUser[]>(r));
+}
+
+export function createUserApi(payload: {
+  name: string;
+  login: string;
+  password: string;
+  role?: string;
+}): Promise<AppUser> {
+  return apiFetch('/api/auth/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<AppUser>(r));
+}
+
+export function updateUserApi(id: number, payload: Record<string, unknown>): Promise<AppUser> {
+  return apiFetch(`/api/auth/users/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<AppUser>(r));
+}
+
+export function changeUserPasswordApi(
+  id: number,
+  newPassword: string
+): Promise<{ user: AppUser }> {
+  return apiFetch(`/api/auth/users/${id}/password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ new_password: newPassword }),
+  }).then((r) => handle<{ user: AppUser }>(r));
+}
+
+export function fetchReportCatalog(): Promise<ReportCatalogItem[]> {
+  return apiFetch('/api/reports').then((r) => handle<ReportCatalogItem[]>(r));
+}
+
+export function runReport(
+  id: string,
+  filters?: Record<string, string | number | undefined | null>
+): Promise<ReportResult> {
+  return apiFetch(`/api/reports/${encodeURIComponent(id)}${qs(filters || {})}`).then((r) =>
+    handle<ReportResult>(r)
+  );
+}
+
+export function createBackupApi(payload?: { notes?: string }): Promise<BackupRecord> {
+  return apiFetch('/api/backups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {}),
+  }).then((r) => handle<BackupRecord>(r));
+}
+
+export function listBackupsApi(): Promise<BackupRecord[]> {
+  return apiFetch('/api/backups').then((r) => handle<BackupRecord[]>(r));
+}
+
+export function previewRestoreApi(filepath: string): Promise<Record<string, unknown>> {
+  return apiFetch('/api/backups/restore/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filepath }),
+  }).then((r) => handle<Record<string, unknown>>(r));
+}
+
+export function restoreBackupApi(filepath: string, confirm: boolean): Promise<Record<string, unknown>> {
+  return apiFetch('/api/backups/restore', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filepath, confirm }),
+  }).then((r) => handle<Record<string, unknown>>(r));
+}
+
+export function uploadBackupApi(filename: string, contentBase64: string): Promise<Record<string, unknown>> {
+  return apiFetch('/api/backups/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, content_base64: contentBase64 }),
+  }).then((r) => handle<Record<string, unknown>>(r));
+}
+
+export function previewImportApi(payload: {
+  filename?: string;
+  content_base64?: string;
+  json?: unknown;
+}): Promise<ImportRun> {
+  return apiFetch('/api/imports/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<ImportRun>(r));
+}
+
+export function executeImportApi(payload: {
+  filename?: string;
+  content_base64?: string;
+  json?: unknown;
+  confirm: boolean;
+  run_id?: number;
+}): Promise<Record<string, unknown>> {
+  return apiFetch('/api/imports/execute', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<Record<string, unknown>>(r));
+}
+
+export function listImportRunsApi(): Promise<ImportRun[]> {
+  return apiFetch('/api/imports').then((r) => handle<ImportRun[]>(r));
+}
+
+export function fetchAuditLogs(params?: {
+  limit?: number;
+  offset?: number;
+  action?: string;
+  user_name?: string;
+  from?: string;
+  to?: string;
+}): Promise<AuditLog[]> {
+  return apiFetch(
+    `/api/audit${qs({
+      limit: params?.limit,
+      offset: params?.offset,
+      action: params?.action,
+      user_name: params?.user_name,
+      from: params?.from,
+      to: params?.to,
+    })}`
+  ).then((r) => handle<AuditLog[]>(r));
+}
+
+export function buildReceiptPdfUrl(saleId: number): string {
+  return `/api/receipts/sales/${saleId}/pdf`;
+}
+
+export function whatsappShareApi(
+  saleId: number,
+  opts?: { phone?: string; message?: string }
+): Promise<{
+  sale_id: number;
+  sale_number: string;
+  phone: string | null;
+  message: string;
+  url: string;
+  pdf_attached: boolean;
+  note?: string;
+}> {
+  return apiFetch(`/api/receipts/sales/${saleId}/whatsapp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts || {}),
+  }).then((r) => handle(r));
+}
+
+export function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const comma = result.indexOf(',');
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+    reader.readAsDataURL(file);
+  });
 }

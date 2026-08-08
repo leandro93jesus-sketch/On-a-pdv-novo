@@ -11,14 +11,30 @@ import purchasesRouter from './routes/purchases.js';
 import creditRouter from './routes/credit.js';
 import returnsRouter from './routes/returns.js';
 import deliveriesRouter from './routes/deliveries.js';
+import authRouter from './routes/auth.js';
+import settingsRouter from './routes/settings.js';
+import reportsRouter from './routes/reports.js';
+import backupsRouter from './routes/backups.js';
+import importsRouter from './routes/imports.js';
+import receiptsRouter from './routes/receipts.js';
+import auditRouter from './routes/audit.js';
+import { authOptional } from './middleware/auth.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 export function createApp() {
   const app = express();
   app.use(cors());
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json({ limit: '100mb' }));
+  app.use(authOptional);
 
   app.use('/api/health', healthRouter);
+  app.use('/api/auth', authRouter);
+  app.use('/api/settings', settingsRouter);
+  app.use('/api/reports', reportsRouter);
+  app.use('/api/backups', backupsRouter);
+  app.use('/api/imports', importsRouter);
+  app.use('/api/receipts', receiptsRouter);
+  app.use('/api/audit', auditRouter);
   app.use('/api/products', productsRouter);
   app.use('/api/sales', salesRouter);
   app.use('/api/stock', stockRouter);

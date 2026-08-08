@@ -2,9 +2,11 @@ import { getDb } from './db/index.js';
 import { seedIfEmpty } from './db/seed.js';
 import { createApp } from './app.js';
 import { getDbPath } from './db/paths.js';
+import { ensureBootstrapAdmin } from './services/authService.js';
 
 // Garante DB + migrations
 getDb();
+ensureBootstrapAdmin();
 
 if (process.env.PDV_SEED !== '0') {
   const result = seedIfEmpty();

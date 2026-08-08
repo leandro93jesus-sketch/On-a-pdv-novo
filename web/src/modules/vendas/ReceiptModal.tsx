@@ -1,22 +1,53 @@
+import { useState } from 'react';
 import type { Sale } from '../../api/client';
-import { formatBRL, paymentLabel } from '../../api/client';
+import {
+  buildReceiptPdfUrl,
+  formatBRL,
+  paymentLabel,
+  whatsappShareApi,
+} from '../../api/client';
 
 interface Props {
   sale: Sale;
   onClose: () => void;
   onCancelSale?: (sale: Sale) => void;
+  companyName?: string;
 }
 
-export default function ReceiptModal({ sale, onClose, onCancelSale }: Props) {
+export default function ReceiptModal({ sale, onClose, onCancelSale, companyName }: Props) {
   const cancelled = sale.status === 'cancelled';
+  const [waNote, setWaNote] = useState<string | null>(null);
+  const [waBusy, setWaBusy] = useState(false);
+  const brand = companyName?.trim() || 'ONÇA PDV';
+
+  function openPdf() {
+    window.open(buildReceiptPdfUrl(sale.id), '_blank', 'noopener,noreferrer');
+  }
+
+  async function sendWhatsApp() {
+    setWaBusy(true);
+    setWaNote(null);
+    try {
+      const share = await whatsappShareApi(sale.id);
+      setWaNote(
+        share.note ||
+          'O PDF não é anexado automaticamente. Gere o PDF e anexe manualmente se necessário.'
+      );
+      window.open(share.url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      setWaNote(e instanceof Error ? e.message : 'Falha ao montar link do WhatsApp');
+    } finally {
+      setWaBusy(false);
+    }
+  }
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Comprovante da venda">
       <div className="modal">
         <div className="receipt" data-testid="receipt">
           <div className="receipt-header">
-            <strong>ONÇA PDV</strong>
-            <span>Comprovante de Venda</span>
+            <strong>{brand}</strong>
+            <span>COMPROVANTE DE VENDA</span>
           </div>
 
           <div className="receipt-meta">
@@ -93,12 +124,25 @@ export default function ReceiptModal({ sale, onClose, onCancelSale }: Props) {
           </div>
         </div>
 
+        {waNote && <div className="alert alert-ok no-print">{waNote}</div>}
+
         <div className="modal-actions no-print">
           {!cancelled && onCancelSale && (
             <button type="button" className="btn btn-danger" onClick={() => onCancelSale(sale)}>
               Cancelar venda
             </button>
           )}
+          <button type="button" className="btn btn-ghost" onClick={openPdf}>
+            PDF
+          </button>
+          <button
+            type="button"
+            className="btn btn-accent"
+            disabled={waBusy}
+            onClick={() => void sendWhatsApp()}
+          >
+            Enviar pelo WhatsApp
+          </button>
           <button type="button" className="btn btn-ghost" onClick={() => window.print()}>
             Imprimir
           </button>
