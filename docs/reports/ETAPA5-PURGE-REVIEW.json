@@ -1,0 +1,41 @@
+{
+  "kind": "etapa5_purge_review_data",
+  "created_at": "2026-08-08T16:29:07.399Z",
+  "removed": {
+    "products": [],
+    "customers": [],
+    "blocked": [
+      {
+        "type": "product",
+        "id": 489,
+        "sku": "RV-1786206493706",
+        "name": "Produto Review E2 Editado",
+        "legacy_source": null,
+        "action": "inactivated",
+        "saleUses": 2,
+        "purchaseUses": 0,
+        "returnUses": 0
+      },
+      {
+        "type": "customer",
+        "id": 8,
+        "name": "Cliente Review 1786206493725",
+        "document": "86206493725",
+        "legacy_source": null,
+        "action": "inactivated",
+        "sales": 1,
+        "credit": 0,
+        "deliveries": 0
+      }
+    ]
+  },
+  "preserved_counts": {
+    "products": 490,
+    "products_legacy": 488,
+    "customers": 9,
+    "customers_legacy": 7,
+    "sales_legacy": 87
+  },
+  "integrity": "ok",
+  "fk": 0
+}
