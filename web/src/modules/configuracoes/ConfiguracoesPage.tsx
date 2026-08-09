@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   changeUserPasswordApi,
   createUserApi,
@@ -6,6 +6,7 @@ import {
   exportPrinterConfigApi,
   fetchAuditLogs,
   fetchPrintJobsApi,
+  fetchPrinterPortableStatusApi,
   fetchPrinterSettings,
   fetchSettings,
   fetchSupportDiagnostics,
@@ -17,6 +18,7 @@ import {
   matchPrintersApi,
   removeLogoApi,
   requeuePrintJobApi,
+  resetPrinterSettingsApi,
   updatePrinterSettingsApi,
   updateSettings,
   updateUserApi,
@@ -30,6 +32,7 @@ import {
 } from '../../api/client';
 import { ModuleToolbar, StatusPill } from '../../components/ModuleChrome';
 import BrandLogo from '../../components/BrandLogo';
+import { withUiTimeout } from '../../lib/desktopAsync';
 
 type Tab = 'empresa' | 'impressoras' | 'pdv' | 'usuarios' | 'auditoria' | 'suporte' | 'exportacao' | 'sobre';
 
@@ -62,6 +65,11 @@ export default function ConfiguracoesPage() {
   >([]);
   const [btNote, setBtNote] = useState<string | null>(null);
   const [matchInfo, setMatchInfo] = useState<string | null>(null);
+  const [printersLoading, setPrintersLoading] = useState(false);
+  const [btLoading, setBtLoading] = useState(false);
+  const [printerOpError, setPrinterOpError] = useState<string | null>(null);
+  const [portableWarn, setPortableWarn] = useState<string | null>(null);
+  const printersGenRef = useRef(0);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [audit, setAudit] = useState<AuditLog[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -85,16 +93,55 @@ export default function ConfiguracoesPage() {
   }
 
   async function loadOsPrinters() {
-    if (!window.oncaDesktop?.listPrinters) {
-      setOsPrinters([]);
-      setPrinterNote(
-        'Listagem de impressoras instaladas disponível no aplicativo desktop Windows. As preferências abaixo serão salvas e usadas quando o desktop estiver ativo.'
+    const gen = ++printersGenRef.current;
+    setPrinterOpError(null);
+    setPrintersLoading(true);
+    setPrinterNote('BUSCANDO IMPRESSORAS...');
+    try {
+      if (!window.oncaDesktop?.listPrinters) {
+        if (gen !== printersGenRef.current) return;
+        setOsPrinters([]);
+        setPrinterNote(
+          'Listagem de impressoras instaladas disponível no aplicativo desktop. As preferências abaixo serão salvas e usadas quando o desktop estiver ativo.'
+        );
+        return;
+      }
+      const res = await withUiTimeout(
+        window.oncaDesktop.listPrinters(),
+        10000,
+        {
+          printers: [],
+          error: 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA.',
+          timeout: true,
+        }
       );
-      return;
+      if (gen !== printersGenRef.current) return;
+      setOsPrinters(res.printers || []);
+      if (res.error) {
+        setPrinterOpError(res.error);
+        setPrinterNote(res.error);
+      } else {
+        setPrinterNote(
+          (res.printers || []).length
+            ? `${res.printers.length} impressora(s) encontrada(s).`
+            : 'Nenhuma impressora instalada detectada.'
+        );
+      }
+    } catch (e) {
+      if (gen !== printersGenRef.current) return;
+      const msg = e instanceof Error ? e.message : 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA.';
+      setPrinterOpError(msg);
+      setPrinterNote(msg);
+      setOsPrinters([]);
+    } finally {
+      if (gen === printersGenRef.current) setPrintersLoading(false);
     }
-    const res = await window.oncaDesktop.listPrinters();
-    setOsPrinters(res.printers || []);
-    setPrinterNote(res.error || null);
+  }
+
+  function cancelPrintersSearch() {
+    printersGenRef.current += 1;
+    setPrintersLoading(false);
+    setPrinterNote('Busca cancelada.');
   }
 
   async function loadUsers() {
@@ -116,8 +163,16 @@ export default function ConfiguracoesPage() {
   useEffect(() => {
     void (async () => {
       try {
+        // Não aguarda impressoras/Bluetooth no boot — evita travar a tela.
         await loadSettings();
-        await loadOsPrinters();
+        try {
+          const st = await fetchPrinterPortableStatusApi();
+          if (st.needs_reconfigure) {
+            setPortableWarn(st.error || 'CONFIGURAÇÃO DE IMPRESSORA NÃO PÔDE SER CARREGADA.');
+          }
+        } catch {
+          /* status opcional */
+        }
         if (isAdmin) {
           await loadUsers();
           await loadAudit();
@@ -129,6 +184,12 @@ export default function ConfiguracoesPage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load
   }, []);
+
+  useEffect(() => {
+    if (tab === 'impressoras') {
+      void loadOsPrinters();
+    }
+  }, [tab]);
 
   async function handleLogoUpload(file: File | null) {
     if (!file || !isAdmin) return;
@@ -190,23 +251,52 @@ export default function ConfiguracoesPage() {
     }
   }
 
-  async function loadBluetooth() {
+  async function loadBluetooth(scan = false) {
     setBtNote(null);
-    if (!window.oncaDesktop?.listBluetoothDevices) {
-      setBtDevices([]);
-      setBtNote(
-        'Bluetooth disponível no aplicativo desktop (Windows/Linux). Pareamento é feito pelo sistema operacional; o PDV lista e tenta reconhecer impressoras.'
-      );
-      return;
-    }
+    setBtLoading(true);
     try {
-      const res = await window.oncaDesktop.listBluetoothDevices();
+      if (!window.oncaDesktop?.listBluetoothDevices) {
+        setBtDevices([]);
+        setBtNote(
+          'Bluetooth disponível no aplicativo desktop (Windows/Linux). Pareamento é feito pelo sistema operacional; o PDV lista e tenta reconhecer impressoras.'
+        );
+        return;
+      }
+      const call = scan && window.oncaDesktop.scanBluetooth
+        ? window.oncaDesktop.scanBluetooth()
+        : window.oncaDesktop.listBluetoothDevices();
+      const res = await withUiTimeout(call, 20000, {
+        devices: [],
+        error: 'Busca Bluetooth expirou. Tente novamente.',
+        timeout: true,
+      });
+      if (res.cancelled) {
+        setBtNote('Busca Bluetooth cancelada.');
+        return;
+      }
       setBtDevices(res.devices || []);
       if (res.error) setBtNote(res.error);
-      else if (!(res.devices || []).length) setBtNote('Nenhum dispositivo Bluetooth listado. Use Procurar ou pareie no SO.');
+      else if (!(res.devices || []).length) {
+        setBtNote('Nenhum dispositivo Bluetooth listado. Use Procurar ou pareie no SO.');
+      } else {
+        setBtNote(`${res.devices.length} dispositivo(s) listado(s).`);
+      }
     } catch (e) {
       setBtNote(e instanceof Error ? e.message : 'Falha ao listar Bluetooth');
+      setBtDevices([]);
+    } finally {
+      setBtLoading(false);
     }
+  }
+
+  async function cancelBluetoothSearch() {
+    try {
+      await window.oncaDesktop?.cancelBluetooth?.();
+    } catch {
+      /* ignore */
+    }
+    setBtLoading(false);
+    setBtNote('Busca Bluetooth cancelada.');
   }
 
   async function exportPrintersCfg() {
@@ -251,30 +341,51 @@ export default function ConfiguracoesPage() {
   async function testPrint() {
     setError(null);
     setNotice(null);
+    setPrinterOpError(null);
     if (!window.oncaDesktop?.testPrint) {
-      setError(
-        'Teste de impressão disponível no aplicativo desktop Windows. A venda não é afetada por falhas de impressora.'
+      setPrinterOpError(
+        'Teste de impressão disponível no aplicativo desktop. A venda não é afetada por falhas de impressora.'
       );
       return;
     }
-    setBusy(true);
+    setPrintersLoading(true);
     try {
       const deviceName = printers?.use_windows_default
         ? undefined
         : printers?.receipt_printer || printers?.default_printer || undefined;
-      const res = await window.oncaDesktop.testPrint({
-        deviceName,
-        copies: printers?.profile.copies || 1,
-      });
+      const res = await withUiTimeout(
+        window.oncaDesktop.testPrint({
+          deviceName,
+          copies: printers?.profile.copies || 1,
+        }),
+        15000,
+        { ok: false, error: 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA.', timeout: true }
+      );
       if (!res.ok) {
-        setError(res.error || 'Impressora indisponível. A venda não é afetada.');
+        setPrinterOpError(res.error || 'Impressora indisponível. A venda não é afetada.');
       } else {
         setNotice('Teste de impressão enviado.');
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Falha no teste de impressão');
+      setPrinterOpError(e instanceof Error ? e.message : 'Falha no teste de impressão');
     } finally {
-      setBusy(false);
+      setPrintersLoading(false);
+    }
+  }
+
+  async function resetPrintersCfg() {
+    if (!isAdmin) return;
+    if (!window.confirm('Resetar apenas preferências de impressão? Produtos, vendas e caixa não serão alterados.')) {
+      return;
+    }
+    try {
+      const res = await resetPrinterSettingsApi();
+      setPrinters(res.settings);
+      setNotice(res.note || 'Configuração de impressão redefinida.');
+      setPortableWarn(null);
+      setMatchInfo(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao resetar impressão');
     }
   }
 
@@ -524,6 +635,39 @@ export default function ConfiguracoesPage() {
 
       {tab === 'impressoras' && printers && (
         <>
+          {portableWarn && (
+            <div className="alert alert-error" style={{ marginBottom: 12 }}>
+              {portableWarn}
+              <div style={{ marginTop: 8 }}>
+                <button type="button" className="btn btn-primary" onClick={() => setPortableWarn(null)}>
+                  Reconfigurar
+                </button>
+              </div>
+            </div>
+          )}
+          {printerOpError && (
+            <div className="alert alert-error" style={{ marginBottom: 12 }}>
+              {printerOpError}
+              <div className="modal-actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
+                <button type="button" className="btn btn-accent" onClick={() => void loadOsPrinters()}>
+                  Tentar novamente
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => setPrinterOpError(null)}>
+                  Fechar
+                </button>
+              </div>
+            </div>
+          )}
+          {printersLoading && (
+            <div className="alert alert-ok" style={{ marginBottom: 12 }}>
+              BUSCANDO IMPRESSORAS...
+              <div style={{ marginTop: 8 }}>
+                <button type="button" className="btn btn-ghost" onClick={cancelPrintersSearch}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
           <p className="muted-line" style={{ marginBottom: 12 }}>
             {printerNote || printers.note}
           </p>
@@ -691,10 +835,18 @@ export default function ConfiguracoesPage() {
             <button
               type="button"
               className="btn btn-ghost"
-              disabled={busy}
+              disabled={printersLoading}
               onClick={() => void loadOsPrinters()}
             >
               Atualizar lista
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger"
+              disabled={busy || !isAdmin || printersLoading}
+              onClick={() => void resetPrintersCfg()}
+            >
+              Resetar configuração de impressão
             </button>
             <button
               type="button"
@@ -780,19 +932,33 @@ export default function ConfiguracoesPage() {
               impressão válida no sistema.
             </p>
             {btNote && <p className="muted-line">{btNote}</p>}
+            {btLoading && (
+              <div className="alert alert-ok" style={{ marginBottom: 8 }}>
+                Buscando dispositivos Bluetooth...
+                <div style={{ marginTop: 8 }}>
+                  <button type="button" className="btn btn-ghost" onClick={() => void cancelBluetoothSearch()}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
-              <button type="button" className="btn btn-ghost" onClick={() => void loadBluetooth()}>
-                Procurar / Atualizar
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={btLoading}
+                onClick={() => void loadBluetooth(false)}
+              >
+                Atualizar
               </button>
-              {window.oncaDesktop?.scanBluetooth && (
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => void window.oncaDesktop?.scanBluetooth?.().then(() => loadBluetooth())}
-                >
-                  Procurar
-                </button>
-              )}
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={btLoading}
+                onClick={() => void loadBluetooth(true)}
+              >
+                Procurar
+              </button>
             </div>
             {btDevices.length > 0 && (
               <table className="data-table" style={{ marginTop: 8 }}>

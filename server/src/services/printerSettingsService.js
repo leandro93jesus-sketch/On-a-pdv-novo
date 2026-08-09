@@ -136,4 +136,32 @@ export function resolvePrinterFor(kind = 'receipt') {
   };
 }
 
+/** Remove apenas preferências de impressão (não toca produtos/vendas/caixa). */
+export function resetPrinterSettings(userName) {
+  for (const key of PRINTER_KEYS) {
+    const def =
+      key === 'printer_use_windows_default'
+        ? '1'
+        : key === 'print_profile_format'
+          ? 'A4'
+          : key === 'print_profile_copies'
+            ? '1'
+            : key === 'print_profile_auto'
+              ? '0'
+              : key === 'print_profile_mode'
+                ? 'manual'
+                : key === 'printer_per_device_json'
+                  ? '{}'
+                  : '';
+    setSetting(key, def);
+  }
+  writeAudit({
+    action: 'settings.printers.reset',
+    entityType: 'settings',
+    details: { keys: PRINTER_KEYS },
+    userName,
+  });
+  return getPrinterSettings();
+}
+
 export { PRINTER_KEYS };

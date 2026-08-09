@@ -948,6 +948,21 @@ export interface PrintJob {
   created_at?: string;
 }
 
+export interface DeliveryOrderItem {
+  id: number;
+  product_id?: number | null;
+  product_name: string;
+  quantity: number;
+  unit_price_cents: number;
+  line_total_cents: number;
+  is_misc?: number;
+  checked_qty?: number;
+  remaining_qty?: number;
+  check_status?: 'PENDENTE' | 'PARCIAL' | 'CONFERIDO' | string;
+  product_barcode?: string | null;
+  product_sku?: string | null;
+}
+
 export interface DeliveryOrder {
   id: number;
   order_number: string;
@@ -961,15 +976,8 @@ export interface DeliveryOrder {
   amount_due_cents?: number;
   sale_id?: number | null;
   cancel_reason?: string | null;
-  items?: Array<{
-    id: number;
-    product_id?: number | null;
-    product_name: string;
-    quantity: number;
-    unit_price_cents: number;
-    line_total_cents: number;
-    is_misc?: number;
-  }>;
+  all_items_checked?: boolean;
+  items?: DeliveryOrderItem[];
   payments?: Array<{
     id: number;
     method: string;
@@ -978,6 +986,15 @@ export interface DeliveryOrder {
   }>;
   history?: Array<{ id: number; from_status?: string; to_status: string; note?: string; created_at?: string }>;
   reservations?: Array<{ id: number; product_id: number; quantity: number; status: string }>;
+  scans?: Array<{
+    id: number;
+    barcode_read?: string | null;
+    product_name?: string | null;
+    quantity: number;
+    method: string;
+    user_name?: string | null;
+    created_at?: string;
+  }>;
 }
 
 export interface SettingsBundle {
@@ -1239,13 +1256,60 @@ export function cancelDeliveryOrderApi(id: number, reason: string): Promise<Deli
 export function updateDeliveryOrderStatusApi(
   id: number,
   status: string,
-  note?: string
+  note?: string,
+  opts?: { allow_unchecked?: boolean }
 ): Promise<DeliveryOrder> {
   return apiFetch(`/api/delivery-orders/${id}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status, note }),
+    body: JSON.stringify({
+      status,
+      note,
+      allow_unchecked: opts?.allow_unchecked,
+    }),
   }).then((r) => handle<DeliveryOrder>(r));
+}
+
+export function scanDeliveryOrderBarcodeApi(
+  id: number,
+  barcode: string
+): Promise<{
+  ok: boolean;
+  beep?: boolean;
+  message?: string;
+  item?: DeliveryOrderItem;
+  order: DeliveryOrder;
+}> {
+  return apiFetch(`/api/delivery-orders/${id}/scan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ barcode }),
+  }).then((r) => handle(r));
+}
+
+export function confirmDeliveryOrderItemManualApi(
+  id: number,
+  itemId: number,
+  quantity?: number
+): Promise<DeliveryOrder> {
+  return apiFetch(`/api/delivery-orders/${id}/items/${itemId}/confirm-manual`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quantity }),
+  }).then((r) => handle<DeliveryOrder>(r));
+}
+
+export function resetPrinterSettingsApi(): Promise<{ settings: PrinterSettings; note?: string }> {
+  return apiFetch('/api/settings/printers/reset', { method: 'POST' }).then((r) => handle(r));
+}
+
+export function fetchPrinterPortableStatusApi(): Promise<{
+  ok: boolean;
+  present?: boolean;
+  needs_reconfigure?: boolean;
+  error?: string;
+}> {
+  return apiFetch('/api/settings/printers/portable-status').then((r) => handle(r));
 }
 
 export function fetchUsers(): Promise<AppUser[]> {

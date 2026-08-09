@@ -11,6 +11,8 @@ import {
   importPortablePrinterConfig,
   matchPrintersOnHost,
   savePortablePrinterConfigFile,
+  resetPortablePrinterConfig,
+  loadPortablePrinterConfigIfPresent,
 } from '../services/portablePrinterConfigService.js';
 import { requireAuth, requireAdmin, authOptional } from '../middleware/auth.js';
 
@@ -119,6 +121,31 @@ router.post('/printers/match', authOptional, (req, res, next) => {
     res.json(matchPrintersOnHost(names));
   } catch (err) {
     next(err);
+  }
+});
+
+router.post('/printers/reset', requireAuth, requireAdmin, (req, res, next) => {
+  try {
+    res.json(resetPortablePrinterConfig(req.user?.name));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/printers/portable-status', authOptional, (_req, res) => {
+  try {
+    const cfg = loadPortablePrinterConfigIfPresent();
+    if (cfg?.__invalid) {
+      res.json({ ok: false, error: cfg.error, needs_reconfigure: true });
+      return;
+    }
+    res.json({ ok: true, present: Boolean(cfg), needs_reconfigure: false });
+  } catch {
+    res.json({
+      ok: false,
+      error: 'CONFIGURAÇÃO DE IMPRESSORA NÃO PÔDE SER CARREGADA.',
+      needs_reconfigure: true,
+    });
   }
 });
 

@@ -1,16 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   cancelDeliveryOrderApi,
+  confirmDeliveryOrderItemManualApi,
   confirmDeliveryOrderPaymentApi,
   createDeliveryOrderApi,
   fetchDeliveryOrderApi,
   fetchDeliveryOrdersApi,
   fetchProducts,
   formatBRL,
+  getStoredAuthUser,
+  scanDeliveryOrderBarcodeApi,
+  updateDeliveryOrderStatusApi,
   type DeliveryOrder,
   type Product,
 } from '../../api/client';
 import { ModuleToolbar, StatusPill } from '../../components/ModuleChrome';
+import { playSoftBeep } from '../../lib/desktopAsync';
 
 function tone(status: string, pay?: string): 'ok' | 'warn' | 'danger' | 'muted' | 'info' {
   if (status === 'cancelado') return 'danger';
@@ -20,12 +25,27 @@ function tone(status: string, pay?: string): 'ok' | 'warn' | 'danger' | 'muted' 
   return 'muted';
 }
 
+function checkTone(st?: string): 'ok' | 'warn' | 'danger' | 'muted' | 'info' {
+  if (st === 'CONFERIDO') return 'ok';
+  if (st === 'PARCIAL') return 'info';
+  if (st === 'PENDENTE') return 'warn';
+  return 'muted';
+}
+
 export default function DeliveryOrdersPanel() {
+  const me = getStoredAuthUser();
+  const isAdmin = me?.role === 'administrador';
+  const scanRef = useRef<HTMLInputElement | null>(null);
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
   const [selected, setSelected] = useState<DeliveryOrder | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanDetail, setScanDetail] = useState<{ name?: string | null; code?: string } | null>(null);
+  const [barcode, setBarcode] = useState('');
+  const [scanBusy, setScanBusy] = useState(false);
+  const [exceptionReason, setExceptionReason] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [showPay, setShowPay] = useState(false);
   const [customerName, setCustomerName] = useState('');
@@ -60,8 +80,73 @@ export default function DeliveryOrdersPanel() {
   async function openOrder(id: number) {
     try {
       setSelected(await fetchDeliveryOrderApi(id));
+      setScanError(null);
+      setScanDetail(null);
+      setTimeout(() => scanRef.current?.focus(), 50);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao abrir pedido');
+    }
+  }
+
+  async function handleScan(codeRaw?: string) {
+    if (!selected) return;
+    const code = String(codeRaw ?? barcode).trim();
+    if (!code || scanBusy) return;
+    setScanBusy(true);
+    setScanError(null);
+    setScanDetail(null);
+    setError(null);
+    try {
+      const res = await scanDeliveryOrderBarcodeApi(selected.id, code);
+      setSelected(res.order);
+      setNotice(res.message || 'Unidade conferida');
+      if (res.beep) playSoftBeep();
+      setBarcode('');
+      setTimeout(() => scanRef.current?.focus(), 30);
+      await load();
+    } catch (e) {
+      const err = e as Error & { code?: string; details?: { product_name?: string; barcode?: string } };
+      setScanError(err.message || 'PRODUTO NÃO PERTENCE A ESTE PEDIDO');
+      setScanDetail({
+        name: err.details?.product_name ?? null,
+        code: err.details?.barcode || code,
+      });
+      setBarcode('');
+      setTimeout(() => scanRef.current?.focus(), 30);
+    } finally {
+      setScanBusy(false);
+    }
+  }
+
+  async function confirmManual(itemId: number) {
+    if (!selected) return;
+    try {
+      const updated = await confirmDeliveryOrderItemManualApi(selected.id, itemId);
+      setSelected(updated);
+      setNotice('Conferência manual registrada');
+      playSoftBeep();
+      setTimeout(() => scanRef.current?.focus(), 30);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro na conferência manual');
+    }
+  }
+
+  async function advanceStatus(status: string, allowUnchecked = false) {
+    if (!selected) return;
+    try {
+      const updated = await updateDeliveryOrderStatusApi(
+        selected.id,
+        status,
+        allowUnchecked ? exceptionReason.trim() : undefined,
+        { allow_unchecked: allowUnchecked }
+      );
+      setSelected(updated);
+      setExceptionReason('');
+      setNotice(`Status: ${status}`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao alterar status');
     }
   }
 
@@ -161,7 +246,7 @@ export default function DeliveryOrdersPanel() {
           Novo pedido
         </button>
       </ModuleToolbar>
-      {error && <div className="alert alert-danger">{error}</div>}
+      {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-ok">{notice}</div>}
 
       <div className="split-layout">
@@ -209,19 +294,98 @@ export default function DeliveryOrdersPanel() {
               {formatBRL(selected.amount_paid_cents)} · Saldo{' '}
               {formatBRL(selected.total_cents - selected.amount_paid_cents)}
             </p>
-            <ul>
-              {(selected.items || []).map((it) => (
-                <li key={it.id}>
-                  {it.product_name} × {it.quantity} = {formatBRL(it.line_total_cents)}
-                </li>
-              ))}
-            </ul>
+
+            {selected.status !== 'cancelado' && (
+              <div style={{ marginTop: 12, marginBottom: 12 }}>
+                <label>
+                  Ler código de barras
+                  <input
+                    ref={scanRef}
+                    className="field-input"
+                    value={barcode}
+                    disabled={scanBusy}
+                    placeholder="Escaneie ou digite o código do produto..."
+                    onChange={(e) => setBarcode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void handleScan();
+                      }
+                    }}
+                    autoFocus
+                  />
+                </label>
+              </div>
+            )}
+
+            {scanError && (
+              <div className="alert alert-error" style={{ marginBottom: 12 }}>
+                <strong>{scanError}</strong>
+                {scanDetail && (
+                  <div style={{ marginTop: 6 }}>
+                    {scanDetail.name != null && (
+                      <div>
+                        Produto encontrado: <strong>{scanDetail.name || '—'}</strong>
+                      </div>
+                    )}
+                    <div>
+                      Código: <strong>{scanDetail.code}</strong>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <table className="data-table" style={{ marginBottom: 12 }}>
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th>Pedida</th>
+                  <th>Conferida</th>
+                  <th>Falta</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(selected.items || []).map((it) => (
+                  <tr key={it.id}>
+                    <td>
+                      {it.product_name}
+                      <div className="muted-line">{it.product_barcode || it.product_sku || 'sem código'}</div>
+                    </td>
+                    <td>{it.quantity}</td>
+                    <td>{it.checked_qty ?? 0}</td>
+                    <td>{it.remaining_qty ?? it.quantity}</td>
+                    <td>
+                      <StatusPill tone={checkTone(it.check_status)}>
+                        {it.check_status || 'PENDENTE'}
+                      </StatusPill>
+                    </td>
+                    <td>
+                      {selected.status !== 'cancelado' && it.check_status !== 'CONFERIDO' && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={() => void confirmManual(it.id)}
+                            title="Conferência manual"
+                          >
+                            Confirmar manualmente
+                          </button>
+                        )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
             {(selected.reservations || []).length > 0 && (
               <p className="muted-line">
                 Reservas:{' '}
                 {selected.reservations!.map((r) => `#${r.product_id}:${r.quantity}(${r.status})`).join(', ')}
               </p>
             )}
+
             <div className="modal-actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
               {selected.status !== 'cancelado' && selected.payment_status !== 'pago' && (
                 <>
@@ -246,7 +410,51 @@ export default function DeliveryOrdersPanel() {
                   </button>
                 </>
               )}
+              {selected.status !== 'cancelado' && selected.payment_status === 'pago' && (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => void advanceStatus('separado')}
+                  >
+                    Separado
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-accent"
+                    onClick={() => void advanceStatus('pronto_para_entrega')}
+                  >
+                    Pronto para entrega
+                  </button>
+                </>
+              )}
             </div>
+
+            {isAdmin &&
+              selected.payment_status === 'pago' &&
+              !selected.all_items_checked &&
+              selected.status !== 'cancelado' && (
+                <div style={{ marginTop: 12 }}>
+                  <label>
+                    Liberação excepcional (admin) — motivo obrigatório
+                    <input
+                      className="field-input"
+                      value={exceptionReason}
+                      onChange={(e) => setExceptionReason(e.target.value)}
+                      placeholder="Motivo da liberação sem conferência total"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    style={{ marginTop: 8 }}
+                    onClick={() => void advanceStatus('separado', true)}
+                  >
+                    Liberar excepcional → Separado
+                  </button>
+                </div>
+              )}
+
             {selected.payment_status !== 'pago' && selected.status !== 'cancelado' && (
               <div style={{ marginTop: 12 }}>
                 <label>
@@ -263,7 +471,16 @@ export default function DeliveryOrdersPanel() {
                 </button>
               </div>
             )}
-            <h4>Histórico</h4>
+            <h4>Histórico de conferência</h4>
+            <ul>
+              {(selected.scans || []).slice(0, 20).map((s) => (
+                <li key={s.id}>
+                  {s.created_at}: {s.method} · {s.product_name} ×{s.quantity}
+                  {s.barcode_read ? ` · cód. ${s.barcode_read}` : ''} · {s.user_name || ''}
+                </li>
+              ))}
+            </ul>
+            <h4>Histórico do pedido</h4>
             <ul>
               {(selected.history || []).map((h) => (
                 <li key={h.id}>

@@ -8,6 +8,8 @@ import {
   cancelDeliveryOrder,
   updateDeliveryOrderStatus,
   getProductAvailability,
+  scanDeliveryOrderBarcode,
+  confirmDeliveryOrderItemManual,
 } from '../services/deliveryOrdersService.js';
 
 const router = Router();
@@ -68,7 +70,32 @@ router.post('/:id/cancel', requireAuth, (req, res, next) => {
 
 router.patch('/:id/status', requireAuth, (req, res, next) => {
   try {
-    res.json(updateDeliveryOrderStatus(req.params.id, req.body?.status, req.body?.note));
+    res.json(
+      updateDeliveryOrderStatus(req.params.id, req.body?.status, req.body?.note, {
+        allowUnchecked: Boolean(req.body?.allow_unchecked),
+        userRole: req.user?.role,
+      })
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/scan', requireAuth, (req, res, next) => {
+  try {
+    res.json(scanDeliveryOrderBarcode(req.params.id, req.body?.barcode ?? req.body?.code));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/items/:itemId/confirm-manual', requireAuth, (req, res, next) => {
+  try {
+    res.json(
+      confirmDeliveryOrderItemManual(req.params.id, req.params.itemId, {
+        quantity: req.body?.quantity,
+      })
+    );
   } catch (err) {
     next(err);
   }

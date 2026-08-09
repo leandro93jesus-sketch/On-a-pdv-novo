@@ -54,13 +54,43 @@ function mapOrder(row) {
   };
 }
 
+function checkStatusForItem(quantity, checkedQty) {
+  const q = Number(quantity) || 0;
+  const c = Math.max(0, Number(checkedQty) || 0);
+  if (c <= 0) return 'PENDENTE';
+  if (c >= q) return 'CONFERIDO';
+  return 'PARCIAL';
+}
+
+function mapOrderItem(row) {
+  const quantity = Number(row.quantity) || 0;
+  const checked = Math.max(0, Number(row.checked_qty) || 0);
+  return {
+    ...row,
+    checked_qty: checked,
+    remaining_qty: Math.max(0, quantity - checked),
+    check_status: checkStatusForItem(quantity, checked),
+  };
+}
+
+function allItemsChecked(items) {
+  return (items || []).every((it) => Number(it.checked_qty || 0) >= Number(it.quantity || 0));
+}
+
 export function getDeliveryOrder(id) {
   const db = getDb();
   const row = db.prepare(`SELECT * FROM delivery_orders WHERE id = ?`).get(Number(id));
   if (!row) throw new AppError('Pedido não encontrado', { status: 404, code: 'ORDER_NOT_FOUND' });
   const items = db
-    .prepare(`SELECT * FROM delivery_order_items WHERE order_id = ? ORDER BY id`)
-    .all(Number(id));
+    .prepare(
+      `SELECT i.*, p.barcode AS product_barcode, p.sku AS product_sku
+       FROM delivery_order_items i
+       LEFT JOIN products p ON p.id = i.product_id
+       WHERE i.order_id = ?
+       ORDER BY i.id`
+    )
+    .all(Number(id))
+    .map(mapOrderItem);
   const payments = db
     .prepare(`SELECT * FROM delivery_order_payments WHERE order_id = ? ORDER BY id`)
     .all(Number(id));
@@ -70,7 +100,23 @@ export function getDeliveryOrder(id) {
   const reservations = db
     .prepare(`SELECT * FROM stock_reservations WHERE order_id = ? ORDER BY id`)
     .all(Number(id));
-  return { ...mapOrder(row), items, payments, history, reservations };
+  let scans = [];
+  try {
+    scans = db
+      .prepare(`SELECT * FROM delivery_order_scans WHERE order_id = ? ORDER BY id DESC LIMIT 100`)
+      .all(Number(id));
+  } catch {
+    scans = [];
+  }
+  return {
+    ...mapOrder(row),
+    items,
+    payments,
+    history,
+    reservations,
+    scans,
+    all_items_checked: allItemsChecked(items),
+  };
 }
 
 export function listDeliveryOrders({ status, payment_status, limit = 100 } = {}) {
@@ -496,7 +542,9 @@ export function cancelDeliveryOrder(orderId, { reason } = {}) {
   })();
 }
 
-export function updateDeliveryOrderStatus(orderId, toStatus, note) {
+const SEPARATION_LOCK_STATUSES = new Set(['separado', 'pronto_para_entrega']);
+
+export function updateDeliveryOrderStatus(orderId, toStatus, note, { allowUnchecked = false, userRole } = {}) {
   const db = getDb();
   if (!ORDER_STATUSES.has(toStatus)) {
     throw new AppError('Status inválido', { status: 400, code: 'INVALID_STATUS' });
@@ -516,14 +564,191 @@ export function updateDeliveryOrderStatus(orderId, toStatus, note) {
     });
   }
 
+  if (SEPARATION_LOCK_STATUSES.has(toStatus) && !order.all_items_checked) {
+    const isAdmin = userRole === 'administrador';
+    if (!allowUnchecked || !isAdmin) {
+      throw new AppError('AINDA EXISTEM PRODUTOS NÃO CONFERIDOS.', {
+        status: 409,
+        code: 'ITEMS_NOT_CHECKED',
+      });
+    }
+    if (!note || !String(note).trim()) {
+      throw new AppError('Motivo obrigatório para liberação excepcional', {
+        status: 400,
+        code: 'EXCEPTION_REASON_REQUIRED',
+      });
+    }
+  }
+
+  const historyNote =
+    SEPARATION_LOCK_STATUSES.has(toStatus) && !order.all_items_checked && allowUnchecked
+      ? `Liberação excepcional (itens não conferidos): ${String(note).trim()}`
+      : note || null;
+
   db.prepare(
     `UPDATE delivery_orders SET status = ?, updated_at = datetime('now') WHERE id = ?`
   ).run(toStatus, Number(orderId));
   db.prepare(
     `INSERT INTO delivery_order_history (order_id, from_status, to_status, note, user_name)
      VALUES (?, ?, ?, ?, ?)`
-  ).run(Number(orderId), order.status, toStatus, note || null, getCurrentOperator());
+  ).run(Number(orderId), order.status, toStatus, historyNote, getCurrentOperator());
   return getDeliveryOrder(orderId);
+}
+
+/**
+ * Conferência por código de barras (ou código interno/SKU).
+ * Incrementa checked_qty em +1 por leitura.
+ */
+export function scanDeliveryOrderBarcode(orderId, barcodeRaw) {
+  const db = getDb();
+  const code = String(barcodeRaw || '').trim();
+  if (!code) {
+    throw new AppError('Código vazio', { status: 400, code: 'EMPTY_BARCODE' });
+  }
+  const order = getDeliveryOrder(orderId);
+  if (order.status === 'cancelado') {
+    throw new AppError('Pedido cancelado', { status: 409, code: 'ORDER_CANCELLED' });
+  }
+
+  const product = db
+    .prepare(
+      `SELECT id, name, barcode, sku FROM products
+       WHERE active = 1 AND (barcode = ? OR sku = ? OR CAST(id AS TEXT) = ?)
+       LIMIT 1`
+    )
+    .get(code, code, code);
+
+  if (!product) {
+    throw new AppError('PRODUTO NÃO PERTENCE A ESTE PEDIDO', {
+      status: 404,
+      code: 'PRODUCT_NOT_IN_ORDER',
+      details: { barcode: code, found: false, product_name: null },
+    });
+  }
+
+  const item = order.items.find((i) => Number(i.product_id) === Number(product.id));
+  if (!item) {
+    throw new AppError('PRODUTO NÃO PERTENCE A ESTE PEDIDO', {
+      status: 409,
+      code: 'PRODUCT_NOT_IN_ORDER',
+      details: {
+        barcode: code,
+        found: true,
+        product_name: product.name,
+        product_id: product.id,
+      },
+    });
+  }
+
+  if (Number(item.checked_qty) >= Number(item.quantity)) {
+    throw new AppError('QUANTIDADE DO PEDIDO JÁ CONFERIDA.', {
+      status: 409,
+      code: 'ALREADY_CHECKED',
+      details: {
+        item_id: item.id,
+        product_name: item.product_name,
+        quantity: item.quantity,
+        checked_qty: item.checked_qty,
+      },
+    });
+  }
+
+  return db.transaction(() => {
+    db.prepare(
+      `UPDATE delivery_order_items SET checked_qty = checked_qty + 1 WHERE id = ?`
+    ).run(item.id);
+    db.prepare(
+      `INSERT INTO delivery_order_scans (
+         order_id, item_id, product_id, product_name, barcode_read, quantity, method, user_name
+       ) VALUES (?, ?, ?, ?, ?, 1, 'barcode', ?)`
+    ).run(
+      Number(orderId),
+      item.id,
+      product.id,
+      product.name,
+      code,
+      getCurrentOperator()
+    );
+
+    if (order.status === 'aguardando_separacao') {
+      db.prepare(
+        `UPDATE delivery_orders SET status = 'em_separacao', updated_at = datetime('now') WHERE id = ?`
+      ).run(Number(orderId));
+      db.prepare(
+        `INSERT INTO delivery_order_history (order_id, from_status, to_status, note, user_name)
+         VALUES (?, ?, 'em_separacao', ?, ?)`
+      ).run(Number(orderId), order.status, 'Início da conferência', getCurrentOperator());
+    }
+
+    writeAudit({
+      action: 'delivery_order.scan',
+      entityType: 'delivery_order',
+      entityId: Number(orderId),
+      details: { barcode: code, product_id: product.id, item_id: item.id, method: 'barcode' },
+      userName: getCurrentOperator(),
+    });
+
+    const updated = getDeliveryOrder(orderId);
+    const updatedItem = updated.items.find((i) => i.id === item.id);
+    return {
+      ok: true,
+      beep: true,
+      message: updatedItem?.check_status === 'CONFERIDO' ? 'Item CONFERIDO' : 'Unidade conferida',
+      item: updatedItem,
+      order: updated,
+    };
+  })();
+}
+
+/** Conferência manual (produtos sem código). Requer autenticação; admin ou operador. */
+export function confirmDeliveryOrderItemManual(orderId, itemId, { quantity } = {}) {
+  const db = getDb();
+  const order = getDeliveryOrder(orderId);
+  if (order.status === 'cancelado') {
+    throw new AppError('Pedido cancelado', { status: 409, code: 'ORDER_CANCELLED' });
+  }
+  const item = order.items.find((i) => Number(i.id) === Number(itemId));
+  if (!item) {
+    throw new AppError('Item não encontrado no pedido', { status: 404, code: 'ITEM_NOT_FOUND' });
+  }
+  const remaining = Math.max(0, Number(item.quantity) - Number(item.checked_qty));
+  if (remaining <= 0) {
+    throw new AppError('QUANTIDADE DO PEDIDO JÁ CONFERIDA.', {
+      status: 409,
+      code: 'ALREADY_CHECKED',
+    });
+  }
+  const add = quantity != null ? Number(quantity) : remaining;
+  if (!Number.isInteger(add) || add <= 0 || add > remaining) {
+    throw new AppError('Quantidade de conferência inválida', { status: 400, code: 'INVALID_CHECK_QTY' });
+  }
+
+  return db.transaction(() => {
+    db.prepare(
+      `UPDATE delivery_order_items SET checked_qty = checked_qty + ? WHERE id = ?`
+    ).run(add, item.id);
+    db.prepare(
+      `INSERT INTO delivery_order_scans (
+         order_id, item_id, product_id, product_name, barcode_read, quantity, method, user_name, note
+       ) VALUES (?, ?, ?, ?, NULL, ?, 'manual', ?, ?)`
+    ).run(
+      Number(orderId),
+      item.id,
+      item.product_id,
+      item.product_name,
+      add,
+      getCurrentOperator(),
+      'Conferência manual'
+    );
+    writeAudit({
+      action: 'delivery_order.scan_manual',
+      entityType: 'delivery_order',
+      entityId: Number(orderId),
+      details: { item_id: item.id, quantity: add, method: 'manual' },
+      userName: getCurrentOperator(),
+    });
+    return getDeliveryOrder(orderId);
+  })();
 }
 
 /** Disponibilidade para UI/estoque. */

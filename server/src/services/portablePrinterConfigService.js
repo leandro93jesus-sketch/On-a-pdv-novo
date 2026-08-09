@@ -1,7 +1,11 @@
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { getDataDir } from '../db/paths.js';
-import { getPrinterSettings, updatePrinterSettings } from './printerSettingsService.js';
+import {
+  getPrinterSettings,
+  updatePrinterSettings,
+  resetPrinterSettings,
+} from './printerSettingsService.js';
 import { AppError } from '../utils/errors.js';
 
 function configDir() {
@@ -75,10 +79,34 @@ export function loadPortablePrinterConfigIfPresent() {
   const path = portablePrinterConfigPath();
   if (!existsSync(path)) return null;
   try {
-    return JSON.parse(readFileSync(path, 'utf8'));
+    const raw = readFileSync(path, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+      return { __invalid: true, error: 'CONFIGURAÇÃO DE IMPRESSORA NÃO PÔDE SER CARREGADA.' };
+    }
+    return parsed;
   } catch {
-    return null;
+    return { __invalid: true, error: 'CONFIGURAÇÃO DE IMPRESSORA NÃO PÔDE SER CARREGADA.' };
   }
+}
+
+export function resetPortablePrinterConfig(userName) {
+  const settings = resetPrinterSettings(userName);
+  try {
+    const path = portablePrinterConfigPath();
+    if (existsSync(path)) unlinkSync(path);
+  } catch {
+    /* ignore */
+  }
+  try {
+    savePortablePrinterConfigFile();
+  } catch {
+    /* ignore */
+  }
+  return {
+    settings,
+    note: 'Preferências de impressão redefinidas. Produtos, vendas, caixa e banco não foram alterados.',
+  };
 }
 
 /** Verifica se nomes salvos existem na lista atual do SO. */
