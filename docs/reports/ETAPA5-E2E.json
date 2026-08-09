@@ -1,0 +1,228 @@
+{
+  "created_at": "2026-08-08T21:28:46.230Z",
+  "results": [
+    {
+      "id": "health",
+      "title": "API health + versão",
+      "ok": true,
+      "detail": "{\"version\":\"1.0.0\",\"status\":200}"
+    },
+    {
+      "id": "web",
+      "title": "UI responde ONÇA",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-/login",
+      "title": "UI /login",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-/vendas",
+      "title": "UI /vendas",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-/caixa",
+      "title": "UI /caixa",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-/produtos",
+      "title": "UI /produtos",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-/estoque",
+      "title": "UI /estoque",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-/clientes",
+      "title": "UI /clientes",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-/fornecedores",
+      "title": "UI /fornecedores",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-/compras",
+      "title": "UI /compras",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-/crediario",
+      "title": "UI /crediario",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-/devolucoes",
+      "title": "UI /devolucoes",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-/entregas",
+      "title": "UI /entregas",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-/relatorios",
+      "title": "UI /relatorios",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-/backup",
+      "title": "UI /backup",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-/configuracoes",
+      "title": "UI /configuracoes",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "auth",
+      "title": "Login bootstrap",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "must-change",
+      "title": "Flag troca de senha",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "id": "cash-open",
+      "title": "Abrir caixa",
+      "ok": true,
+      "detail": "201"
+    },
+    {
+      "id": "product-real",
+      "title": "Produto real localizado",
+      "ok": true,
+      "detail": "L-362 AGUA  SANITARIA ZUCCO 2L"
+    },
+    {
+      "id": "customer",
+      "title": "Cliente real",
+      "ok": true,
+      "detail": "Cliente Crediário 1786206493878"
+    },
+    {
+      "id": "sale",
+      "title": "Finalizar venda",
+      "ok": true,
+      "detail": "201"
+    },
+    {
+      "id": "misc",
+      "title": "Item Diversos na venda",
+      "ok": true,
+      "detail": "AGUA  SANITARIA ZUCCO 2L; Item Diversos E2E"
+    },
+    {
+      "id": "stock",
+      "title": "Baixa estoque produto normal",
+      "ok": true,
+      "detail": "991 → 990"
+    },
+    {
+      "id": "cash-register",
+      "title": "Caixa registra venda",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "id": "pdf",
+      "title": "PDF comprovante",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "id": "whatsapp",
+      "title": "WhatsApp link",
+      "ok": true,
+      "detail": "url ok"
+    },
+    {
+      "id": "history",
+      "title": "Histórico vendas",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "report",
+      "title": "Relatório vendas",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "credit-summary",
+      "title": "Crediário summary",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "credit-sale",
+      "title": "Venda crediário (criação)",
+      "ok": true,
+      "detail": "201 id=115"
+    },
+    {
+      "id": "credit-flow",
+      "title": "Fluxo crediário / pagamento parcial",
+      "ok": true,
+      "detail": "account=5 pago=200 saldo=300"
+    },
+    {
+      "id": "cash-close",
+      "title": "Fechar caixa",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "id": "backup",
+      "title": "Backup",
+      "ok": true,
+      "detail": "onca-pdv-backup-2026-08-08-212846.db"
+    },
+    {
+      "id": "sqlite-integrity",
+      "title": "integrity_check",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "sqlite-fk",
+      "title": "foreign_key_check",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "id": "data-preserved",
+      "title": "Dados reais preservados (mínimos)",
+      "ok": true,
+      "detail": "{\"products\":496,\"customers\":9,\"sales_legacy\":87}"
+    }
+  ],
+  "failed": 0
+}

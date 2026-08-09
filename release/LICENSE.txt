@@ -1,0 +1,9 @@
+ONÇA PDV
+Copyright (c) ONÇA Produtos de Limpeza
+
+Software de ponto de venda para uso local.
+
+O instalador NÃO inclui o banco de dados do estabelecimento.
+Dados, backups e logs ficam na pasta de dados do usuário (AppData/ONCA-PDV no Windows).
+
+A desinstalação padrão NÃO apaga automaticamente o banco e os backups.
