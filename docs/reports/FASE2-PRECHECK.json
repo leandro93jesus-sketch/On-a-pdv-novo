@@ -1,0 +1,13 @@
+{
+  "stamp": "2026-08-08T19-12-42Z",
+  "integrity": "ok",
+  "fk_violations": 0,
+  "counts": {
+    "products": 490,
+    "customers": 9,
+    "sales": 105,
+    "legacy_sales": 87,
+    "stock_movements": 231
+  },
+  "backup": "server/data/backups/onca-pdv-backup-pre-fase2-2026-08-08T19-12-42Z.db"
+}
