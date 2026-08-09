@@ -6,6 +6,14 @@ export interface DesktopPrinter {
   isDefault?: boolean;
 }
 
+export interface DesktopBluetoothDevice {
+  name: string;
+  address?: string;
+  paired?: boolean;
+  connected?: boolean;
+  available?: boolean;
+}
+
 export interface OncaDesktopApi {
   platform: string;
   isDesktop: boolean;
@@ -14,6 +22,8 @@ export interface OncaDesktopApi {
     deviceName?: string;
     copies?: number;
   }) => Promise<{ ok: boolean; error?: string }>;
+  listBluetoothDevices?: () => Promise<{ devices: DesktopBluetoothDevice[]; error?: string }>;
+  scanBluetooth?: () => Promise<{ devices: DesktopBluetoothDevice[]; error?: string }>;
 }
 
 declare global {

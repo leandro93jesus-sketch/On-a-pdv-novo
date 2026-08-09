@@ -3,7 +3,9 @@ import {
   changeUserPasswordApi,
   createUserApi,
   exportDatasetApi,
+  exportPrinterConfigApi,
   fetchAuditLogs,
+  fetchPrintJobsApi,
   fetchPrinterSettings,
   fetchSettings,
   fetchSupportDiagnostics,
@@ -11,7 +13,10 @@ import {
   fileToBase64,
   generateDiagnosticReportApi,
   getStoredAuthUser,
+  importPrinterConfigApi,
+  matchPrintersApi,
   removeLogoApi,
+  requeuePrintJobApi,
   updatePrinterSettingsApi,
   updateSettings,
   updateUserApi,
@@ -19,6 +24,7 @@ import {
   type AppUser,
   type AuditLog,
   type LogoMeta,
+  type PrintJob,
   type PrinterSettings,
   type SettingsBundle,
 } from '../../api/client';
@@ -50,6 +56,12 @@ export default function ConfiguracoesPage() {
   const [diagnostic, setDiagnostic] = useState<Record<string, unknown> | null>(null);
   const [osPrinters, setOsPrinters] = useState<Array<{ name: string; displayName?: string; isDefault?: boolean }>>([]);
   const [printerNote, setPrinterNote] = useState<string | null>(null);
+  const [printJobs, setPrintJobs] = useState<PrintJob[]>([]);
+  const [btDevices, setBtDevices] = useState<
+    Array<{ name: string; address?: string; paired?: boolean; connected?: boolean; available?: boolean }>
+  >([]);
+  const [btNote, setBtNote] = useState<string | null>(null);
+  const [matchInfo, setMatchInfo] = useState<string | null>(null);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [audit, setAudit] = useState<AuditLog[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -167,6 +179,72 @@ export default function ConfiguracoesPage() {
       setError(e instanceof Error ? e.message : 'Erro ao salvar impressoras');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function loadPrintJobs() {
+    try {
+      setPrintJobs(await fetchPrintJobsApi());
+    } catch {
+      setPrintJobs([]);
+    }
+  }
+
+  async function loadBluetooth() {
+    setBtNote(null);
+    if (!window.oncaDesktop?.listBluetoothDevices) {
+      setBtDevices([]);
+      setBtNote(
+        'Bluetooth disponível no aplicativo desktop (Windows/Linux). Pareamento é feito pelo sistema operacional; o PDV lista e tenta reconhecer impressoras.'
+      );
+      return;
+    }
+    try {
+      const res = await window.oncaDesktop.listBluetoothDevices();
+      setBtDevices(res.devices || []);
+      if (res.error) setBtNote(res.error);
+      else if (!(res.devices || []).length) setBtNote('Nenhum dispositivo Bluetooth listado. Use Procurar ou pareie no SO.');
+    } catch (e) {
+      setBtNote(e instanceof Error ? e.message : 'Falha ao listar Bluetooth');
+    }
+  }
+
+  async function exportPrintersCfg() {
+    try {
+      const cfg = await exportPrinterConfigApi();
+      const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'onca-pdv-impressoras.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setNotice('Configuração exportada: onca-pdv-impressoras.json');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao exportar');
+    }
+  }
+
+  async function importPrintersCfg(file: File) {
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text) as Record<string, unknown>;
+      const res = await importPrinterConfigApi(json);
+      setPrinters(res.settings);
+      setNotice(res.note || 'Configuração importada.');
+      const names = osPrinters.map((p) => p.name);
+      if (names.length) {
+        const m = await matchPrintersApi(names);
+        const missing = Object.entries(m)
+          .filter(([, v]) => v.configured && !v.found)
+          .map(([k, v]) => `${k}: ${v.configured}`);
+        setMatchInfo(
+          missing.length
+            ? `IMPRESSORA CONFIGURADA NÃO ENCONTRADA. Selecione equivalente mantendo papel/perfil. Ausentes: ${missing.join('; ')}`
+            : 'Impressoras configuradas reconhecidas neste computador.'
+        );
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao importar configuração');
     }
   }
 
@@ -495,6 +573,22 @@ export default function ConfiguracoesPage() {
               </select>
             </label>
             <label>
+              Impressora de pedidos/entregas
+              <select
+                className="field-input"
+                disabled={!isAdmin || printers.use_windows_default}
+                value={printers.delivery_printer || ''}
+                onChange={(e) => setPrinters({ ...printers, delivery_printer: e.target.value })}
+              >
+                <option value="">— padrão / não definida —</option>
+                {osPrinters.map((p) => (
+                  <option key={`e-${p.name}`} value={p.name}>
+                    {p.displayName || p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
               Impressora padrão do ONÇA PDV
               <select
                 className="field-input"
@@ -602,11 +696,138 @@ export default function ConfiguracoesPage() {
             >
               Atualizar lista
             </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={busy || !isAdmin}
+              onClick={() => void exportPrintersCfg()}
+            >
+              Exportar configuração
+            </button>
+            <label className="btn btn-ghost" style={{ cursor: isAdmin ? 'pointer' : 'not-allowed' }}>
+              Importar configuração
+              <input
+                type="file"
+                accept="application/json,.json"
+                disabled={!isAdmin || busy}
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void importPrintersCfg(f);
+                  e.target.value = '';
+                }}
+              />
+            </label>
           </div>
+          {matchInfo && <div className="alert alert-error" style={{ marginTop: 12 }}>{matchInfo}</div>}
           <p className="muted-line" style={{ marginTop: 12 }}>
             Se a impressora estiver desligada, a venda concluída não é cancelada nem travada — apenas
-            uma mensagem clara é exibida.
+            uma mensagem clara é exibida. Configuração portátil: configuracoes/impressoras.json.
           </p>
+
+          <div className="side-card" style={{ marginTop: 16 }}>
+            <h3>Fila de impressão</h3>
+            <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
+              <button type="button" className="btn btn-ghost" onClick={() => void loadPrintJobs()}>
+                Atualizar fila
+              </button>
+            </div>
+            {printJobs.length === 0 ? (
+              <p className="muted-line">Nenhum trabalho listado. Clique em Atualizar fila.</p>
+            ) : (
+              <table className="data-table" style={{ marginTop: 8 }}>
+                <thead>
+                  <tr>
+                    <th>Doc</th>
+                    <th>Impressora</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {printJobs.slice(0, 30).map((j) => (
+                    <tr key={j.id}>
+                      <td>
+                        {j.title}
+                        <div className="muted-line">{j.document_type}</div>
+                      </td>
+                      <td>{j.printer_name || '—'}</td>
+                      <td>{j.status}</td>
+                      <td>
+                        {(j.status === 'erro' || j.status === 'pendente') && isAdmin && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={() =>
+                              void requeuePrintJobApi(j.id).then(() => loadPrintJobs())
+                            }
+                          >
+                            Reimprimir
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div className="side-card" style={{ marginTop: 16 }}>
+            <h3>Bluetooth</h3>
+            <p className="muted-line">
+              Dispositivo pareado ≠ impressora pronta. Só use para impressão quando houver fila de
+              impressão válida no sistema.
+            </p>
+            {btNote && <p className="muted-line">{btNote}</p>}
+            <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
+              <button type="button" className="btn btn-ghost" onClick={() => void loadBluetooth()}>
+                Procurar / Atualizar
+              </button>
+              {window.oncaDesktop?.scanBluetooth && (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => void window.oncaDesktop?.scanBluetooth?.().then(() => loadBluetooth())}
+                >
+                  Procurar
+                </button>
+              )}
+            </div>
+            {btDevices.length > 0 && (
+              <table className="data-table" style={{ marginTop: 8 }}>
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Identificador</th>
+                    <th>Pareado</th>
+                    <th>Conectado</th>
+                    <th>Disponível</th>
+                    <th>Impressora</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {btDevices.map((d) => {
+                    const installed = osPrinters.some(
+                      (p) =>
+                        p.name.toLowerCase().includes((d.name || '').toLowerCase()) ||
+                        (d.name || '').toLowerCase().includes(p.name.toLowerCase())
+                    );
+                    return (
+                      <tr key={`${d.name}-${d.address || ''}`}>
+                        <td>{d.name}</td>
+                        <td>{d.address || '—'}</td>
+                        <td>{d.paired ? 'Sim' : 'Não'}</td>
+                        <td>{d.connected ? 'Sim' : 'Não'}</td>
+                        <td>{d.available ? 'Sim' : 'Não'}</td>
+                        <td>{installed ? 'INSTALADA' : 'NÃO INSTALADA'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </>
       )}
 

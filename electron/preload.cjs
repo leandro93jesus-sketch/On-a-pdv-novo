@@ -5,4 +5,6 @@ contextBridge.exposeInMainWorld('oncaDesktop', {
   isDesktop: true,
   listPrinters: () => ipcRenderer.invoke('printers:list'),
   testPrint: (opts) => ipcRenderer.invoke('printers:test', opts || {}),
+  listBluetoothDevices: () => ipcRenderer.invoke('bluetooth:list'),
+  scanBluetooth: () => ipcRenderer.invoke('bluetooth:scan'),
 });

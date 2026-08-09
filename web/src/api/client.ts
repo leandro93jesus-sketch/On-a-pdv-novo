@@ -923,6 +923,7 @@ export interface PrinterSettings {
   use_windows_default: boolean;
   receipt_printer: string;
   reports_printer: string;
+  delivery_printer?: string;
   default_printer: string;
   profile: {
     format: string;
@@ -930,7 +931,53 @@ export interface PrinterSettings {
     auto_print: boolean;
     mode: string;
   };
+  per_printer?: Record<string, { format?: string; copies?: number }>;
   note?: string;
+}
+
+export interface PrintJob {
+  id: number;
+  document_type: string;
+  document_ref?: string | null;
+  title: string;
+  printer_name?: string | null;
+  paper_format: string;
+  copies: number;
+  status: string;
+  error_message?: string | null;
+  created_at?: string;
+}
+
+export interface DeliveryOrder {
+  id: number;
+  order_number: string;
+  customer_id?: number | null;
+  customer_name?: string | null;
+  phone?: string | null;
+  status: string;
+  payment_status: string;
+  total_cents: number;
+  amount_paid_cents: number;
+  amount_due_cents?: number;
+  sale_id?: number | null;
+  cancel_reason?: string | null;
+  items?: Array<{
+    id: number;
+    product_id?: number | null;
+    product_name: string;
+    quantity: number;
+    unit_price_cents: number;
+    line_total_cents: number;
+    is_misc?: number;
+  }>;
+  payments?: Array<{
+    id: number;
+    method: string;
+    amount_cents: number;
+    created_at?: string;
+  }>;
+  history?: Array<{ id: number; from_status?: string; to_status: string; note?: string; created_at?: string }>;
+  reservations?: Array<{ id: number; product_id: number; quantity: number; status: string }>;
 }
 
 export interface SettingsBundle {
@@ -1084,6 +1131,121 @@ export function updatePrinterSettingsApi(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   }).then((r) => handle<PrinterSettings>(r));
+}
+
+export function exportPrinterConfigApi(): Promise<Record<string, unknown>> {
+  return apiFetch('/api/settings/printers/export').then((r) => handle(r));
+}
+
+export function importPrinterConfigApi(payload: Record<string, unknown>): Promise<{
+  settings: PrinterSettings;
+  note?: string;
+}> {
+  return apiFetch('/api/settings/printers/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle(r));
+}
+
+export function matchPrintersApi(printers: string[]): Promise<Record<string, { configured: string; found: boolean }>> {
+  return apiFetch('/api/settings/printers/match', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ printers }),
+  }).then((r) => handle(r));
+}
+
+export function enqueuePrintJobApi(payload: Record<string, unknown>): Promise<PrintJob> {
+  return apiFetch('/api/print/jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<PrintJob>(r));
+}
+
+export function fetchPrintJobsApi(status?: string): Promise<PrintJob[]> {
+  return apiFetch(`/api/print/jobs${qs({ status })}`).then((r) => handle<PrintJob[]>(r));
+}
+
+export function markPrintJobResultApi(
+  id: number,
+  payload: { ok: boolean; error?: string; printer_name?: string }
+): Promise<PrintJob> {
+  return apiFetch(`/api/print/jobs/${id}/result`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<PrintJob>(r));
+}
+
+export function requeuePrintJobApi(id: number): Promise<PrintJob> {
+  return apiFetch(`/api/print/jobs/${id}/requeue`, { method: 'POST' }).then((r) =>
+    handle<PrintJob>(r)
+  );
+}
+
+export function logDirectPrintApi(payload: Record<string, unknown>): Promise<{ ok: boolean }> {
+  return apiFetch('/api/print/log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle(r));
+}
+
+export function fetchDeliveryOrdersApi(params?: {
+  status?: string;
+  payment_status?: string;
+}): Promise<DeliveryOrder[]> {
+  return apiFetch(
+    `/api/delivery-orders${qs({
+      status: params?.status,
+      payment_status: params?.payment_status,
+    })}`
+  ).then((r) => handle<DeliveryOrder[]>(r));
+}
+
+export function fetchDeliveryOrderApi(id: number): Promise<DeliveryOrder> {
+  return apiFetch(`/api/delivery-orders/${id}`).then((r) => handle<DeliveryOrder>(r));
+}
+
+export function createDeliveryOrderApi(payload: Record<string, unknown>): Promise<DeliveryOrder> {
+  return apiFetch('/api/delivery-orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<DeliveryOrder>(r));
+}
+
+export function confirmDeliveryOrderPaymentApi(
+  id: number,
+  payload: Record<string, unknown>
+): Promise<DeliveryOrder> {
+  return apiFetch(`/api/delivery-orders/${id}/payments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<DeliveryOrder>(r));
+}
+
+export function cancelDeliveryOrderApi(id: number, reason: string): Promise<DeliveryOrder> {
+  return apiFetch(`/api/delivery-orders/${id}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  }).then((r) => handle<DeliveryOrder>(r));
+}
+
+export function updateDeliveryOrderStatusApi(
+  id: number,
+  status: string,
+  note?: string
+): Promise<DeliveryOrder> {
+  return apiFetch(`/api/delivery-orders/${id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status, note }),
+  }).then((r) => handle<DeliveryOrder>(r));
 }
 
 export function fetchUsers(): Promise<AppUser[]> {

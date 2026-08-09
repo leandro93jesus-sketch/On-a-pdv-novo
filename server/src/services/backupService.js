@@ -12,7 +12,7 @@ import { join, basename } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { getDb, closeDb, openDatabase, setDb } from '../db/index.js';
-import { getDbPath, ensureDataDir, getBackupsDir } from '../db/paths.js';
+import { getDbPath, ensureDataDir, getBackupsDir, getDataDir } from '../db/paths.js';
 import { getSetting } from './settingsService.js';
 import { writeAudit } from './auditService.js';
 import { AppError } from '../utils/errors.js';
@@ -72,6 +72,18 @@ export function createBackup({ kind = 'manual', createdBy = null, notes = null }
     throw new AppError('Falha ao criar arquivo de backup', { status: 500, code: 'BACKUP_FAILED' });
   }
 
+  // Inclui configuração portátil de impressoras (se existir).
+  let printersConfigCopied = false;
+  try {
+    const printersSrc = join(getDataDir(), 'configuracoes', 'impressoras.json');
+    if (existsSync(printersSrc)) {
+      copyFileSync(printersSrc, join(dir, `${base}.impressoras.json`));
+      printersConfigCopied = true;
+    }
+  } catch {
+    /* não bloqueia backup do banco */
+  }
+
   const hash = sha256File(dbDest);
   const size = statSync(dbDest).size;
   const manifest = {
@@ -84,6 +96,7 @@ export function createBackup({ kind = 'manual', createdBy = null, notes = null }
     sha256: hash,
     kind,
     notes,
+    printers_config_sidecar: printersConfigCopied ? `${base}.impressoras.json` : null,
   };
   writeFileSync(manifestDest, JSON.stringify(manifest, null, 2), 'utf8');
 

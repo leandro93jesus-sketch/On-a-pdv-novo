@@ -6,6 +6,12 @@ import {
   updatePrinterSettings,
   resolvePrinterFor,
 } from '../services/printerSettingsService.js';
+import {
+  exportPortablePrinterConfig,
+  importPortablePrinterConfig,
+  matchPrintersOnHost,
+  savePortablePrinterConfigFile,
+} from '../services/portablePrinterConfigService.js';
 import { requireAuth, requireAdmin, authOptional } from '../middleware/auth.js';
 
 const router = Router();
@@ -72,7 +78,13 @@ router.get('/printers', authOptional, (_req, res) => {
 
 router.put('/printers', requireAuth, requireAdmin, (req, res, next) => {
   try {
-    res.json(updatePrinterSettings(req.body || {}, req.user?.name));
+    const saved = updatePrinterSettings(req.body || {}, req.user?.name);
+    try {
+      savePortablePrinterConfigFile();
+    } catch {
+      /* arquivo portátil é best-effort */
+    }
+    res.json(saved);
   } catch (err) {
     next(err);
   }
@@ -81,6 +93,33 @@ router.put('/printers', requireAuth, requireAdmin, (req, res, next) => {
 router.get('/printers/resolve', authOptional, (req, res) => {
   const kind = String(req.query.kind || 'receipt');
   res.json(resolvePrinterFor(kind));
+});
+
+router.get('/printers/export', requireAuth, requireAdmin, (_req, res, next) => {
+  try {
+    res.json(exportPortablePrinterConfig());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/printers/import', requireAuth, requireAdmin, (req, res, next) => {
+  try {
+    res.json(importPortablePrinterConfig(req.body || {}, req.user?.name));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/printers/match', authOptional, (req, res, next) => {
+  try {
+    const names = Array.isArray(req.body?.printers)
+      ? req.body.printers.map((p) => (typeof p === 'string' ? p : p?.name)).filter(Boolean)
+      : [];
+    res.json(matchPrintersOnHost(names));
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;

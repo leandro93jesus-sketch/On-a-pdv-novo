@@ -14,6 +14,8 @@ import purchasesRouter from './routes/purchases.js';
 import creditRouter from './routes/credit.js';
 import returnsRouter from './routes/returns.js';
 import deliveriesRouter from './routes/deliveries.js';
+import deliveryOrdersRouter from './routes/deliveryOrders.js';
+import printRouter from './routes/print.js';
 import authRouter from './routes/auth.js';
 import settingsRouter from './routes/settings.js';
 import reportsRouter from './routes/reports.js';
@@ -59,6 +61,8 @@ export function createApp() {
   app.use('/api/credit', creditRouter);
   app.use('/api/returns', returnsRouter);
   app.use('/api/deliveries', deliveriesRouter);
+  app.use('/api/delivery-orders', deliveryOrdersRouter);
+  app.use('/api/print', printRouter);
 
   const webDist = resolveWebDist();
   if (existsSync(webDist)) {

@@ -7,6 +7,8 @@ import {
   type ReportResult,
 } from '../../api/client';
 import { ModuleToolbar } from '../../components/ModuleChrome';
+import ChoosePrinterModal from '../../components/ChoosePrinterModal';
+import { printDocument } from '../../lib/printDocument';
 
 function columnLabel(col: string): string {
   return col
@@ -36,6 +38,7 @@ export default function RelatoriosPage() {
   const [result, setResult] = useState<ReportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [choosePrinter, setChoosePrinter] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -118,13 +121,33 @@ export default function RelatoriosPage() {
           type="button"
           className="btn btn-ghost no-print"
           disabled={!result}
-          onClick={() => window.print()}
+          onClick={() => setChoosePrinter(true)}
         >
           Imprimir
         </button>
       </ModuleToolbar>
 
       {error && <div className="alert alert-error">{error}</div>}
+      {choosePrinter && result && (
+        <ChoosePrinterModal
+          kind="report"
+          title="Escolher impressora"
+          onCancel={() => setChoosePrinter(false)}
+          onConfirm={(choice) => {
+            setChoosePrinter(false);
+            void printDocument({
+              kind: 'report',
+              title: result.title,
+              documentType: 'relatorio',
+              documentRef: result.id,
+              printerName: choice.printerName || undefined,
+              paperFormat: choice.paperFormat,
+            }).then((res) => {
+              if (!res.ok) setError(res.error || 'Não foi possível imprimir o relatório.');
+            });
+          }}
+        />
+      )}
 
       {!result ? (
         <p className="cart-empty">Selecione um relatório e clique em Visualizar.</p>

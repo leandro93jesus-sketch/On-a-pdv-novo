@@ -244,6 +244,97 @@ function registerPrinterIpc() {
       }
     });
   });
+
+  ipcMain.handle('bluetooth:list', async () => listBluetoothDevicesOs());
+  ipcMain.handle('bluetooth:scan', async () => {
+    if (process.platform === 'linux') {
+      const { execFile } = require('node:child_process');
+      return new Promise((resolve) => {
+        execFile('bluetoothctl', ['--timeout', '5', 'scan', 'on'], { timeout: 12000 }, () => {
+          listBluetoothDevicesOs().then(resolve);
+        });
+      });
+    }
+    // Windows: pareamento/PIN via fluxo real do SO — apenas atualiza lista PnP
+    return listBluetoothDevicesOs();
+  });
+}
+
+function listBluetoothDevicesOs() {
+  return new Promise((resolve) => {
+    const { execFile } = require('node:child_process');
+    if (process.platform === 'win32') {
+      const ps = [
+        "$ErrorActionPreference='SilentlyContinue'",
+        'Get-PnpDevice -Class Bluetooth | Select-Object FriendlyName, InstanceId, Status | ConvertTo-Json -Compress',
+      ].join('; ');
+      execFile(
+        'powershell.exe',
+        ['-NoProfile', '-Command', ps],
+        { windowsHide: true, timeout: 15000, maxBuffer: 2 * 1024 * 1024 },
+        (err, stdout) => {
+          if (err) {
+            resolve({
+              devices: [],
+              error:
+                'Não foi possível listar Bluetooth no Windows. Use as configurações do sistema para parear.',
+            });
+            return;
+          }
+          try {
+            const parsed = stdout && stdout.trim() ? JSON.parse(stdout) : [];
+            const arr = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+            resolve({
+              devices: arr.map((d) => ({
+                name: d.FriendlyName || d.InstanceId || 'Dispositivo',
+                address: d.InstanceId || '',
+                paired: true,
+                connected: String(d.Status || '').toLowerCase() === 'ok',
+                available: String(d.Status || '').toLowerCase() === 'ok',
+              })),
+            });
+          } catch {
+            resolve({ devices: [], error: 'Resposta Bluetooth inválida no Windows.' });
+          }
+        }
+      );
+      return;
+    }
+    if (process.platform === 'linux') {
+      execFile('bluetoothctl', ['devices'], { timeout: 12000 }, (err, stdout) => {
+        if (err) {
+          resolve({
+            devices: [],
+            error:
+              'BlueZ/bluetoothctl indisponível. Pareie pelo sistema e atualize a lista de impressoras.',
+          });
+          return;
+        }
+        const devices = String(stdout || '')
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => {
+            const m = line.match(/^Device\s+([0-9A-Fa-f:]+)\s+(.+)$/);
+            if (!m) return null;
+            return {
+              name: m[2],
+              address: m[1],
+              paired: true,
+              connected: false,
+              available: true,
+            };
+          })
+          .filter(Boolean);
+        resolve({ devices });
+      });
+      return;
+    }
+    resolve({
+      devices: [],
+      error: 'Bluetooth não suportado nesta plataforma pelo PDV.',
+    });
+  });
 }
 
 async function boot() {

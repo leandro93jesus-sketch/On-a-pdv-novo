@@ -7,6 +7,8 @@ import {
   whatsappShareApi,
 } from '../../api/client';
 import BrandLogo from '../../components/BrandLogo';
+import ChoosePrinterModal, { type ChoosePrinterResult } from '../../components/ChoosePrinterModal';
+import { printDocument } from '../../lib/printDocument';
 
 interface Props {
   sale: Sale;
@@ -28,11 +30,39 @@ export default function ReceiptModal({
   const [waNote, setWaNote] = useState<string | null>(null);
   const [waBusy, setWaBusy] = useState(false);
   const [waPhone, setWaPhone] = useState(sale.customer?.phone || sale.customer?.whatsapp || '');
+  const [choosePrinter, setChoosePrinter] = useState(false);
+  const [printNote, setPrintNote] = useState<string | null>(null);
+  const [printBusy, setPrintBusy] = useState(false);
   const brand = companyName?.trim() || 'ONÇA PRODUTOS DE LIMPEZA';
   const showSuccess = successBanner && !cancelled;
 
   function openPdf() {
     window.open(buildReceiptPdfUrl(sale.id), '_blank', 'noopener,noreferrer');
+  }
+
+  async function doPrint(choice: ChoosePrinterResult) {
+    setChoosePrinter(false);
+    setPrintBusy(true);
+    setPrintNote(null);
+    try {
+      const res = await printDocument({
+        kind: 'receipt',
+        title: `Comprovante ${sale.sale_number}`,
+        documentType: 'comprovante',
+        documentRef: sale.sale_number,
+        printerName: choice.printerName || undefined,
+        paperFormat: choice.paperFormat,
+      });
+      if (!res.ok) {
+        setPrintNote(
+          showSuccess
+            ? `Venda concluída. Não foi possível imprimir.${res.error ? ` ${res.error}` : ''}`
+            : res.error || 'Não foi possível imprimir.'
+        );
+      }
+    } finally {
+      setPrintBusy(false);
+    }
   }
 
   async function sendWhatsApp() {
@@ -173,6 +203,16 @@ export default function ReceiptModal({
         )}
 
         {waNote && <div className="alert alert-ok no-print">{waNote}</div>}
+        {printNote && (
+          <div className="alert alert-error no-print">
+            {printNote}
+            <div style={{ marginTop: 8 }}>
+              <button type="button" className="btn btn-accent" disabled={printBusy} onClick={() => setChoosePrinter(true)}>
+                Tentar novamente
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="modal-actions no-print">
           {!cancelled && onCancelSale && !showSuccess && (
@@ -191,7 +231,12 @@ export default function ReceiptModal({
           >
             Enviar no WhatsApp
           </button>
-          <button type="button" className="btn btn-ghost" onClick={() => window.print()}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={printBusy}
+            onClick={() => setChoosePrinter(true)}
+          >
             Imprimir
           </button>
           <button type="button" className="btn btn-primary" onClick={onClose}>
@@ -199,6 +244,14 @@ export default function ReceiptModal({
           </button>
         </div>
       </div>
+      {choosePrinter && (
+        <ChoosePrinterModal
+          kind="receipt"
+          title="Escolher impressora"
+          onCancel={() => setChoosePrinter(false)}
+          onConfirm={(r) => void doPrint(r)}
+        />
+      )}
     </div>
   );
 }

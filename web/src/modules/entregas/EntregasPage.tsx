@@ -10,6 +10,7 @@ import {
   type Sale,
 } from '../../api/client';
 import { ModuleToolbar, StatusPill } from '../../components/ModuleChrome';
+import DeliveryOrdersPanel from './DeliveryOrdersPanel';
 
 const STATUSES = [
   'pendente',
@@ -29,6 +30,7 @@ function tone(status: string): 'ok' | 'warn' | 'danger' | 'muted' | 'info' {
 }
 
 export default function EntregasPage() {
+  const [mode, setMode] = useState<'pedidos' | 'logistica'>('pedidos');
   const [items, setItems] = useState<Delivery[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [selected, setSelected] = useState<Delivery | null>(null);
@@ -119,6 +121,27 @@ export default function EntregasPage() {
 
   return (
     <section className="module-panel">
+      <ModuleToolbar>
+        <button
+          type="button"
+          className={`btn ${mode === 'pedidos' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => setMode('pedidos')}
+        >
+          Pedidos (pagamento)
+        </button>
+        <button
+          type="button"
+          className={`btn ${mode === 'logistica' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => setMode('logistica')}
+        >
+          Logística (venda paga)
+        </button>
+      </ModuleToolbar>
+
+      {mode === 'pedidos' ? (
+        <DeliveryOrdersPanel />
+      ) : (
+        <>
       <ModuleToolbar>
         <select
           className="field-input"
@@ -311,6 +334,8 @@ export default function EntregasPage() {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </section>
   );
