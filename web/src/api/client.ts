@@ -969,6 +969,12 @@ export interface DeliveryOrder {
   customer_id?: number | null;
   customer_name?: string | null;
   phone?: string | null;
+  address?: string | null;
+  address_number?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip_code?: string | null;
   status: string;
   payment_status: string;
   total_cents: number;
@@ -976,15 +982,26 @@ export interface DeliveryOrder {
   amount_due_cents?: number;
   sale_id?: number | null;
   cancel_reason?: string | null;
+  created_by?: string | null;
+  created_at?: string;
+  paid_at?: string | null;
   all_items_checked?: boolean;
   items?: DeliveryOrderItem[];
   payments?: Array<{
     id: number;
     method: string;
     amount_cents: number;
+    user_name?: string | null;
     created_at?: string;
   }>;
-  history?: Array<{ id: number; from_status?: string; to_status: string; note?: string; created_at?: string }>;
+  history?: Array<{
+    id: number;
+    from_status?: string;
+    to_status: string;
+    note?: string;
+    user_name?: string | null;
+    created_at?: string;
+  }>;
   reservations?: Array<{ id: number; product_id: number; quantity: number; status: string }>;
   scans?: Array<{
     id: number;

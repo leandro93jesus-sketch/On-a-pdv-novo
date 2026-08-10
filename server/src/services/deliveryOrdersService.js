@@ -300,8 +300,61 @@ export function confirmDeliveryOrderPayment(orderId, payload = {}) {
   if (order.status === 'cancelado') {
     throw new AppError('Pedido cancelado', { status: 409, code: 'ORDER_CANCELLED' });
   }
-  if (order.payment_status === 'pago' && order.sale_id) {
-    throw new AppError('Pedido já quitado', { status: 409, code: 'ORDER_ALREADY_PAID' });
+  if (order.payment_status === 'pago' && (order.sale_id || Number(order.amount_paid_cents) > 0)) {
+    const lastPay = (order.payments || [])[(order.payments || []).length - 1];
+    throw new AppError('PAGAMENTO JÁ CONFIRMADO', {
+      status: 409,
+      code: 'ORDER_ALREADY_PAID',
+      details: {
+        paid_at: order.paid_at || null,
+        operator: lastPay?.user_name || null,
+        payment_method: lastPay?.method || null,
+        amount_paid_cents: order.amount_paid_cents,
+      },
+    });
+  }
+
+  // Marcações sem lançar caixa (devem vir ANTES da validação de payments)
+  if (payload.mark_pix_pending) {
+    return db.transaction(() => {
+      db.prepare(
+        `UPDATE delivery_orders
+         SET payment_status = 'pix_pendente', updated_at = datetime('now')
+         WHERE id = ?`
+      ).run(Number(orderId));
+      db.prepare(
+        `INSERT INTO delivery_order_history (order_id, from_status, to_status, note, user_name)
+         VALUES (?, ?, ?, ?, ?)`
+      ).run(
+        Number(orderId),
+        order.status,
+        order.status,
+        'Aguardando confirmação PIX',
+        getCurrentOperator()
+      );
+      return getDeliveryOrder(orderId);
+    })();
+  }
+
+  if (payload.mark_pagamento_na_entrega) {
+    return db.transaction(() => {
+      db.prepare(
+        `UPDATE delivery_orders
+         SET payment_status = 'pagamento_na_entrega', updated_at = datetime('now')
+         WHERE id = ?`
+      ).run(Number(orderId));
+      db.prepare(
+        `INSERT INTO delivery_order_history (order_id, from_status, to_status, note, user_name)
+         VALUES (?, ?, ?, ?, ?)`
+      ).run(
+        Number(orderId),
+        order.status,
+        order.status,
+        'Pagamento na entrega — aguardando recebimento',
+        getCurrentOperator()
+      );
+      return getDeliveryOrder(orderId);
+    })();
   }
 
   const payments = Array.isArray(payload.payments) ? payload.payments : [];
@@ -331,28 +384,6 @@ export function confirmDeliveryOrderPayment(orderId, payload = {}) {
   const due = order.total_cents - order.amount_paid_cents;
   if (paySum > due) {
     throw new AppError('Pagamento maior que o saldo do pedido', { status: 400, code: 'PAYMENT_OVER' });
-  }
-
-  // Pix marcado como aguardando: não lança no caixa ainda
-  if (payload.mark_pix_pending) {
-    return db.transaction(() => {
-      db.prepare(
-        `UPDATE delivery_orders
-         SET payment_status = 'pix_pendente', updated_at = datetime('now')
-         WHERE id = ?`
-      ).run(Number(orderId));
-      db.prepare(
-        `INSERT INTO delivery_order_history (order_id, from_status, to_status, note, user_name)
-         VALUES (?, ?, ?, ?, ?)`
-      ).run(
-        Number(orderId),
-        order.status,
-        order.status,
-        'Aguardando confirmação PIX',
-        getCurrentOperator()
-      );
-      return getDeliveryOrder(orderId);
-    })();
   }
 
   const newPaid = order.amount_paid_cents + paySum;
@@ -554,7 +585,7 @@ export function updateDeliveryOrderStatus(orderId, toStatus, note, { allowUnchec
     throw new AppError('Pedido cancelado', { status: 409, code: 'ORDER_CANCELLED' });
   }
   const unpaidBlock =
-    order.payment_status === 'nao_pago' &&
+    ['nao_pago', 'pix_pendente', 'pagamento_na_entrega'].includes(order.payment_status) &&
     toStatus !== 'aguardando_pagamento' &&
     toStatus !== 'cancelado';
   if (unpaidBlock) {
