@@ -977,6 +977,10 @@ export interface DeliveryOrder {
   zip_code?: string | null;
   complement?: string | null;
   reference_note?: string | null;
+  courier_name?: string | null;
+  courier_phone?: string | null;
+  expected_payment_method?: string | null;
+  change_for_cents?: number | null;
   status: string;
   payment_status: string;
   total_cents: number;
@@ -1264,6 +1268,48 @@ export function updateDeliveryOrderApi(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   }).then((r) => handle<DeliveryOrder>(r));
+}
+
+export function updateDeliveryOrderAddressApi(
+  id: number,
+  payload: Record<string, unknown>
+): Promise<DeliveryOrder> {
+  return apiFetch(`/api/delivery-orders/${id}/address`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<DeliveryOrder>(r));
+}
+
+export function logDeliveryOrderRouteEventApi(
+  id: number,
+  payload: { event: string; note?: string; phone?: string }
+): Promise<DeliveryOrder> {
+  return apiFetch(`/api/delivery-orders/${id}/route-event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<DeliveryOrder>(r));
+}
+
+export function deliveryOrderWhatsAppShareApi(
+  id: number,
+  payload: { phone?: string; message: string; recipient?: string }
+): Promise<{
+  order_id: number;
+  order_number: string;
+  recipient?: string;
+  phone: string | null;
+  message: string;
+  url: string;
+  financial_impact?: boolean;
+  order?: DeliveryOrder;
+}> {
+  return apiFetch(`/api/delivery-orders/${id}/whatsapp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle(r));
 }
 
 export function confirmDeliveryOrderPaymentApi(

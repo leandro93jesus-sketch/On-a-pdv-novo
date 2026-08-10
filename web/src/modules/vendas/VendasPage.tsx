@@ -12,6 +12,11 @@ import {
   type Product,
   type Sale,
 } from '../../api/client';
+import DeliveryAddressForm, {
+  emptyDeliveryAddress,
+  type DeliveryAddressFormValue,
+} from '../entregas/DeliveryAddressForm';
+import { isDeliveryAddressComplete } from '../entregas/deliveryAddress';
 import CustomerPicker from './CustomerPicker';
 import MiscItemModal from './MiscItemModal';
 import MixedPaymentModal, { type MixedAmounts } from './MixedPaymentModal';
@@ -91,12 +96,7 @@ export default function VendasPage() {
   const [customerOpenReq, setCustomerOpenReq] = useState(0);
   const [receiptFromHistory, setReceiptFromHistory] = useState(false);
   const [highlightIdx, setHighlightIdx] = useState(0);
-  const [deliveryPhone, setDeliveryPhone] = useState('');
-  const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [deliveryComplement, setDeliveryComplement] = useState('');
-  const [deliveryNeighborhood, setDeliveryNeighborhood] = useState('');
-  const [deliveryReference, setDeliveryReference] = useState('');
-  const [deliveryNotes, setDeliveryNotes] = useState('');
+  const [deliveryAddr, setDeliveryAddr] = useState<DeliveryAddressFormValue>(emptyDeliveryAddress);
   const searchRef = useRef<HTMLInputElement>(null);
   const searchTimer = useRef<number | null>(null);
   const submittingRef = useRef(false);
@@ -106,19 +106,22 @@ export default function VendasPage() {
 
   function fillDeliveryFromCustomer(c: Customer | null) {
     if (!c) return;
-    setDeliveryPhone(c.phone || '');
-    setDeliveryAddress(c.address || '');
-    setDeliveryComplement(c.address_number || '');
-    setDeliveryNeighborhood(c.neighborhood || '');
+    setDeliveryAddr({
+      phone: c.phone || c.whatsapp || '',
+      zip_code: c.zip_code || '',
+      address: c.address || '',
+      address_number: c.address_number || '',
+      complement: '',
+      neighborhood: c.neighborhood || '',
+      city: c.city || '',
+      state: c.state || '',
+      reference_note: '',
+      notes: '',
+    });
   }
 
   function clearDeliveryFields() {
-    setDeliveryPhone('');
-    setDeliveryAddress('');
-    setDeliveryComplement('');
-    setDeliveryNeighborhood('');
-    setDeliveryReference('');
-    setDeliveryNotes('');
+    setDeliveryAddr(emptyDeliveryAddress());
   }
 
   function focusSearch() {
@@ -260,12 +263,7 @@ export default function VendasPage() {
     customer,
     query,
     saleMode,
-    deliveryPhone,
-    deliveryAddress,
-    deliveryComplement,
-    deliveryNeighborhood,
-    deliveryReference,
-    deliveryNotes,
+    deliveryAddr,
   ]);
 
   const subtotal = useMemo(() => cart.reduce((sum, line) => sum + lineTotal(line), 0), [cart]);
@@ -442,8 +440,8 @@ export default function VendasPage() {
       setError('Desconto não pode ser maior que o subtotal.');
       return;
     }
-    if (!customer && !deliveryPhone.trim() && !deliveryAddress.trim()) {
-      setError('Informe cliente, telefone ou endereço da entrega.');
+    if (!isDeliveryAddressComplete(deliveryAddr)) {
+      setError('ENDEREÇO INCOMPLETO PARA GERAR ROTA. Informe rua, número e cidade.');
       return;
     }
 
@@ -461,16 +459,16 @@ export default function VendasPage() {
         client_request_id: requestIdRef.current,
         customer_id: customer?.id ?? null,
         customer_name: customer?.name || null,
-        phone: deliveryPhone.trim() || customer?.phone || null,
-        address: deliveryAddress.trim() || customer?.address || null,
-        address_number: deliveryComplement.trim() || customer?.address_number || null,
-        neighborhood: deliveryNeighborhood.trim() || customer?.neighborhood || null,
-        city: customer?.city || null,
-        state: customer?.state || null,
-        zip_code: customer?.zip_code || null,
-        complement: deliveryComplement.trim() || null,
-        reference_note: deliveryReference.trim() || null,
-        notes: deliveryNotes.trim() || null,
+        phone: deliveryAddr.phone.trim() || customer?.phone || null,
+        address: deliveryAddr.address.trim(),
+        address_number: deliveryAddr.address_number.trim(),
+        complement: deliveryAddr.complement.trim() || null,
+        neighborhood: deliveryAddr.neighborhood.trim() || null,
+        city: deliveryAddr.city.trim(),
+        state: deliveryAddr.state.trim() || null,
+        zip_code: deliveryAddr.zip_code.trim() || null,
+        reference_note: deliveryAddr.reference_note.trim() || null,
+        notes: deliveryAddr.notes.trim() || null,
         discount_cents: discountParse.cents,
         items: cart.map((line) => ({
           product_id: line.productId,
@@ -727,62 +725,11 @@ export default function VendasPage() {
         />
 
         {isDeliveryMode && (
-          <div className="delivery-fields-grid">
-            <label>
-              Telefone
-              <input
-                className="field-input"
-                value={deliveryPhone}
-                onChange={(e) => setDeliveryPhone(e.target.value)}
-                placeholder="Telefone"
-              />
-            </label>
-            <label>
-              Endereço
-              <input
-                className="field-input"
-                value={deliveryAddress}
-                onChange={(e) => setDeliveryAddress(e.target.value)}
-                placeholder="Endereço da entrega"
-              />
-            </label>
-            <label>
-              Complemento
-              <input
-                className="field-input"
-                value={deliveryComplement}
-                onChange={(e) => setDeliveryComplement(e.target.value)}
-                placeholder="Complemento"
-              />
-            </label>
-            <label>
-              Bairro
-              <input
-                className="field-input"
-                value={deliveryNeighborhood}
-                onChange={(e) => setDeliveryNeighborhood(e.target.value)}
-                placeholder="Bairro"
-              />
-            </label>
-            <label>
-              Referência
-              <input
-                className="field-input"
-                value={deliveryReference}
-                onChange={(e) => setDeliveryReference(e.target.value)}
-                placeholder="Ponto de referência"
-              />
-            </label>
-            <label>
-              Observação da entrega
-              <input
-                className="field-input"
-                value={deliveryNotes}
-                onChange={(e) => setDeliveryNotes(e.target.value)}
-                placeholder="Observações"
-              />
-            </label>
-          </div>
+          <DeliveryAddressForm
+            value={deliveryAddr}
+            onChange={setDeliveryAddr}
+            showCustomerHint
+          />
         )}
 
         <div className="search-block">

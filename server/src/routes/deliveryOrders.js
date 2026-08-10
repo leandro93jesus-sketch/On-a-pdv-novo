@@ -5,6 +5,8 @@ import {
   getDeliveryOrder,
   createDeliveryOrder,
   updateDeliveryOrder,
+  updateDeliveryOrderAddress,
+  logDeliveryOrderRouteEvent,
   confirmDeliveryOrderPayment,
   cancelDeliveryOrder,
   updateDeliveryOrderStatus,
@@ -12,6 +14,7 @@ import {
   scanDeliveryOrderBarcode,
   confirmDeliveryOrderItemManual,
 } from '../services/deliveryOrdersService.js';
+import { buildDeliveryOrderWhatsAppShare } from '../services/whatsappService.js';
 
 const router = Router();
 
@@ -56,6 +59,49 @@ router.get('/:id', authOptional, (req, res, next) => {
 router.put('/:id', requireAuth, (req, res, next) => {
   try {
     res.json(updateDeliveryOrder(req.params.id, req.body || {}));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch('/:id/address', requireAuth, (req, res, next) => {
+  try {
+    res.json(updateDeliveryOrderAddress(req.params.id, req.body || {}));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/route-event', requireAuth, (req, res, next) => {
+  try {
+    res.json(
+      logDeliveryOrderRouteEvent(req.params.id, {
+        event: req.body?.event,
+        note: req.body?.note,
+        phone: req.body?.phone,
+      })
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/whatsapp', requireAuth, (req, res, next) => {
+  try {
+    const order = getDeliveryOrder(req.params.id);
+    const share = buildDeliveryOrderWhatsAppShare({
+      order,
+      phone: req.body?.phone,
+      message: req.body?.message,
+      recipient: req.body?.recipient,
+    });
+    // Histórico: compartilhamento (sem impacto financeiro)
+    logDeliveryOrderRouteEvent(order.id, {
+      event: 'route_shared',
+      phone: share.phone,
+      note: req.body?.recipient ? `para ${req.body.recipient}` : null,
+    });
+    res.json({ ...share, order: getDeliveryOrder(order.id) });
   } catch (err) {
     next(err);
   }

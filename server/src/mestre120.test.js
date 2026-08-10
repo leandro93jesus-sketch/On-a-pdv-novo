@@ -82,6 +82,12 @@ test('pedido entrega: reserva estoque e não entra no caixa enquanto não pago',
   const order = await api('POST', '/api/delivery-orders', {
     client_request_id: `m120-ord-${Date.now()}`,
     customer_name: 'Cliente Pedido',
+        address: 'Rua Teste Entrega',
+    address_number: '100',
+    neighborhood: 'Centro',
+    city: 'São Paulo',
+    state: 'SP',
+    zip_code: '01000-000',
     items: [{ product_id: p.id, quantity: 5 }],
   });
   assert.equal(order.status, 201, JSON.stringify(order.json));
@@ -105,6 +111,12 @@ test('pedido: pagamento parcial lança só o valor pago; quitação converte res
   const p = await product('M120 Parcial', 10, 2000);
   const created = await api('POST', '/api/delivery-orders', {
     client_request_id: `m120-par-${Date.now()}`,
+        address: 'Rua Teste Entrega',
+    address_number: '100',
+    neighborhood: 'Centro',
+    city: 'São Paulo',
+    state: 'SP',
+    zip_code: '01000-000',
     items: [{ product_id: p.id, quantity: 3 }],
   });
   assert.equal(created.status, 201, JSON.stringify(created.json));
@@ -163,6 +175,12 @@ test('pedido: cancelamento libera reserva sem apagar histórico', async () => {
   const p = await product('M120 Cancel', 8, 1000);
   const created = await api('POST', '/api/delivery-orders', {
     client_request_id: `m120-can-${Date.now()}`,
+        address: 'Rua Teste Entrega',
+    address_number: '100',
+    neighborhood: 'Centro',
+    city: 'São Paulo',
+    state: 'SP',
+    zip_code: '01000-000',
     items: [{ product_id: p.id, quantity: 4 }],
   });
   const orderId = created.json.id;

@@ -19,6 +19,12 @@ import {
 } from '../../api/client';
 import { ModuleToolbar, StatusPill } from '../../components/ModuleChrome';
 import { playSoftBeep } from '../../lib/desktopAsync';
+import DeliveryAddressForm, {
+  emptyDeliveryAddress,
+  type DeliveryAddressFormValue,
+} from './DeliveryAddressForm';
+import { isDeliveryAddressComplete } from './deliveryAddress';
+import DeliveryRoutePanel from './DeliveryRoutePanel';
 
 type CartLine = {
   key: string;
@@ -47,17 +53,6 @@ function statusLabel(o: DeliveryOrder): string {
     return 'AGUARDANDO PAGAMENTO';
   }
   return String(o.status || '').replaceAll('_', ' ').toUpperCase();
-}
-
-function formatAddress(o: DeliveryOrder): string {
-  const parts = [
-    o.address,
-    o.address_number,
-    o.neighborhood,
-    o.city && o.state ? `${o.city}/${o.state}` : o.city || o.state,
-    o.zip_code,
-  ].filter(Boolean);
-  return parts.length ? parts.join(', ') : '—';
 }
 
 function formatDateTime(value?: string | null): string {
@@ -103,12 +98,7 @@ export default function DeliveryOrdersPanel() {
   const [listFilter, setListFilter] = useState('');
   const [view, setView] = useState<'lista' | 'nova'>('lista');
   const [showEdit, setShowEdit] = useState(false);
-  const [editPhone, setEditPhone] = useState('');
-  const [editAddress, setEditAddress] = useState('');
-  const [editComplement, setEditComplement] = useState('');
-  const [editNeighborhood, setEditNeighborhood] = useState('');
-  const [editReference, setEditReference] = useState('');
-  const [editNotes, setEditNotes] = useState('');
+  const [editAddr, setEditAddr] = useState<DeliveryAddressFormValue>(emptyDeliveryAddress());
   const [editItems, setEditItems] = useState<
     Array<{ product_id: number | null; name: string; quantity: number; unit_price_cents: number; is_misc: boolean }>
   >([]);
@@ -117,8 +107,7 @@ export default function DeliveryOrdersPanel() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [customerQuery, setCustomerQuery] = useState('');
   const [customerOptions, setCustomerOptions] = useState<Customer[]>([]);
-  const [address, setAddress] = useState('');
-  const [phone, setPhone] = useState('');
+  const [novaAddr, setNovaAddr] = useState<DeliveryAddressFormValue>(emptyDeliveryAddress());
   const [draftScan, setDraftScan] = useState('');
   const [cart, setCart] = useState<CartLine[]>([]);
   const [scanBusy, setScanBusy] = useState(false);
@@ -194,8 +183,7 @@ export default function DeliveryOrdersPanel() {
   function resetNova() {
     setCustomer(null);
     setCustomerQuery('');
-    setAddress('');
-    setPhone('');
+    setNovaAddr(emptyDeliveryAddress());
     setDraftScan('');
     setCart([]);
     setProductNotFound(false);
@@ -296,6 +284,10 @@ export default function DeliveryOrdersPanel() {
       setError('Passe ao menos um produto no leitor para montar o pedido');
       return;
     }
+    if (!isDeliveryAddressComplete(novaAddr)) {
+      setError('ENDEREÇO INCOMPLETO PARA GERAR ROTA. Informe rua, número e cidade.');
+      return;
+    }
     setCreating(true);
     setError(null);
     try {
@@ -303,13 +295,16 @@ export default function DeliveryOrdersPanel() {
         client_request_id: `ui-ord-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         customer_id: customer?.id ?? null,
         customer_name: customer?.name || customerQuery.trim() || null,
-        phone: phone.trim() || customer?.phone || null,
-        address: address.trim() || customer?.address || null,
-        address_number: customer?.address_number || null,
-        neighborhood: customer?.neighborhood || null,
-        city: customer?.city || null,
-        state: customer?.state || null,
-        zip_code: customer?.zip_code || null,
+        phone: novaAddr.phone.trim() || customer?.phone || null,
+        address: novaAddr.address.trim(),
+        address_number: novaAddr.address_number.trim(),
+        complement: novaAddr.complement.trim() || null,
+        neighborhood: novaAddr.neighborhood.trim() || null,
+        city: novaAddr.city.trim(),
+        state: novaAddr.state.trim() || null,
+        zip_code: novaAddr.zip_code.trim() || null,
+        reference_note: novaAddr.reference_note.trim() || null,
+        notes: novaAddr.notes.trim() || null,
         items: cart.map((l) => ({
           product_id: l.product_id,
           quantity: l.quantity,
@@ -345,8 +340,13 @@ export default function DeliveryOrdersPanel() {
         return;
       }
       if (opts?.markCod) {
+        const changeCents = received
+          ? Math.round(Number(String(received).replace(',', '.')) * 100)
+          : null;
         const updated = await confirmDeliveryOrderPaymentApi(selected.id, {
           mark_pagamento_na_entrega: true,
+          expected_payment_method: payMethod === 'misto' ? 'dinheiro' : payMethod,
+          change_for_cents: payMethod === 'dinheiro' ? changeCents : null,
         });
         setSelected(updated);
         setShowPay(false);
@@ -486,12 +486,18 @@ export default function DeliveryOrdersPanel() {
 
   function openEdit() {
     if (!selected) return;
-    setEditPhone(selected.phone || '');
-    setEditAddress(selected.address || '');
-    setEditComplement(selected.complement || selected.address_number || '');
-    setEditNeighborhood(selected.neighborhood || '');
-    setEditReference(selected.reference_note || '');
-    setEditNotes(selected.notes || '');
+    setEditAddr({
+      phone: selected.phone || '',
+      zip_code: selected.zip_code || '',
+      address: selected.address || '',
+      address_number: selected.address_number || '',
+      complement: selected.complement || '',
+      neighborhood: selected.neighborhood || '',
+      city: selected.city || '',
+      state: selected.state || '',
+      reference_note: selected.reference_note || '',
+      notes: selected.notes || '',
+    });
     setEditItems(
       (selected.items || []).map((it) => ({
         product_id: it.product_id ?? null,
@@ -510,15 +516,22 @@ export default function DeliveryOrdersPanel() {
       setError('Pedido precisa de itens com quantidade válida');
       return;
     }
+    if (!isDeliveryAddressComplete(editAddr)) {
+      setError('ENDEREÇO INCOMPLETO PARA GERAR ROTA. Informe rua, número e cidade.');
+      return;
+    }
     try {
       const updated = await updateDeliveryOrderApi(selected.id, {
-        phone: editPhone.trim() || null,
-        address: editAddress.trim() || null,
-        address_number: editComplement.trim() || null,
-        complement: editComplement.trim() || null,
-        neighborhood: editNeighborhood.trim() || null,
-        reference_note: editReference.trim() || null,
-        notes: editNotes.trim() || null,
+        phone: editAddr.phone.trim() || null,
+        address: editAddr.address.trim(),
+        address_number: editAddr.address_number.trim(),
+        complement: editAddr.complement.trim() || null,
+        neighborhood: editAddr.neighborhood.trim() || null,
+        city: editAddr.city.trim(),
+        state: editAddr.state.trim() || null,
+        zip_code: editAddr.zip_code.trim() || null,
+        reference_note: editAddr.reference_note.trim() || null,
+        notes: editAddr.notes.trim() || null,
         discount_cents: selected.discount_cents || 0,
         items: editItems.map((it) => ({
           product_id: it.product_id,
@@ -616,11 +629,18 @@ export default function DeliveryOrdersPanel() {
                       onClick={() => {
                         setCustomer(c);
                         setCustomerQuery(c.name);
-                        setPhone(c.phone || '');
-                        const addr = [c.address, c.address_number, c.neighborhood, c.city]
-                          .filter(Boolean)
-                          .join(', ');
-                        setAddress(addr);
+                        setNovaAddr({
+                          phone: c.phone || c.whatsapp || '',
+                          zip_code: c.zip_code || '',
+                          address: c.address || '',
+                          address_number: c.address_number || '',
+                          complement: '',
+                          neighborhood: c.neighborhood || '',
+                          city: c.city || '',
+                          state: c.state || '',
+                          reference_note: '',
+                          notes: '',
+                        });
                       }}
                     >
                       {c.name}
@@ -629,25 +649,8 @@ export default function DeliveryOrdersPanel() {
                 </div>
               )}
             </label>
-            <label className="span-2">
-              Endereço
-              <input
-                className="field-input"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="Endereço da entrega"
-              />
-            </label>
-            <label>
-              Telefone
-              <input
-                className="field-input"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="Telefone"
-              />
-            </label>
           </div>
+          <DeliveryAddressForm value={novaAddr} onChange={setNovaAddr} showCustomerHint />
 
           <label style={{ display: 'block', marginTop: 16, marginBottom: 8 }}>
             <strong>LER CÓDIGO DE BARRAS / BUSCAR PRODUTO</strong>
@@ -819,23 +822,20 @@ export default function DeliveryOrdersPanel() {
                 <strong>Cliente:</strong> {selected.customer_name || '—'}
               </p>
               <p>
-                <strong>Endereço:</strong> {formatAddress(selected)}
-              </p>
-              <p>
                 <strong>Telefone:</strong> {selected.phone || '—'}
               </p>
-              {(selected.complement || selected.reference_note || selected.notes) && (
-                <p className="muted-line">
-                  {selected.complement ? `Compl.: ${selected.complement}. ` : ''}
-                  {selected.reference_note ? `Ref.: ${selected.reference_note}. ` : ''}
-                  {selected.notes ? `Obs.: ${selected.notes}` : ''}
-                </p>
-              )}
               <p>
                 <strong>Total:</strong> {formatBRL(selected.total_cents)}
                 {selected.discount_cents ? ` (desc. ${formatBRL(selected.discount_cents)})` : ''} ·{' '}
                 <strong>Pago:</strong> {formatBRL(selected.amount_paid_cents)}
               </p>
+
+              <DeliveryRoutePanel
+                order={selected}
+                onOrderUpdated={setSelected}
+                onNotice={setNotice}
+                onError={setError}
+              />
 
               {paidConfirmed && (
                 <div className="alert alert-ok" style={{ marginBottom: 12 }}>
@@ -949,7 +949,16 @@ export default function DeliveryOrdersPanel() {
                     <button
                       type="button"
                       className="btn btn-ghost"
-                      onClick={() => void confirmPay({ markCod: true })}
+                      onClick={() => {
+                        setPayAmount(
+                          ((selected.total_cents - selected.amount_paid_cents) / 100).toFixed(2)
+                        );
+                        setPayMethod('dinheiro');
+                        setShowPay(true);
+                        setNotice(
+                          'Escolha a forma prevista e use “Pagar na entrega” (sem lançar no caixa).'
+                        );
+                      }}
                     >
                       PAGAMENTO NA ENTREGA
                     </button>
@@ -1171,6 +1180,17 @@ export default function DeliveryOrdersPanel() {
                   Aguardar confirmação PIX
                 </button>
               )}
+              {selected.payment_status !== 'pagamento_na_entrega' &&
+                selected.payment_status !== 'pix_pendente' &&
+                selected.payment_status !== 'pago' && (
+                  <button
+                    type="button"
+                    className="btn btn-accent"
+                    onClick={() => void confirmPay({ markCod: true })}
+                  >
+                    Pagar na entrega (sem caixa)
+                  </button>
+                )}
               <button
                 type="button"
                 className="btn btn-primary"
@@ -1192,44 +1212,7 @@ export default function DeliveryOrdersPanel() {
           <div className="modal">
             <h2>EDITAR PEDIDO {selected.order_number}</h2>
             <p className="muted-line">Somente pedidos não pagos. Reserva será reajustada.</p>
-            <div className="form-grid">
-              <label>
-                Telefone
-                <input className="field-input" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
-              </label>
-              <label className="span-2">
-                Endereço
-                <input className="field-input" value={editAddress} onChange={(e) => setEditAddress(e.target.value)} />
-              </label>
-              <label>
-                Complemento
-                <input
-                  className="field-input"
-                  value={editComplement}
-                  onChange={(e) => setEditComplement(e.target.value)}
-                />
-              </label>
-              <label>
-                Bairro
-                <input
-                  className="field-input"
-                  value={editNeighborhood}
-                  onChange={(e) => setEditNeighborhood(e.target.value)}
-                />
-              </label>
-              <label>
-                Referência
-                <input
-                  className="field-input"
-                  value={editReference}
-                  onChange={(e) => setEditReference(e.target.value)}
-                />
-              </label>
-              <label className="span-2">
-                Observação
-                <input className="field-input" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
-              </label>
-            </div>
+            <DeliveryAddressForm value={editAddr} onChange={setEditAddr} showCustomerHint />
             <table className="data-table" style={{ marginTop: 12 }}>
               <thead>
                 <tr>

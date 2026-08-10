@@ -78,6 +78,12 @@ async function product(name, stock = 20, price = 1000, barcode) {
 async function paidOrder(items) {
   const created = await api('POST', '/api/delivery-orders', {
     client_request_id: `bpf-ord-${Date.now()}-${seq}`,
+    address: 'Rua Teste Entrega',
+    address_number: '100',
+    neighborhood: 'Centro',
+    city: 'São Paulo',
+    state: 'SP',
+    zip_code: '01000-000',
     items,
   });
   assert.equal(created.status, 201, JSON.stringify(created.json));
