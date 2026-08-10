@@ -202,6 +202,25 @@ function resolveOrderDiscount(normalized, discountRaw) {
   return { subtotal, discount, total: subtotal - discount };
 }
 
+function assertDeliveryAddress(payload) {
+  const street = String(payload.address || '').trim();
+  const number = String(payload.address_number || '').trim();
+  const city = String(payload.city || '').trim();
+  if (!street || !number || !city) {
+    throw new AppError('ENDEREÇO INCOMPLETO PARA GERAR ROTA. Informe rua, número e cidade.', {
+      status: 400,
+      code: 'ADDRESS_INCOMPLETE',
+    });
+  }
+}
+
+function appendOrderHistory(db, orderId, fromStatus, toStatus, note) {
+  db.prepare(
+    `INSERT INTO delivery_order_history (order_id, from_status, to_status, note, user_name)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(Number(orderId), fromStatus, toStatus, note || null, getCurrentOperator());
+}
+
 function releaseActiveReservations(db, orderId) {
   const reservas = db
     .prepare(`SELECT * FROM stock_reservations WHERE order_id = ? AND status = 'ativa'`)
@@ -255,6 +274,7 @@ export function createDeliveryOrder(payload = {}) {
     if (existing) return getDeliveryOrder(existing.id);
   }
 
+  assertDeliveryAddress(payload);
   const normalized = normalizeDeliveryItems(db, payload.items);
   const { subtotal, discount, total } = resolveOrderDiscount(normalized, payload.discount_cents);
   const paymentStatus = PAY_STATUSES.has(payload.payment_status)
@@ -270,8 +290,9 @@ export function createDeliveryOrder(payload = {}) {
            order_number, customer_id, customer_name, phone, whatsapp, address, address_number,
            neighborhood, city, state, zip_code, scheduled_date, period, notes, courier_name,
            status, payment_status, total_cents, amount_paid_cents, discount_cents,
-           complement, reference_note, client_request_id, created_by
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`
+           complement, reference_note, courier_phone, expected_payment_method, change_for_cents,
+           client_request_id, created_by
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         orderNumber,
@@ -279,10 +300,10 @@ export function createDeliveryOrder(payload = {}) {
         payload.customer_name || null,
         payload.phone || null,
         payload.whatsapp || null,
-        payload.address || null,
-        payload.address_number || null,
+        String(payload.address || '').trim() || null,
+        String(payload.address_number || '').trim() || null,
         payload.neighborhood || null,
-        payload.city || null,
+        String(payload.city || '').trim() || null,
         payload.state || null,
         payload.zip_code || null,
         payload.scheduled_date ? String(payload.scheduled_date).slice(0, 10) : null,
@@ -295,6 +316,9 @@ export function createDeliveryOrder(payload = {}) {
         discount,
         payload.complement || null,
         payload.reference_note || payload.reference || null,
+        payload.courier_phone || null,
+        payload.expected_payment_method || null,
+        payload.change_for_cents != null ? Number(payload.change_for_cents) : null,
         payload.client_request_id ? String(payload.client_request_id) : null,
         getCurrentOperator()
       );
@@ -367,6 +391,14 @@ export function updateDeliveryOrder(orderId, payload = {}) {
   const discountSource =
     payload.discount_cents != null ? payload.discount_cents : order.discount_cents || 0;
   const { discount, total } = resolveOrderDiscount(normalized, discountSource);
+
+  const nextAddress = {
+    address: payload.address !== undefined ? payload.address || null : order.address,
+    address_number:
+      payload.address_number !== undefined ? payload.address_number || null : order.address_number,
+    city: payload.city !== undefined ? payload.city || null : order.city,
+  };
+  assertDeliveryAddress(nextAddress);
 
   return db.transaction(() => {
     if (hasItems) {
@@ -441,6 +473,104 @@ export function updateDeliveryOrder(orderId, payload = {}) {
 }
 
 /**
+ * Corrige endereço do pedido (não altera cadastro do cliente, caixa nem estoque).
+ * Permitido mesmo com pagamento pendente ou confirmado.
+ */
+export function updateDeliveryOrderAddress(orderId, payload = {}) {
+  const db = getDb();
+  const order = getDeliveryOrder(orderId);
+  if (order.status === 'cancelado') {
+    throw new AppError('Pedido cancelado', { status: 409, code: 'ORDER_CANCELLED' });
+  }
+
+  const next = {
+    phone: payload.phone !== undefined ? payload.phone || null : order.phone,
+    address: payload.address !== undefined ? payload.address || null : order.address,
+    address_number:
+      payload.address_number !== undefined ? payload.address_number || null : order.address_number,
+    complement: payload.complement !== undefined ? payload.complement || null : order.complement,
+    neighborhood:
+      payload.neighborhood !== undefined ? payload.neighborhood || null : order.neighborhood,
+    city: payload.city !== undefined ? payload.city || null : order.city,
+    state: payload.state !== undefined ? payload.state || null : order.state,
+    zip_code: payload.zip_code !== undefined ? payload.zip_code || null : order.zip_code,
+    reference_note:
+      payload.reference_note !== undefined || payload.reference !== undefined
+        ? payload.reference_note || payload.reference || null
+        : order.reference_note,
+    notes: payload.notes !== undefined ? payload.notes || null : order.notes,
+    courier_name:
+      payload.courier_name !== undefined ? payload.courier_name || null : order.courier_name,
+    courier_phone:
+      payload.courier_phone !== undefined ? payload.courier_phone || null : order.courier_phone,
+    customer_name:
+      payload.customer_name !== undefined ? payload.customer_name || null : order.customer_name,
+  };
+  assertDeliveryAddress(next);
+
+  return db.transaction(() => {
+    db.prepare(
+      `UPDATE delivery_orders SET
+         phone = ?, address = ?, address_number = ?, complement = ?, neighborhood = ?,
+         city = ?, state = ?, zip_code = ?, reference_note = ?, notes = ?,
+         courier_name = ?, courier_phone = ?, customer_name = ?,
+         updated_at = datetime('now')
+       WHERE id = ?`
+    ).run(
+      next.phone,
+      String(next.address || '').trim(),
+      String(next.address_number || '').trim(),
+      next.complement,
+      next.neighborhood,
+      String(next.city || '').trim(),
+      next.state,
+      next.zip_code,
+      next.reference_note,
+      next.notes,
+      next.courier_name,
+      next.courier_phone,
+      next.customer_name,
+      Number(orderId)
+    );
+    appendOrderHistory(db, orderId, order.status, order.status, 'Endereço do pedido corrigido');
+    writeAudit({
+      action: 'delivery_order.address_update',
+      entityType: 'delivery_order',
+      entityId: Number(orderId),
+      details: { city: next.city, address: next.address },
+      userName: getCurrentOperator(),
+    });
+    return getDeliveryOrder(orderId);
+  })();
+}
+
+/**
+ * Registra evento de rota/WhatsApp no histórico (sem impacto financeiro).
+ * event: 'route_opened' | 'route_shared' | 'route_link_copied' | 'address_copied'
+ */
+export function logDeliveryOrderRouteEvent(orderId, { event, note, phone } = {}) {
+  const order = getDeliveryOrder(orderId);
+  const labels = {
+    route_opened: 'Rota aberta no mapa',
+    route_shared: 'Rota compartilhada no WhatsApp',
+    route_link_copied: 'Link da rota copiado',
+    address_copied: 'Endereço copiado',
+  };
+  const label = labels[event] || 'Evento de rota';
+  const detail = [label, phone ? `dest: ${phone}` : null, note || null].filter(Boolean).join(' · ');
+  const db = getDb();
+  appendOrderHistory(db, orderId, order.status, order.status, detail);
+  writeAudit({
+    action: `delivery_order.${event || 'route_event'}`,
+    entityType: 'delivery_order',
+    entityId: Number(orderId),
+    details: { event, phone: phone || null },
+    userName: getCurrentOperator(),
+  });
+  return getDeliveryOrder(orderId);
+}
+
+/**
  * Confirma pagamento (parcial ou total). Idempotente por client_request_id.
  * Somente o valor pago entra no caixa (via createSale quando quita ou gera venda vinculada).
  */
@@ -494,21 +624,28 @@ export function confirmDeliveryOrderPayment(orderId, payload = {}) {
   }
 
   if (payload.mark_pagamento_na_entrega) {
+    const expected = payload.expected_payment_method
+      ? String(payload.expected_payment_method).toLowerCase()
+      : null;
+    const changeFor =
+      payload.change_for_cents != null && Number.isFinite(Number(payload.change_for_cents))
+        ? Math.max(0, Math.round(Number(payload.change_for_cents)))
+        : null;
     return db.transaction(() => {
       db.prepare(
         `UPDATE delivery_orders
-         SET payment_status = 'pagamento_na_entrega', updated_at = datetime('now')
+         SET payment_status = 'pagamento_na_entrega',
+             expected_payment_method = COALESCE(?, expected_payment_method),
+             change_for_cents = COALESCE(?, change_for_cents),
+             updated_at = datetime('now')
          WHERE id = ?`
-      ).run(Number(orderId));
-      db.prepare(
-        `INSERT INTO delivery_order_history (order_id, from_status, to_status, note, user_name)
-         VALUES (?, ?, ?, ?, ?)`
-      ).run(
-        Number(orderId),
+      ).run(expected, changeFor, Number(orderId));
+      appendOrderHistory(
+        db,
+        orderId,
         order.status,
         order.status,
-        'Pagamento na entrega — aguardando recebimento',
-        getCurrentOperator()
+        'Pagamento na entrega — aguardando recebimento'
       );
       return getDeliveryOrder(orderId);
     })();

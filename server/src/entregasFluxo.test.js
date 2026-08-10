@@ -85,6 +85,11 @@ test('fluxo: montar pedido com vários itens, aguardando pagamento, sem caixa', 
     customer_name: 'Maria',
     phone: '11999990000',
     address: 'Rua A, 100',
+    address_number: '100',
+    neighborhood: 'Centro',
+    city: 'São Paulo',
+    state: 'SP',
+    zip_code: '01000-000',
     items: [
       { product_id: detergente.id, quantity: 2 },
       { product_id: agua.id, quantity: 1 },
@@ -112,6 +117,12 @@ test('fluxo: PIX pendente não entra no caixa; confirmar PIX entra', async () =>
 
   const created = await api('POST', '/api/delivery-orders', {
     client_request_id: `ef-pix-${Date.now()}`,
+        address: 'Rua Teste Entrega',
+    address_number: '100',
+    neighborhood: 'Centro',
+    city: 'São Paulo',
+    state: 'SP',
+    zip_code: '01000-000',
     items: [{ product_id: p.id, quantity: 1 }],
   });
   assert.equal(created.status, 201);
@@ -145,6 +156,12 @@ test('fluxo: pagamento na entrega fica pendente; confirmar recebimento lança ca
 
   const created = await api('POST', '/api/delivery-orders', {
     client_request_id: `ef-cod-${Date.now()}`,
+        address: 'Rua Teste Entrega',
+    address_number: '100',
+    neighborhood: 'Centro',
+    city: 'São Paulo',
+    state: 'SP',
+    zip_code: '01000-000',
     items: [{ product_id: p.id, quantity: 1 }],
   });
 
@@ -173,6 +190,12 @@ test('fluxo: impedir pagamento duplicado com PAGAMENTO JÁ CONFIRMADO', async ()
   const p = await product('Dup Pay EF', 5, 1000);
   const created = await api('POST', '/api/delivery-orders', {
     client_request_id: `ef-dup-${Date.now()}`,
+        address: 'Rua Teste Entrega',
+    address_number: '100',
+    neighborhood: 'Centro',
+    city: 'São Paulo',
+    state: 'SP',
+    zip_code: '01000-000',
     items: [{ product_id: p.id, quantity: 1 }],
   });
   const pay = await api('POST', `/api/delivery-orders/${created.json.id}/payments`, {
@@ -199,6 +222,12 @@ test('fluxo: cancelar não pago libera reserva e não altera caixa', async () =>
 
   const created = await api('POST', '/api/delivery-orders', {
     client_request_id: `ef-can-${Date.now()}`,
+        address: 'Rua Teste Entrega',
+    address_number: '100',
+    neighborhood: 'Centro',
+    city: 'São Paulo',
+    state: 'SP',
+    zip_code: '01000-000',
     items: [{ product_id: p.id, quantity: 3 }],
   });
   const avail1 = await api('GET', `/api/delivery-orders/availability/${p.id}`);

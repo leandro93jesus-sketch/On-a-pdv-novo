@@ -89,6 +89,10 @@ test('modo entrega: carrinho vira pedido aguardando pagamento com reserva e sem 
     reference_note: 'Portão azul',
     notes: 'Entregar após 18h',
     discount_cents: 100,
+    address_number: '100',
+    city: 'São Paulo',
+    state: 'SP',
+    zip_code: '01000-000',
     items: [
       { product_id: p.id, quantity: 2, unit_price_cents: 500 },
       { name: 'Item Diversos Sacola', quantity: 1, unit_price_cents: 200, is_misc: true },
@@ -117,6 +121,12 @@ test('modo entrega: editar pedido não pago reajusta reserva sem caixa', async (
   const created = await api('POST', '/api/delivery-orders', {
     client_request_id: `vme-edit-${Date.now()}`,
     customer_name: 'Editável',
+        address: 'Rua Teste Entrega',
+    address_number: '100',
+    neighborhood: 'Centro',
+    city: 'São Paulo',
+    state: 'SP',
+    zip_code: '01000-000',
     items: [{ product_id: p.id, quantity: 3 }],
   });
   assert.equal(created.status, 201);
@@ -164,6 +174,12 @@ test('após pagamento do pedido: baixa definitiva e bloqueio de edição', async
   const p = await product('Pago VME', 8, 1500);
   const created = await api('POST', '/api/delivery-orders', {
     client_request_id: `vme-pay-${Date.now()}`,
+        address: 'Rua Teste Entrega',
+    address_number: '100',
+    neighborhood: 'Centro',
+    city: 'São Paulo',
+    state: 'SP',
+    zip_code: '01000-000',
     items: [{ product_id: p.id, quantity: 2 }],
   });
   const id = created.json.id;
