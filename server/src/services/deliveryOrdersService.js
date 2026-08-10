@@ -143,21 +143,11 @@ export function listDeliveryOrders({ status, payment_status, limit = 100 } = {})
     .map(mapOrder);
 }
 
-export function createDeliveryOrder(payload = {}) {
-  const db = getDb();
-  const items = Array.isArray(payload.items) ? payload.items : [];
-  if (!items.length) {
+function normalizeDeliveryItems(db, items, { extraAvailableByProduct = {} } = {}) {
+  if (!Array.isArray(items) || !items.length) {
     throw new AppError('Pedido sem itens', { status: 400, code: 'ORDER_EMPTY' });
   }
-
-  if (payload.client_request_id) {
-    const existing = db
-      .prepare(`SELECT id FROM delivery_orders WHERE client_request_id = ?`)
-      .get(String(payload.client_request_id));
-    if (existing) return getDeliveryOrder(existing.id);
-  }
-
-  const normalized = items.map((raw) => {
+  return items.map((raw) => {
     const qty = Number(raw.quantity);
     if (!Number.isInteger(qty) || qty <= 0) {
       throw new AppError('Quantidade inválida', { status: 400, code: 'INVALID_QTY' });
@@ -179,8 +169,10 @@ export function createDeliveryOrder(payload = {}) {
     }
     const productId = Number(raw.product_id);
     const prod = availableStock(db, productId);
-    if (qty > prod.available && !prod.allow_negative_stock) {
-      throw new AppError(`Estoque disponível insuficiente para "${prod.name}". Disponível: ${prod.available}`, {
+    const extra = Number(extraAvailableByProduct[productId] || 0);
+    const available = prod.available + extra;
+    if (qty > available && !prod.allow_negative_stock) {
+      throw new AppError(`Estoque disponível insuficiente para "${prod.name}". Disponível: ${available}`, {
         status: 409,
         code: 'STOCK_AVAILABLE_INSUFFICIENT',
       });
@@ -189,22 +181,86 @@ export function createDeliveryOrder(payload = {}) {
       raw.unit_price_cents != null ? Number(raw.unit_price_cents) : Number(prod.price_cents || 0);
     return {
       product_id: productId,
-      product_name: prod.name,
+      product_name: String(raw.name || prod.name),
       quantity: qty,
       unit_price_cents: price,
       line_total_cents: price * qty,
       is_misc: 0,
     };
   });
+}
 
-  const total = normalized.reduce((s, i) => s + i.line_total_cents, 0);
+function resolveOrderDiscount(normalized, discountRaw) {
+  const subtotal = normalized.reduce((s, i) => s + i.line_total_cents, 0);
+  let discount = Number(discountRaw || 0);
+  if (!Number.isInteger(discount) || discount < 0) {
+    throw new AppError('Desconto inválido', { status: 400, code: 'INVALID_DISCOUNT' });
+  }
+  if (discount > subtotal) {
+    throw new AppError('Desconto maior que o subtotal', { status: 400, code: 'DISCOUNT_OVER' });
+  }
+  return { subtotal, discount, total: subtotal - discount };
+}
+
+function releaseActiveReservations(db, orderId) {
+  const reservas = db
+    .prepare(`SELECT * FROM stock_reservations WHERE order_id = ? AND status = 'ativa'`)
+    .all(Number(orderId));
+  for (const r of reservas) {
+    db.prepare(
+      `UPDATE products SET reserved_qty = MAX(COALESCE(reserved_qty, 0) - ?, 0) WHERE id = ?`
+    ).run(r.quantity, r.product_id);
+    db.prepare(
+      `UPDATE stock_reservations SET status = 'liberada', released_at = datetime('now') WHERE id = ?`
+    ).run(r.id);
+  }
+  return reservas;
+}
+
+function insertOrderItemsAndReserve(db, orderId, normalized) {
+  const insertItem = db.prepare(
+    `INSERT INTO delivery_order_items (
+       order_id, product_id, product_name, quantity, unit_price_cents, line_total_cents, is_misc
+     ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+  );
+  for (const item of normalized) {
+    insertItem.run(
+      orderId,
+      item.product_id,
+      item.product_name,
+      item.quantity,
+      item.unit_price_cents,
+      item.line_total_cents,
+      item.is_misc
+    );
+    if (item.product_id) {
+      db.prepare(
+        `UPDATE products SET reserved_qty = COALESCE(reserved_qty, 0) + ? WHERE id = ?`
+      ).run(item.quantity, item.product_id);
+      db.prepare(
+        `INSERT INTO stock_reservations (product_id, order_id, quantity, status)
+         VALUES (?, ?, ?, 'ativa')`
+      ).run(item.product_id, orderId, item.quantity);
+    }
+  }
+}
+
+export function createDeliveryOrder(payload = {}) {
+  const db = getDb();
+
+  if (payload.client_request_id) {
+    const existing = db
+      .prepare(`SELECT id FROM delivery_orders WHERE client_request_id = ?`)
+      .get(String(payload.client_request_id));
+    if (existing) return getDeliveryOrder(existing.id);
+  }
+
+  const normalized = normalizeDeliveryItems(db, payload.items);
+  const { subtotal, discount, total } = resolveOrderDiscount(normalized, payload.discount_cents);
   const paymentStatus = PAY_STATUSES.has(payload.payment_status)
     ? payload.payment_status
     : 'nao_pago';
-  const status =
-    paymentStatus === 'pagamento_na_entrega' || paymentStatus === 'pix_pendente'
-      ? 'aguardando_pagamento'
-      : 'aguardando_pagamento';
+  const status = 'aguardando_pagamento';
 
   return db.transaction(() => {
     const orderNumber = nextOrderNumber(db);
@@ -213,8 +269,9 @@ export function createDeliveryOrder(payload = {}) {
         `INSERT INTO delivery_orders (
            order_number, customer_id, customer_name, phone, whatsapp, address, address_number,
            neighborhood, city, state, zip_code, scheduled_date, period, notes, courier_name,
-           status, payment_status, total_cents, amount_paid_cents, client_request_id, created_by
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+           status, payment_status, total_cents, amount_paid_cents, discount_cents,
+           complement, reference_note, client_request_id, created_by
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`
       )
       .run(
         orderNumber,
@@ -235,47 +292,147 @@ export function createDeliveryOrder(payload = {}) {
         status,
         paymentStatus,
         total,
+        discount,
+        payload.complement || null,
+        payload.reference_note || payload.reference || null,
         payload.client_request_id ? String(payload.client_request_id) : null,
         getCurrentOperator()
       );
     const orderId = Number(info.lastInsertRowid);
 
-    const insertItem = db.prepare(
-      `INSERT INTO delivery_order_items (
-         order_id, product_id, product_name, quantity, unit_price_cents, line_total_cents, is_misc
-       ) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    );
-    for (const item of normalized) {
-      insertItem.run(
-        orderId,
-        item.product_id,
-        item.product_name,
-        item.quantity,
-        item.unit_price_cents,
-        item.line_total_cents,
-        item.is_misc
-      );
-      if (item.product_id) {
-        db.prepare(
-          `UPDATE products SET reserved_qty = COALESCE(reserved_qty, 0) + ? WHERE id = ?`
-        ).run(item.quantity, item.product_id);
-        db.prepare(
-          `INSERT INTO stock_reservations (product_id, order_id, quantity, status)
-           VALUES (?, ?, ?, 'ativa')`
-        ).run(item.product_id, orderId, item.quantity);
-      }
-    }
+    insertOrderItemsAndReserve(db, orderId, normalized);
 
     db.prepare(
       `INSERT INTO delivery_order_history (order_id, from_status, to_status, note, user_name)
        VALUES (?, NULL, ?, ?, ?)`
-    ).run(orderId, status, 'Pedido criado — aguardando pagamento', getCurrentOperator());
+    ).run(
+      orderId,
+      status,
+      `Pedido criado — aguardando pagamento (subtotal ${(subtotal / 100).toFixed(2)}, desc. ${(discount / 100).toFixed(2)})`,
+      getCurrentOperator()
+    );
 
     writeAudit({
       action: 'delivery_order.create',
       entityType: 'delivery_order',
       entityId: orderId,
-      details: { order_number: orderNumber, total_cents: total, payment_status: paymentStatus },
+      details: {
+        order_number: orderNumber,
+        total_cents: total,
+        discount_cents: discount,
+        payment_status: paymentStatus,
+      },
+      userName: getCurrentOperator(),
+    });
+
+    return getDeliveryOrder(orderId);
+  })();
+}
+
+/**
+ * Edita pedido ainda não pago: atualiza dados/itens e reajusta reservas.
+ * Não lança caixa nem baixa definitiva.
+ */
+export function updateDeliveryOrder(orderId, payload = {}) {
+  const db = getDb();
+  const order = getDeliveryOrder(orderId);
+  if (order.status === 'cancelado') {
+    throw new AppError('Pedido cancelado', { status: 409, code: 'ORDER_CANCELLED' });
+  }
+  if (order.payment_status === 'pago' || Number(order.amount_paid_cents) > 0) {
+    throw new AppError('Pedido já tem pagamento — edição bloqueada', {
+      status: 409,
+      code: 'ORDER_ALREADY_PAID',
+    });
+  }
+
+  const hasItems = Array.isArray(payload.items);
+  const currentReserves = (order.reservations || []).filter((r) => r.status === 'ativa');
+  const extraAvailable = {};
+  for (const r of currentReserves) {
+    extraAvailable[r.product_id] = (extraAvailable[r.product_id] || 0) + Number(r.quantity || 0);
+  }
+
+  const normalized = hasItems
+    ? normalizeDeliveryItems(db, payload.items, { extraAvailableByProduct: extraAvailable })
+    : (order.items || []).map((it) => ({
+        product_id: it.product_id,
+        product_name: it.product_name,
+        quantity: it.quantity,
+        unit_price_cents: it.unit_price_cents,
+        line_total_cents: it.line_total_cents,
+        is_misc: it.is_misc ? 1 : 0,
+      }));
+
+  const discountSource =
+    payload.discount_cents != null ? payload.discount_cents : order.discount_cents || 0;
+  const { discount, total } = resolveOrderDiscount(normalized, discountSource);
+
+  return db.transaction(() => {
+    if (hasItems) {
+      releaseActiveReservations(db, orderId);
+      db.prepare(`DELETE FROM delivery_order_items WHERE order_id = ?`).run(Number(orderId));
+      insertOrderItemsAndReserve(db, orderId, normalized);
+    }
+
+    db.prepare(
+      `UPDATE delivery_orders SET
+         customer_id = ?,
+         customer_name = ?,
+         phone = ?,
+         address = ?,
+         address_number = ?,
+         neighborhood = ?,
+         city = ?,
+         state = ?,
+         zip_code = ?,
+         notes = ?,
+         complement = ?,
+         reference_note = ?,
+         discount_cents = ?,
+         total_cents = ?,
+         updated_at = datetime('now')
+       WHERE id = ?`
+    ).run(
+      payload.customer_id != null
+        ? Number(payload.customer_id) || null
+        : order.customer_id ?? null,
+      payload.customer_name !== undefined ? payload.customer_name || null : order.customer_name,
+      payload.phone !== undefined ? payload.phone || null : order.phone,
+      payload.address !== undefined ? payload.address || null : order.address,
+      payload.address_number !== undefined
+        ? payload.address_number || null
+        : order.address_number,
+      payload.neighborhood !== undefined ? payload.neighborhood || null : order.neighborhood,
+      payload.city !== undefined ? payload.city || null : order.city,
+      payload.state !== undefined ? payload.state || null : order.state,
+      payload.zip_code !== undefined ? payload.zip_code || null : order.zip_code,
+      payload.notes !== undefined ? payload.notes || null : order.notes,
+      payload.complement !== undefined ? payload.complement || null : order.complement ?? null,
+      payload.reference_note !== undefined || payload.reference !== undefined
+        ? payload.reference_note || payload.reference || null
+        : order.reference_note ?? null,
+      discount,
+      total,
+      Number(orderId)
+    );
+
+    db.prepare(
+      `INSERT INTO delivery_order_history (order_id, from_status, to_status, note, user_name)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(
+      Number(orderId),
+      order.status,
+      order.status,
+      'Pedido editado (ainda aguardando pagamento)',
+      getCurrentOperator()
+    );
+
+    writeAudit({
+      action: 'delivery_order.update',
+      entityType: 'delivery_order',
+      entityId: Number(orderId),
+      details: { total_cents: total, discount_cents: discount, items_replaced: hasItems },
       userName: getCurrentOperator(),
     });
 

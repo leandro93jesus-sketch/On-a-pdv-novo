@@ -4,6 +4,7 @@ import {
   listDeliveryOrders,
   getDeliveryOrder,
   createDeliveryOrder,
+  updateDeliveryOrder,
   confirmDeliveryOrderPayment,
   cancelDeliveryOrder,
   updateDeliveryOrderStatus,
@@ -47,6 +48,14 @@ router.get('/availability/:productId', authOptional, (req, res, next) => {
 router.get('/:id', authOptional, (req, res, next) => {
   try {
     res.json(getDeliveryOrder(req.params.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/:id', requireAuth, (req, res, next) => {
+  try {
+    res.json(updateDeliveryOrder(req.params.id, req.body || {}));
   } catch (err) {
     next(err);
   }

@@ -11,6 +11,7 @@ import {
   formatBRL,
   getStoredAuthUser,
   scanDeliveryOrderBarcodeApi,
+  updateDeliveryOrderApi,
   updateDeliveryOrderStatusApi,
   type Customer,
   type DeliveryOrder,
@@ -99,8 +100,18 @@ export default function DeliveryOrdersPanel() {
   const [selected, setSelected] = useState<DeliveryOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [payFilter, setPayFilter] = useState('');
+  const [listFilter, setListFilter] = useState('');
   const [view, setView] = useState<'lista' | 'nova'>('lista');
+  const [showEdit, setShowEdit] = useState(false);
+  const [editPhone, setEditPhone] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editComplement, setEditComplement] = useState('');
+  const [editNeighborhood, setEditNeighborhood] = useState('');
+  const [editReference, setEditReference] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editItems, setEditItems] = useState<
+    Array<{ product_id: number | null; name: string; quantity: number; unit_price_cents: number; is_misc: boolean }>
+  >([]);
 
   // Nova entrega (carrinho local)
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -137,7 +148,19 @@ export default function DeliveryOrdersPanel() {
 
   async function load() {
     try {
-      const list = await fetchDeliveryOrdersApi({ payment_status: payFilter || undefined });
+      const params: { status?: string; payment_status?: string } = {};
+      if (
+        listFilter === 'pago' ||
+        listFilter === 'parcial' ||
+        listFilter === 'pix_pendente' ||
+        listFilter === 'pagamento_na_entrega' ||
+        listFilter === 'nao_pago'
+      ) {
+        params.payment_status = listFilter;
+      } else if (listFilter) {
+        params.status = listFilter;
+      }
+      const list = await fetchDeliveryOrdersApi(params);
       setOrders(list);
       setError(null);
     } catch (e) {
@@ -148,7 +171,7 @@ export default function DeliveryOrdersPanel() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payFilter]);
+  }, [listFilter]);
 
   useEffect(() => {
     if (view !== 'nova') return;
@@ -461,6 +484,59 @@ export default function DeliveryOrdersPanel() {
     }
   }
 
+  function openEdit() {
+    if (!selected) return;
+    setEditPhone(selected.phone || '');
+    setEditAddress(selected.address || '');
+    setEditComplement(selected.complement || selected.address_number || '');
+    setEditNeighborhood(selected.neighborhood || '');
+    setEditReference(selected.reference_note || '');
+    setEditNotes(selected.notes || '');
+    setEditItems(
+      (selected.items || []).map((it) => ({
+        product_id: it.product_id ?? null,
+        name: it.product_name,
+        quantity: it.quantity,
+        unit_price_cents: it.unit_price_cents,
+        is_misc: Boolean(it.is_misc),
+      }))
+    );
+    setShowEdit(true);
+  }
+
+  async function saveEdit() {
+    if (!selected) return;
+    if (!editItems.length || editItems.some((it) => it.quantity < 1)) {
+      setError('Pedido precisa de itens com quantidade válida');
+      return;
+    }
+    try {
+      const updated = await updateDeliveryOrderApi(selected.id, {
+        phone: editPhone.trim() || null,
+        address: editAddress.trim() || null,
+        address_number: editComplement.trim() || null,
+        complement: editComplement.trim() || null,
+        neighborhood: editNeighborhood.trim() || null,
+        reference_note: editReference.trim() || null,
+        notes: editNotes.trim() || null,
+        discount_cents: selected.discount_cents || 0,
+        items: editItems.map((it) => ({
+          product_id: it.product_id,
+          name: it.name,
+          quantity: it.quantity,
+          unit_price_cents: it.unit_price_cents,
+          is_misc: it.is_misc,
+        })),
+      });
+      setSelected(updated);
+      setShowEdit(false);
+      setNotice('Pedido atualizado. Reserva reajustada. Continua aguardando pagamento.');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao editar pedido');
+    }
+  }
+
   const unpaid =
     selected &&
     selected.status !== 'cancelado' &&
@@ -475,13 +551,19 @@ export default function DeliveryOrdersPanel() {
       </p>
 
       <ModuleToolbar>
-        <select className="field-input" value={payFilter} onChange={(e) => setPayFilter(e.target.value)}>
-          <option value="">Todos pagamentos</option>
-          <option value="nao_pago">Aguardando pagamento</option>
-          <option value="pagamento_na_entrega">Pagamento na entrega</option>
+        <select className="field-input" value={listFilter} onChange={(e) => setListFilter(e.target.value)}>
+          <option value="">Todos</option>
+          <option value="aguardando_pagamento">AGUARDANDO PAGAMENTO</option>
+          <option value="nao_pago">Não pago</option>
+          <option value="pago">PAGO</option>
+          <option value="em_separacao">EM SEPARAÇÃO</option>
+          <option value="pronto_para_entrega">PRONTO</option>
+          <option value="saiu_para_entrega">EM ROTA</option>
+          <option value="entregue">ENTREGUE</option>
+          <option value="cancelado">CANCELADO</option>
           <option value="pix_pendente">PIX pendente</option>
+          <option value="pagamento_na_entrega">Pagamento na entrega</option>
           <option value="parcial">Parcial</option>
-          <option value="pago">Pago</option>
         </select>
         <button type="button" className="btn btn-ghost" onClick={() => { setView('lista'); void load(); }}>
           Pedidos
@@ -742,8 +824,16 @@ export default function DeliveryOrdersPanel() {
               <p>
                 <strong>Telefone:</strong> {selected.phone || '—'}
               </p>
+              {(selected.complement || selected.reference_note || selected.notes) && (
+                <p className="muted-line">
+                  {selected.complement ? `Compl.: ${selected.complement}. ` : ''}
+                  {selected.reference_note ? `Ref.: ${selected.reference_note}. ` : ''}
+                  {selected.notes ? `Obs.: ${selected.notes}` : ''}
+                </p>
+              )}
               <p>
-                <strong>Total:</strong> {formatBRL(selected.total_cents)} ·{' '}
+                <strong>Total:</strong> {formatBRL(selected.total_cents)}
+                {selected.discount_cents ? ` (desc. ${formatBRL(selected.discount_cents)})` : ''} ·{' '}
                 <strong>Pago:</strong> {formatBRL(selected.amount_paid_cents)}
               </p>
 
@@ -794,6 +884,11 @@ export default function DeliveryOrdersPanel() {
               )}
 
               <div className="modal-actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
+                {unpaid && (
+                  <button type="button" className="btn btn-ghost" onClick={openEdit}>
+                    EDITAR PEDIDO
+                  </button>
+                )}
                 {unpaid && selected.payment_status !== 'pix_pendente' && (
                   <button
                     type="button"
@@ -1086,6 +1181,93 @@ export default function DeliveryOrdersPanel() {
                   : selected.payment_status === 'pagamento_na_entrega'
                     ? 'CONFIRMAR RECEBIMENTO'
                     : 'CONFIRMAR PAGAMENTO'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEdit && selected && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal">
+            <h2>EDITAR PEDIDO {selected.order_number}</h2>
+            <p className="muted-line">Somente pedidos não pagos. Reserva será reajustada.</p>
+            <div className="form-grid">
+              <label>
+                Telefone
+                <input className="field-input" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
+              </label>
+              <label className="span-2">
+                Endereço
+                <input className="field-input" value={editAddress} onChange={(e) => setEditAddress(e.target.value)} />
+              </label>
+              <label>
+                Complemento
+                <input
+                  className="field-input"
+                  value={editComplement}
+                  onChange={(e) => setEditComplement(e.target.value)}
+                />
+              </label>
+              <label>
+                Bairro
+                <input
+                  className="field-input"
+                  value={editNeighborhood}
+                  onChange={(e) => setEditNeighborhood(e.target.value)}
+                />
+              </label>
+              <label>
+                Referência
+                <input
+                  className="field-input"
+                  value={editReference}
+                  onChange={(e) => setEditReference(e.target.value)}
+                />
+              </label>
+              <label className="span-2">
+                Observação
+                <input className="field-input" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
+              </label>
+            </div>
+            <table className="data-table" style={{ marginTop: 12 }}>
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th>Qtd</th>
+                  <th>Unit.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {editItems.map((it, idx) => (
+                  <tr key={`${it.product_id ?? 'm'}-${idx}`}>
+                    <td>{it.name}</td>
+                    <td>
+                      <input
+                        className="field-input"
+                        style={{ width: 72 }}
+                        type="number"
+                        min={1}
+                        value={it.quantity}
+                        onChange={(e) => {
+                          const q = Math.max(1, Number(e.target.value) || 1);
+                          setEditItems((prev) =>
+                            prev.map((row, i) => (i === idx ? { ...row, quantity: q } : row))
+                          );
+                        }}
+                      />
+                    </td>
+                    <td>{formatBRL(it.unit_price_cents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setShowEdit(false)}>
+                Voltar
+              </button>
+              <button type="button" className="btn btn-primary" onClick={() => void saveEdit()}>
+                Salvar alterações
               </button>
             </div>
           </div>
