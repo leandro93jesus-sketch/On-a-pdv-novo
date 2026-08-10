@@ -121,20 +121,27 @@ export default function EntregasPage() {
 
   return (
     <section className="module-panel">
+      <div className="entregas-page-header">
+        <h2 style={{ margin: 0 }}>ENTREGAS</h2>
+        <p className="muted-line" style={{ margin: 0 }}>
+          Pedidos com leitor, endereço, rota e pagamento só após confirmação.
+        </p>
+      </div>
       <ModuleToolbar>
         <button
           type="button"
           className={`btn ${mode === 'pedidos' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => setMode('pedidos')}
+          data-testid="tab-pedidos-entrega"
         >
-          Pedidos (nova entrega / leitor)
+          PEDIDOS DE ENTREGA
         </button>
         <button
           type="button"
           className={`btn ${mode === 'logistica' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => setMode('logistica')}
         >
-          Logística (venda paga)
+          Logística (venda já paga)
         </button>
       </ModuleToolbar>
 
