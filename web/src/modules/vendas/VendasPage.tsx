@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   cancelSale as cancelCompletedSale,
+  createDeliveryOrderApi,
   createSale,
   fetchOpenCash,
   fetchProducts,
@@ -58,7 +59,10 @@ function newRequestId(): string {
   return `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+type SaleMode = 'normal' | 'entrega';
+
 export default function VendasPage() {
+  const [saleMode, setSaleMode] = useState<SaleMode>('normal');
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -87,11 +91,35 @@ export default function VendasPage() {
   const [customerOpenReq, setCustomerOpenReq] = useState(0);
   const [receiptFromHistory, setReceiptFromHistory] = useState(false);
   const [highlightIdx, setHighlightIdx] = useState(0);
+  const [deliveryPhone, setDeliveryPhone] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryComplement, setDeliveryComplement] = useState('');
+  const [deliveryNeighborhood, setDeliveryNeighborhood] = useState('');
+  const [deliveryReference, setDeliveryReference] = useState('');
+  const [deliveryNotes, setDeliveryNotes] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
   const searchTimer = useRef<number | null>(null);
   const submittingRef = useRef(false);
   const requestIdRef = useRef<string | null>(null);
   const lastBarcodeRef = useRef<{ code: string; at: number } | null>(null);
+  const isDeliveryMode = saleMode === 'entrega';
+
+  function fillDeliveryFromCustomer(c: Customer | null) {
+    if (!c) return;
+    setDeliveryPhone(c.phone || '');
+    setDeliveryAddress(c.address || '');
+    setDeliveryComplement(c.address_number || '');
+    setDeliveryNeighborhood(c.neighborhood || '');
+  }
+
+  function clearDeliveryFields() {
+    setDeliveryPhone('');
+    setDeliveryAddress('');
+    setDeliveryComplement('');
+    setDeliveryNeighborhood('');
+    setDeliveryReference('');
+    setDeliveryNotes('');
+  }
 
   function focusSearch() {
     window.setTimeout(() => searchRef.current?.focus(), 0);
@@ -211,7 +239,8 @@ export default function VendasPage() {
       if (e.key === 'F10') {
         e.preventDefault();
         if (!inEditable || tag === 'INPUT') {
-          void finalizeSale();
+          if (saleMode === 'entrega') void createDeliveryOrderFromCart();
+          else void finalizeSale();
         }
       }
     }
@@ -230,6 +259,13 @@ export default function VendasPage() {
     discountInput,
     customer,
     query,
+    saleMode,
+    deliveryPhone,
+    deliveryAddress,
+    deliveryComplement,
+    deliveryNeighborhood,
+    deliveryReference,
+    deliveryNotes,
   ]);
 
   const subtotal = useMemo(() => cart.reduce((sum, line) => sum + lineTotal(line), 0), [cart]);
@@ -394,7 +430,79 @@ export default function VendasPage() {
     }
   }
 
+  async function createDeliveryOrderFromCart() {
+    if (cart.length === 0 || submittingRef.current) return;
+
+    const discountParse = parseDiscountInput(discountInput);
+    if (!discountParse.ok) {
+      setError(discountParse.error);
+      return;
+    }
+    if (discountParse.cents > subtotal) {
+      setError('Desconto não pode ser maior que o subtotal.');
+      return;
+    }
+    if (!customer && !deliveryPhone.trim() && !deliveryAddress.trim()) {
+      setError('Informe cliente, telefone ou endereço da entrega.');
+      return;
+    }
+
+    submittingRef.current = true;
+    setSubmitting(true);
+    setError(null);
+    setNotice(null);
+
+    if (!requestIdRef.current) {
+      requestIdRef.current = newRequestId();
+    }
+
+    try {
+      const order = await createDeliveryOrderApi({
+        client_request_id: requestIdRef.current,
+        customer_id: customer?.id ?? null,
+        customer_name: customer?.name || null,
+        phone: deliveryPhone.trim() || customer?.phone || null,
+        address: deliveryAddress.trim() || customer?.address || null,
+        address_number: deliveryComplement.trim() || customer?.address_number || null,
+        neighborhood: deliveryNeighborhood.trim() || customer?.neighborhood || null,
+        city: customer?.city || null,
+        state: customer?.state || null,
+        zip_code: customer?.zip_code || null,
+        complement: deliveryComplement.trim() || null,
+        reference_note: deliveryReference.trim() || null,
+        notes: deliveryNotes.trim() || null,
+        discount_cents: discountParse.cents,
+        items: cart.map((line) => ({
+          product_id: line.productId,
+          name: line.name,
+          quantity: line.quantity,
+          unit_price_cents: line.unitPriceCents,
+          is_misc: line.isMisc,
+        })),
+      });
+
+      setCart([]);
+      setDiscountInput('0,00');
+      setQtyDrafts({});
+      clearDeliveryFields();
+      requestIdRef.current = null;
+      setNotice(
+        `Pedido ${order.order_number} criado — AGUARDANDO PAGAMENTO. Estoque reservado. Não entrou no caixa.`
+      );
+      clearSearch();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao criar pedido de entrega');
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  }
+
   async function finalizeSale(mixedOverride?: MixedAmounts) {
+    if (isDeliveryMode) {
+      await createDeliveryOrderFromCart();
+      return;
+    }
     if (cart.length === 0 || submittingRef.current) return;
 
     const discountParse = parseDiscountInput(discountInput);
@@ -559,7 +667,13 @@ export default function VendasPage() {
   }
 
   return (
-    <div className="sales-layout sales-layout-stack">
+    <div
+      className={
+        isDeliveryMode
+          ? 'sales-layout sales-layout-stack sales-mode-delivery'
+          : 'sales-layout sales-layout-stack'
+      }
+    >
       <section className="sales-top">
         <div className="sales-status-row">
           <span className={cash ? 'status-pill status-ok' : 'status-pill status-warn'}>
@@ -567,14 +681,109 @@ export default function VendasPage() {
               ? `Caixa aberto · ${cash.operator_name}`
               : 'Caixa fechado — abra o caixa para vender'}
           </span>
+          <div className="sale-mode-toggle" role="group" aria-label="Modo de venda">
+            <button
+              type="button"
+              className={saleMode === 'normal' ? 'btn btn-primary' : 'btn btn-ghost'}
+              onClick={() => {
+                setSaleMode('normal');
+                setError(null);
+                setNotice(null);
+              }}
+            >
+              VENDA NORMAL
+            </button>
+            <button
+              type="button"
+              className={saleMode === 'entrega' ? 'btn btn-accent' : 'btn btn-ghost'}
+              onClick={() => {
+                setSaleMode('entrega');
+                setError(null);
+                setNotice(null);
+                if (customer) fillDeliveryFromCustomer(customer);
+                focusSearch();
+              }}
+            >
+              ENTREGA
+            </button>
+          </div>
         </div>
+
+        {isDeliveryMode && (
+          <div className="delivery-mode-banner" role="status">
+            <strong>MODO ENTREGA</strong>
+            <span>PEDIDO AINDA NÃO RECEBIDO — não entra no caixa ao criar</span>
+          </div>
+        )}
 
         <CustomerPicker
           selected={customer}
-          onSelect={setCustomer}
+          onSelect={(c) => {
+            setCustomer(c);
+            if (isDeliveryMode) fillDeliveryFromCustomer(c);
+          }}
           openRequest={customerOpenReq}
           onClosed={focusSearch}
         />
+
+        {isDeliveryMode && (
+          <div className="delivery-fields-grid">
+            <label>
+              Telefone
+              <input
+                className="field-input"
+                value={deliveryPhone}
+                onChange={(e) => setDeliveryPhone(e.target.value)}
+                placeholder="Telefone"
+              />
+            </label>
+            <label>
+              Endereço
+              <input
+                className="field-input"
+                value={deliveryAddress}
+                onChange={(e) => setDeliveryAddress(e.target.value)}
+                placeholder="Endereço da entrega"
+              />
+            </label>
+            <label>
+              Complemento
+              <input
+                className="field-input"
+                value={deliveryComplement}
+                onChange={(e) => setDeliveryComplement(e.target.value)}
+                placeholder="Complemento"
+              />
+            </label>
+            <label>
+              Bairro
+              <input
+                className="field-input"
+                value={deliveryNeighborhood}
+                onChange={(e) => setDeliveryNeighborhood(e.target.value)}
+                placeholder="Bairro"
+              />
+            </label>
+            <label>
+              Referência
+              <input
+                className="field-input"
+                value={deliveryReference}
+                onChange={(e) => setDeliveryReference(e.target.value)}
+                placeholder="Ponto de referência"
+              />
+            </label>
+            <label>
+              Observação da entrega
+              <input
+                className="field-input"
+                value={deliveryNotes}
+                onChange={(e) => setDeliveryNotes(e.target.value)}
+                placeholder="Observações"
+              />
+            </label>
+          </div>
+        )}
 
         <div className="search-block">
           <div className="search-row">
@@ -802,135 +1011,150 @@ export default function VendasPage() {
             <strong>{formatBRL(total)}</strong>
           </div>
 
-          <div>
-            <div className="summary-row" style={{ marginBottom: 8 }}>
-              <span>Forma de pagamento</span>
-            </div>
-            <div className="payment-options">
-              {PAYMENTS_ROW1.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={m.id === payment ? 'pay-btn active' : 'pay-btn'}
-                  onClick={() => {
-                    setPayment(m.id);
-                    setMixedDraft(null);
-                  }}
-                >
-                  {m.label}
+          {!isDeliveryMode ? (
+            <div>
+              <div className="summary-row" style={{ marginBottom: 8 }}>
+                <span>Forma de pagamento</span>
+              </div>
+              <div className="payment-options">
+                {PAYMENTS_ROW1.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={m.id === payment ? 'pay-btn active' : 'pay-btn'}
+                    onClick={() => {
+                      setPayment(m.id);
+                      setMixedDraft(null);
+                    }}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <div className="payment-options" style={{ marginTop: 8 }}>
+                {PAYMENTS_ROW2.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={m.id === payment ? 'pay-btn active' : 'pay-btn'}
+                    onClick={() => {
+                      if (m.id === 'misto') {
+                        setPayment('misto');
+                        setShowMixed(true);
+                        return;
+                      }
+                      setPayment(m.id);
+                      setMixedDraft(null);
+                    }}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+                <button type="button" className="pay-btn" onClick={() => setShowHistory(true)}>
+                  Histórico
                 </button>
-              ))}
+              </div>
+
+              {payment === 'dinheiro' ? (
+                <div className="credit-fields" style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                  <label>
+                    Valor recebido (R$)
+                    <input
+                      value={cashReceivedInput}
+                      onChange={(e) => setCashReceivedInput(e.target.value)}
+                      inputMode="decimal"
+                      placeholder={(total / 100).toFixed(2).replace('.', ',')}
+                    />
+                  </label>
+                  {cashReceivedInput.trim() &&
+                  Number.isFinite(
+                    Number(cashReceivedInput.replace(/\./g, '').replace(',', '.'))
+                  ) ? (
+                    <div className="muted-line">
+                      Troco:{' '}
+                      <strong>
+                        {formatBRL(
+                          Math.max(
+                            0,
+                            Math.round(
+                              Number(cashReceivedInput.replace(/\./g, '').replace(',', '.')) * 100
+                            ) - total
+                          )
+                        )}
+                      </strong>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {payment === 'misto' && mixedDraft ? (
+                <div className="muted-line" style={{ marginTop: 8 }}>
+                  Misto configurado · informado{' '}
+                  {formatBRL(
+                    mixedDraft.dinheiro + mixedDraft.pix + mixedDraft.cartao + mixedDraft.crediario
+                  )}
+                  <button
+                    type="button"
+                    className="linkish"
+                    style={{ marginLeft: 8 }}
+                    onClick={() => setShowMixed(true)}
+                  >
+                    Editar
+                  </button>
+                </div>
+              ) : null}
+
+              {payment === 'crediario' ? (
+                <div className="credit-fields" style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                  <label>
+                    Entrada (R$)
+                    <input
+                      value={creditEntryInput}
+                      onChange={(e) => setCreditEntryInput(e.target.value)}
+                      inputMode="decimal"
+                    />
+                  </label>
+                  <label>
+                    Parcelas
+                    <input
+                      type="number"
+                      min={1}
+                      value={creditInstallments}
+                      onChange={(e) =>
+                        setCreditInstallments(Math.max(1, Number(e.target.value) || 1))
+                      }
+                    />
+                  </label>
+                  <label>
+                    1º vencimento
+                    <input
+                      type="date"
+                      value={creditFirstDue}
+                      onChange={(e) => setCreditFirstDue(e.target.value)}
+                    />
+                  </label>
+                  {!customer ? (
+                    <span className="alert alert-error" style={{ margin: 0 }}>
+                      Selecione um cliente para crediário.
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
-            <div className="payment-options" style={{ marginTop: 8 }}>
-              {PAYMENTS_ROW2.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={m.id === payment ? 'pay-btn active' : 'pay-btn'}
-                  onClick={() => {
-                    if (m.id === 'misto') {
-                      setPayment('misto');
-                      setShowMixed(true);
-                      return;
-                    }
-                    setPayment(m.id);
-                    setMixedDraft(null);
-                  }}
-                >
-                  {m.label}
-                </button>
-              ))}
+          ) : (
+            <div className="delivery-mode-summary">
+              <p>
+                <strong>Status ao salvar:</strong> AGUARDANDO PAGAMENTO
+              </p>
+              <p className="muted-line">
+                O pagamento (Dinheiro, Pix, Cartão, Crediário ou Misto) é confirmado depois na aba
+                Entregas. Aqui só reserva estoque.
+              </p>
               <button type="button" className="pay-btn" onClick={() => setShowHistory(true)}>
-                Histórico
+                Histórico de vendas
               </button>
             </div>
-
-            {payment === 'dinheiro' ? (
-              <div className="credit-fields" style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-                <label>
-                  Valor recebido (R$)
-                  <input
-                    value={cashReceivedInput}
-                    onChange={(e) => setCashReceivedInput(e.target.value)}
-                    inputMode="decimal"
-                    placeholder={(total / 100).toFixed(2).replace('.', ',')}
-                  />
-                </label>
-                {cashReceivedInput.trim() &&
-                Number.isFinite(
-                  Number(cashReceivedInput.replace(/\./g, '').replace(',', '.'))
-                ) ? (
-                  <div className="muted-line">
-                    Troco:{' '}
-                    <strong>
-                      {formatBRL(
-                        Math.max(
-                          0,
-                          Math.round(
-                            Number(cashReceivedInput.replace(/\./g, '').replace(',', '.')) * 100
-                          ) - total
-                        )
-                      )}
-                    </strong>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {payment === 'misto' && mixedDraft ? (
-              <div className="muted-line" style={{ marginTop: 8 }}>
-                Misto configurado · informado{' '}
-                {formatBRL(
-                  mixedDraft.dinheiro + mixedDraft.pix + mixedDraft.cartao + mixedDraft.crediario
-                )}
-                <button
-                  type="button"
-                  className="linkish"
-                  style={{ marginLeft: 8 }}
-                  onClick={() => setShowMixed(true)}
-                >
-                  Editar
-                </button>
-              </div>
-            ) : null}
-
-            {payment === 'crediario' ? (
-              <div className="credit-fields" style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-                <label>
-                  Entrada (R$)
-                  <input
-                    value={creditEntryInput}
-                    onChange={(e) => setCreditEntryInput(e.target.value)}
-                    inputMode="decimal"
-                  />
-                </label>
-                <label>
-                  Parcelas
-                  <input
-                    type="number"
-                    min={1}
-                    value={creditInstallments}
-                    onChange={(e) =>
-                      setCreditInstallments(Math.max(1, Number(e.target.value) || 1))
-                    }
-                  />
-                </label>
-                <label>
-                  1º vencimento
-                  <input
-                    type="date"
-                    value={creditFirstDue}
-                    onChange={(e) => setCreditFirstDue(e.target.value)}
-                  />
-                </label>
-                {!customer ? (
-                  <span className="alert alert-error" style={{ margin: 0 }}>
-                    Selecione um cliente para crediário.
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+          )}
 
           <div className="cart-actions">
             <button
@@ -939,15 +1163,23 @@ export default function VendasPage() {
               onClick={cancelSale}
               disabled={cart.length === 0 || submitting}
             >
-              Cancelar venda
+              {isDeliveryMode ? 'Limpar pedido' : 'Cancelar venda'}
             </button>
             <button
               type="button"
               className="btn btn-primary btn-finalize"
-              onClick={() => void finalizeSale()}
+              onClick={() =>
+                void (isDeliveryMode ? createDeliveryOrderFromCart() : finalizeSale())
+              }
               disabled={cart.length === 0 || submitting}
             >
-              {submitting ? 'Finalizando…' : 'Finalizar venda'}
+              {submitting
+                ? isDeliveryMode
+                  ? 'Criando pedido…'
+                  : 'Finalizando…'
+                : isDeliveryMode
+                  ? 'CRIAR PEDIDO DE ENTREGA'
+                  : 'Finalizar venda'}
             </button>
           </div>
         </div>

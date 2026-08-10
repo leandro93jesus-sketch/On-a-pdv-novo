@@ -975,9 +975,12 @@ export interface DeliveryOrder {
   city?: string | null;
   state?: string | null;
   zip_code?: string | null;
+  complement?: string | null;
+  reference_note?: string | null;
   status: string;
   payment_status: string;
   total_cents: number;
+  discount_cents?: number;
   amount_paid_cents: number;
   amount_due_cents?: number;
   sale_id?: number | null;
@@ -985,6 +988,7 @@ export interface DeliveryOrder {
   created_by?: string | null;
   created_at?: string;
   paid_at?: string | null;
+  notes?: string | null;
   all_items_checked?: boolean;
   items?: DeliveryOrderItem[];
   payments?: Array<{
@@ -1246,6 +1250,17 @@ export function fetchDeliveryOrderApi(id: number): Promise<DeliveryOrder> {
 export function createDeliveryOrderApi(payload: Record<string, unknown>): Promise<DeliveryOrder> {
   return apiFetch('/api/delivery-orders', {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<DeliveryOrder>(r));
+}
+
+export function updateDeliveryOrderApi(
+  id: number,
+  payload: Record<string, unknown>
+): Promise<DeliveryOrder> {
+  return apiFetch(`/api/delivery-orders/${id}`, {
+    method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   }).then((r) => handle<DeliveryOrder>(r));
