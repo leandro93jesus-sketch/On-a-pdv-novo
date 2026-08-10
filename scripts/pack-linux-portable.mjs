@@ -24,6 +24,17 @@ if (!existsSync(unpacked)) {
   process.exit(1);
 }
 
+const nodeBin = join(unpacked, 'resources', 'node', 'node');
+const winNode = join(unpacked, 'resources', 'node', 'node.exe');
+if (!existsSync(nodeBin)) {
+  console.error('FALHA: linux-unpacked sem resources/node/node');
+  process.exit(1);
+}
+if (existsSync(winNode)) {
+  console.error('FALHA: linux-unpacked contém node.exe (Windows). Regenere com PDV_DESKTOP_PLATFORM=linux.');
+  process.exit(1);
+}
+
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 cpSync(unpacked, outDir, { recursive: true });
