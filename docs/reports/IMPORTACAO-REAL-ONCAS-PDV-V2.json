@@ -1,0 +1,571 @@
+{
+  "mode": "PRODUCTION_IMPORT",
+  "authorized": true,
+  "adapter": "oncas_pdv_v2",
+  "adapter_version": "1.0.0",
+  "source": {
+    "path": "/home/ubuntu/.cursor/projects/workspace/uploads/oncas-pdv-backup-2026-08-07-1786145822438_eda5.json",
+    "sha256": "6389a693b4f9f2f0d6c8b1781e633767db5e32913a26933d7c43212d0a112d70",
+    "size_bytes": 223981,
+    "backup_meta": {
+      "app": "Oncas PDV",
+      "version": 2,
+      "createdAt": "2026-08-07T23:37:02.422Z",
+      "reason": "Backup manual",
+      "storageKey": "onca-pdv-backup-20260805-1785961803384"
+    }
+  },
+  "safety_backup": {
+    "format": "onca-pdv-backup-v1",
+    "kind": "pre_import",
+    "created_at": "2026-08-08T16:05:24.727Z",
+    "db_filename": "onca-pdv-backup-2026-08-08-160524.db",
+    "size_bytes": 483328,
+    "sha256": "e8bf2f2c4c384436806dd8a9dc029568d587fcd878b82950bd31cf4b25d9bcf0",
+    "note": "Backup automático antes da importação do JSON real Oncas PDV v2",
+    "filepath": "/workspace/server/data/backups/onca-pdv-backup-2026-08-08-160524.db",
+    "filename": "onca-pdv-backup-2026-08-08-160524.db"
+  },
+  "preflight": {
+    "integrity_check": "ok",
+    "foreign_key_violations": 0,
+    "ok": true
+  },
+  "demo_purge": {
+    "products": 19,
+    "customers": 7,
+    "sales": 31,
+    "suppliers": 4
+  },
+  "before_json": {
+    "products": 488,
+    "customers": 7,
+    "sales": 87,
+    "sale_items": 210,
+    "stock_movements": 204,
+    "suppliers": 0,
+    "receivables": 0,
+    "purchases": 0,
+    "deliveries": 0,
+    "returns": 0,
+    "cash_history": 2
+  },
+  "preview": {
+    "adapter": "oncas_pdv_v2",
+    "adapter_version": "1.0.0",
+    "produtos_encontrados": 488,
+    "clientes_encontrados": 7,
+    "fornecedores_encontrados": 0,
+    "vendas_encontradas": 87,
+    "itens_venda": 210,
+    "movimentacoes_estoque": 204,
+    "sessoes_caixa": 2,
+    "registros_crediario": 0,
+    "compras_encontradas": 0,
+    "entregas_encontradas": 0,
+    "registros_invalidos": 0,
+    "possiveis_duplicidades": 36,
+    "campos_desconhecidos": 8,
+    "unknown_fields_sample": [
+      "customer.createdAt",
+      "customer.email",
+      "customer.updatedAt",
+      "product.code.internal_non_ean",
+      "product.code.junk",
+      "product.priceHistory",
+      "sale._obsOk",
+      "sale.note"
+    ],
+    "warnings_count": 6,
+    "empty_collections": {
+      "suppliers": 0,
+      "purchases": 0,
+      "receivables": 0,
+      "payables": 0,
+      "deliveries": 0,
+      "returns": 0,
+      "quotes": 0,
+      "promotions": 0,
+      "salesGoals": 0,
+      "financialEntries": 0,
+      "internalNotes": 0,
+      "operatorHistory": 0
+    },
+    "duplicates_sample": {
+      "products": [
+        {
+          "legacy_id": "100",
+          "reason": "codigo_duplicado",
+          "code": "700083139368",
+          "other_legacy_id": "267"
+        },
+        {
+          "legacy_id": "240",
+          "reason": "codigo_duplicado",
+          "code": "7898917671153",
+          "other_legacy_id": "251"
+        },
+        {
+          "legacy_id": "45",
+          "reason": "codigo_duplicado",
+          "code": "7898669410109",
+          "other_legacy_id": "265"
+        },
+        {
+          "legacy_id": "357",
+          "reason": "codigo_duplicado",
+          "code": "070341439777",
+          "other_legacy_id": "353"
+        },
+        {
+          "legacy_id": "434",
+          "reason": "codigo_duplicado",
+          "code": "7896090100101",
+          "other_legacy_id": "144"
+        },
+        {
+          "legacy_id": "61",
+          "reason": "codigo_duplicado",
+          "code": "7365323869080",
+          "other_legacy_id": "168"
+        },
+        {
+          "legacy_id": "223",
+          "reason": "codigo_duplicado",
+          "code": "7896527700782",
+          "other_legacy_id": "174"
+        },
+        {
+          "legacy_id": "404",
+          "reason": "codigo_duplicado",
+          "code": "7899928308700",
+          "other_legacy_id": "432"
+        },
+        {
+          "legacy_id": "181",
+          "reason": "codigo_duplicado",
+          "code": "7899958221857",
+          "other_legacy_id": "421"
+        },
+        {
+          "legacy_id": "162",
+          "reason": "codigo_duplicado",
+          "code": "7897750771778",
+          "other_legacy_id": "136"
+        },
+        {
+          "legacy_id": "124",
+          "reason": "codigo_duplicado",
+          "code": "7899809001768",
+          "other_legacy_id": "195"
+        },
+        {
+          "legacy_id": "341",
+          "reason": "codigo_duplicado",
+          "code": "7365322809780",
+          "other_legacy_id": "324"
+        },
+        {
+          "legacy_id": "266",
+          "reason": "codigo_duplicado",
+          "code": "609963037070",
+          "other_legacy_id": "103"
+        },
+        {
+          "legacy_id": "308",
+          "reason": "codigo_duplicado",
+          "code": "7898669410956",
+          "other_legacy_id": "309"
+        },
+        {
+          "legacy_id": "161",
+          "reason": "codigo_duplicado",
+          "code": "7896013404682",
+          "other_legacy_id": "130"
+        },
+        {
+          "legacy_id": "274",
+          "reason": "codigo_duplicado",
+          "code": "7898311540536",
+          "other_legacy_id": "135"
+        },
+        {
+          "legacy_id": "119",
+          "reason": "codigo_duplicado",
+          "code": "7898311540390",
+          "other_legacy_id": "249"
+        },
+        {
+          "legacy_id": "371",
+          "reason": "codigo_duplicado",
+          "code": "7896076001897",
+          "other_legacy_id": "385"
+        },
+        {
+          "legacy_id": "262",
+          "reason": "codigo_duplicado",
+          "code": "7898311540734",
+          "other_legacy_id": "167"
+        },
+        {
+          "legacy_id": "410",
+          "reason": "codigo_duplicado",
+          "code": "7898950286185",
+          "other_legacy_id": "273"
+        }
+      ]
+    },
+    "source_sha256": "6389a693b4f9f2f0d6c8b1781e633767db5e32913a26933d7c43212d0a112d70",
+    "source_filename": "oncas-pdv-backup-2026-08-07-1786145822438_eda5.json",
+    "source_size_bytes": 223981
+  },
+  "imported": {
+    "products": 488,
+    "customers": 7,
+    "sales": 87,
+    "sale_items": 210,
+    "sale_payments": 87,
+    "stock_movements": 204,
+    "cash_sessions": 2,
+    "settings": 7,
+    "suppliers": 0,
+    "credit": 0,
+    "purchases": 0,
+    "deliveries": 0,
+    "returns": 0
+  },
+  "ignored": {
+    "products": 0,
+    "customers": 0,
+    "sales": 0,
+    "stock_movements": 0
+  },
+  "duplicated": {
+    "products": 36,
+    "customers": 0,
+    "sales": 0
+  },
+  "conflicts": [
+    {
+      "legacy_id": "100",
+      "reason": "codigo_duplicado",
+      "code": "700083139368",
+      "other_legacy_id": "267"
+    },
+    {
+      "legacy_id": "240",
+      "reason": "codigo_duplicado",
+      "code": "7898917671153",
+      "other_legacy_id": "251"
+    },
+    {
+      "legacy_id": "45",
+      "reason": "codigo_duplicado",
+      "code": "7898669410109",
+      "other_legacy_id": "265"
+    },
+    {
+      "legacy_id": "357",
+      "reason": "codigo_duplicado",
+      "code": "070341439777",
+      "other_legacy_id": "353"
+    },
+    {
+      "legacy_id": "434",
+      "reason": "codigo_duplicado",
+      "code": "7896090100101",
+      "other_legacy_id": "144"
+    },
+    {
+      "legacy_id": "61",
+      "reason": "codigo_duplicado",
+      "code": "7365323869080",
+      "other_legacy_id": "168"
+    },
+    {
+      "legacy_id": "223",
+      "reason": "codigo_duplicado",
+      "code": "7896527700782",
+      "other_legacy_id": "174"
+    },
+    {
+      "legacy_id": "404",
+      "reason": "codigo_duplicado",
+      "code": "7899928308700",
+      "other_legacy_id": "432"
+    },
+    {
+      "legacy_id": "181",
+      "reason": "codigo_duplicado",
+      "code": "7899958221857",
+      "other_legacy_id": "421"
+    },
+    {
+      "legacy_id": "162",
+      "reason": "codigo_duplicado",
+      "code": "7897750771778",
+      "other_legacy_id": "136"
+    },
+    {
+      "legacy_id": "124",
+      "reason": "codigo_duplicado",
+      "code": "7899809001768",
+      "other_legacy_id": "195"
+    },
+    {
+      "legacy_id": "341",
+      "reason": "codigo_duplicado",
+      "code": "7365322809780",
+      "other_legacy_id": "324"
+    },
+    {
+      "legacy_id": "266",
+      "reason": "codigo_duplicado",
+      "code": "609963037070",
+      "other_legacy_id": "103"
+    },
+    {
+      "legacy_id": "308",
+      "reason": "codigo_duplicado",
+      "code": "7898669410956",
+      "other_legacy_id": "309"
+    },
+    {
+      "legacy_id": "161",
+      "reason": "codigo_duplicado",
+      "code": "7896013404682",
+      "other_legacy_id": "130"
+    },
+    {
+      "legacy_id": "274",
+      "reason": "codigo_duplicado",
+      "code": "7898311540536",
+      "other_legacy_id": "135"
+    },
+    {
+      "legacy_id": "119",
+      "reason": "codigo_duplicado",
+      "code": "7898311540390",
+      "other_legacy_id": "249"
+    },
+    {
+      "legacy_id": "371",
+      "reason": "codigo_duplicado",
+      "code": "7896076001897",
+      "other_legacy_id": "385"
+    },
+    {
+      "legacy_id": "262",
+      "reason": "codigo_duplicado",
+      "code": "7898311540734",
+      "other_legacy_id": "167"
+    },
+    {
+      "legacy_id": "410",
+      "reason": "codigo_duplicado",
+      "code": "7898950286185",
+      "other_legacy_id": "273"
+    },
+    {
+      "legacy_id": "469",
+      "reason": "codigo_duplicado",
+      "code": "7908871912114",
+      "other_legacy_id": "470"
+    },
+    {
+      "legacy_id": "278",
+      "reason": "codigo_duplicado",
+      "code": "4005808850839",
+      "other_legacy_id": "346"
+    },
+    {
+      "legacy_id": "318",
+      "reason": "codigo_duplicado",
+      "code": "7898948339084",
+      "other_legacy_id": "302"
+    },
+    {
+      "legacy_id": "245",
+      "reason": "codigo_duplicado",
+      "code": "751320060365",
+      "other_legacy_id": "10"
+    },
+    {
+      "legacy_id": "313",
+      "reason": "codigo_duplicado",
+      "code": "7891150091511",
+      "other_legacy_id": "459"
+    },
+    {
+      "legacy_id": "474",
+      "reason": "codigo_duplicado",
+      "code": "070341439623",
+      "other_legacy_id": "457"
+    },
+    {
+      "legacy_id": "235",
+      "reason": "codigo_duplicado",
+      "code": "7891150091511",
+      "other_legacy_id": "459"
+    },
+    {
+      "legacy_id": "431",
+      "reason": "codigo_duplicado",
+      "code": "070341439920",
+      "other_legacy_id": "368"
+    },
+    {
+      "legacy_id": "98",
+      "reason": "codigo_duplicado",
+      "code": "751320060365",
+      "other_legacy_id": "10"
+    },
+    {
+      "legacy_id": "145",
+      "reason": "codigo_duplicado",
+      "code": "7896098905913",
+      "other_legacy_id": "326"
+    },
+    {
+      "legacy_id": "279",
+      "reason": "codigo_duplicado",
+      "code": "751320024985",
+      "other_legacy_id": "102"
+    },
+    {
+      "legacy_id": "378",
+      "reason": "codigo_duplicado",
+      "code": "7896098905906",
+      "other_legacy_id": "476"
+    },
+    {
+      "legacy_id": "163",
+      "reason": "codigo_duplicado",
+      "code": "736532086150",
+      "other_legacy_id": "83"
+    },
+    {
+      "legacy_id": "164",
+      "reason": "codigo_duplicado",
+      "code": "7365322809476",
+      "other_legacy_id": "165"
+    },
+    {
+      "legacy_id": "50",
+      "reason": "codigo_duplicado",
+      "code": "7365322809476",
+      "other_legacy_id": "165"
+    },
+    {
+      "legacy_id": "342",
+      "reason": "codigo_duplicado",
+      "code": "7898311540444",
+      "other_legacy_id": "132"
+    }
+  ],
+  "converted": {
+    "money_fields": 1273
+  },
+  "errors": [],
+  "warnings": [
+    {
+      "entity": "product",
+      "legacy_id": "451",
+      "warning": "codigo_invalido:httpsÇ;;qrco."
+    },
+    {
+      "entity": "product",
+      "legacy_id": "129",
+      "warning": "estoque_negativo:-1"
+    },
+    {
+      "entity": "product",
+      "legacy_id": "218",
+      "warning": "estoque_negativo:-1"
+    },
+    {
+      "entity": "product",
+      "legacy_id": "397",
+      "warning": "estoque_negativo:-1"
+    },
+    {
+      "entity": "product",
+      "legacy_id": "452",
+      "warning": "codigo_invalido:httpsÇ;;qrco."
+    },
+    {
+      "entity": "product",
+      "legacy_id": "343",
+      "warning": "estoque_negativo:-3"
+    }
+  ],
+  "unknown_fields": [
+    "customer.createdAt",
+    "customer.email",
+    "customer.updatedAt",
+    "product.code.internal_non_ean",
+    "product.code.junk",
+    "product.priceHistory",
+    "sale._obsOk",
+    "sale.note"
+  ],
+  "finance": {
+    "json_sales_total_cents": 343053,
+    "db_sales_total_cents": 343053,
+    "sales_total_match": true,
+    "json_sales_total_brl": "3430.53",
+    "crediario_accounts": 0,
+    "receivables_json": 0
+  },
+  "stock": {
+    "json_stock_sum": 214763,
+    "db_stock_sum": 214763,
+    "stock_sum_match": true,
+    "zero": 12,
+    "negative_allowed": 4,
+    "negative_forbidden": 0
+  },
+  "after_db": {
+    "products": 488,
+    "customers": 7,
+    "sales": 87,
+    "sale_items": 210,
+    "sale_payments": 87,
+    "stock_movements": 204,
+    "cash_sessions": 2,
+    "suppliers": 0,
+    "credit_accounts": 0,
+    "users": 1,
+    "legacy_products": 488
+  },
+  "validation": {
+    "ok": true,
+    "integrity_check": "ok",
+    "foreign_key_violations": 0,
+    "orphan_sale_items": 0
+  },
+  "elapsed_ms": 46,
+  "import_run_id": 2,
+  "sample_name_checks": [
+    {
+      "name": "ACOOL ZULU",
+      "found": true
+    },
+    {
+      "name": "AGIL FACIL SAPOLIO",
+      "found": true
+    },
+    {
+      "name": "AGUA   SANITARIA",
+      "found": true
+    },
+    {
+      "name": "AGUA  SANITARIA ZUCCO 2L",
+      "found": true
+    },
+    {
+      "name": "AGUA PERFUMADA BRISA ALECRIM",
+      "found": true
+    }
+  ]
+}
