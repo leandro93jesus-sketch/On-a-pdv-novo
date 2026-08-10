@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const version = require(join(root, 'package.json')).version;
 const dist = join(root, 'release', 'dist');
 const unpacked = join(dist, 'win-unpacked');
-const folderName = `ONCA-PDV-${version}-PORTATIL`;
+const folderName = `ONCA-PDV-${version}-PORTATIL-WINDOWS-X64`;
 const outDir = join(dist, folderName);
 const zipName = `ONCA-PDV-${version}-PORTATIL-WINDOWS-X64.zip`;
 const zipPath = join(dist, zipName);
@@ -37,6 +37,37 @@ Não exige Node, npm, Cursor ou VS Code.
 
 if (!existsSync(unpacked)) {
   console.error('win-unpacked ausente. Gere o build Windows antes.');
+  process.exit(1);
+}
+
+const nodeExe = join(unpacked, 'resources', 'node', 'node.exe');
+const linuxNode = join(unpacked, 'resources', 'node', 'node');
+const sqliteNative = join(
+  unpacked,
+  'resources',
+  'app-server',
+  'node_modules',
+  'better-sqlite3',
+  'build',
+  'Release',
+  'better_sqlite3.node'
+);
+if (!existsSync(nodeExe)) {
+  console.error('FALHA: win-unpacked sem resources/node/node.exe (API LOCAL quebrada).');
+  process.exit(1);
+}
+if (existsSync(linuxNode)) {
+  console.error('FALHA: win-unpacked contém resources/node/node (Linux). Regenere com PDV_DESKTOP_PLATFORM=win.');
+  process.exit(1);
+}
+if (!existsSync(sqliteNative)) {
+  console.error('FALHA: better-sqlite3 nativo ausente no win-unpacked.');
+  process.exit(1);
+}
+const probe = spawnSync('file', ['-b', nodeExe, sqliteNative], { encoding: 'utf8' });
+const probeText = `${probe.stdout || ''}`;
+if (/ELF|GNU\/Linux/i.test(probeText) || !/PE32\+|MS-DOS executable|Windows/i.test(probeText)) {
+  console.error('FALHA: binários Windows inválidos no win-unpacked:\n', probeText);
   process.exit(1);
 }
 

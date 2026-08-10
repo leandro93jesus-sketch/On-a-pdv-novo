@@ -98,6 +98,45 @@ if (npm.status !== 0) {
 
 rmSync(join(out, 'app-server', 'data'), { recursive: true, force: true });
 
+// Impede mistura de runtimes (regressão 1.2.3: Windows com node Linux).
+const wrongRuntime = join(out, 'node', isWin ? 'node' : 'node.exe');
+if (existsSync(wrongRuntime)) {
+  rmSync(wrongRuntime, { force: true });
+}
+if (!existsSync(nodeBin)) {
+  console.error('Runtime Node ausente após download:', nodeBin);
+  process.exit(1);
+}
+
+const sqliteNative = join(
+  out,
+  'app-server',
+  'node_modules',
+  'better-sqlite3',
+  'build',
+  'Release',
+  'better_sqlite3.node'
+);
+if (!existsSync(sqliteNative)) {
+  console.error('better-sqlite3 nativo ausente:', sqliteNative);
+  process.exit(1);
+}
+
+const probe = spawnSync('file', ['-b', nodeBin, sqliteNative], { encoding: 'utf8' });
+const probeText = `${probe.stdout || ''}\n${probe.stderr || ''}`;
+console.log('Probe binários:\n', probeText.trim());
+if (isWin) {
+  if (/ELF|GNU\/Linux/i.test(probeText) || !/PE32\+|MS-DOS executable|Windows/i.test(probeText)) {
+    console.error('Falha: pacote Windows contém binários incompatíveis (esperado PE/Windows).');
+    process.exit(1);
+  }
+} else if (targetPlatform === 'linux') {
+  if (!/ELF/i.test(probeText) || /PE32\+|MS Windows/i.test(probeText)) {
+    console.error('Falha: pacote Linux contém binários incompatíveis (esperado ELF).');
+    process.exit(1);
+  }
+}
+
 if (!isWin && targetPlatform === process.platform) {
   const check = spawnSync(
     nodeBin,
@@ -115,12 +154,14 @@ if (!isWin && targetPlatform === process.platform) {
   console.log(check.stdout.trim());
 }
 
+writeFileSync(join(out, 'PLATFORM.txt'), `${targetPlatform}-${arch}\n`, 'utf8');
 writeFileSync(
   join(out, 'README.txt'),
   [
     'Recursos internos do ONÇA PDV desktop.',
     'Não contém banco de dados do cliente nem backups reais.',
     `Node embutido: ${NODE_VERSION} (${targetPlatform}-${arch})`,
+    `Gerado em: ${new Date().toISOString()}`,
     '',
   ].join('\n')
 );

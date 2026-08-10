@@ -15,7 +15,11 @@ extraResources:
     to: web-dist
   - from: desktop-resources/node
     to: node
+  - from: desktop-resources/PLATFORM.txt
+    to: PLATFORM.txt
 asar: true
+# API roda via Node embutido em extraResources (fora do asar).
+# Não empacotar app-server dentro do asar.
 extraMetadata:
   main: electron/main.cjs
 win:

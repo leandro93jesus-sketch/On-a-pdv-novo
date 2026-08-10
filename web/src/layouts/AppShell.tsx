@@ -47,7 +47,7 @@ export default function AppShell() {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="sidebar-version">ONÇA PDV 1.2.3</div>
+          <div className="sidebar-version">ONÇA PDV 1.2.4</div>
           {user ? (
             <div className="sidebar-user">
               <span title={user.role}>{user.name || user.login}</span>
