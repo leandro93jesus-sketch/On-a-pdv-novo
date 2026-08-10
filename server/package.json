@@ -9,7 +9,7 @@
     "start": "node src/index.js",
     "migrate": "node src/db/migrate-cli.js",
     "seed": "node src/db/seed-cli.js",
-    "test": "node --test src/sales.test.js src/etapa2.test.js src/etapa3.test.js src/etapa4.test.js src/etapa4b.test.js src/fase1.test.js src/fase2.test.js src/fase3.test.js src/fase4.test.js src/fase5.test.js src/estoqueVendas.test.js src/mestre120.test.js src/barcodePrinterFix.test.js src/linuxCups.test.js"
+    "test": "node --test src/sales.test.js src/etapa2.test.js src/etapa3.test.js src/etapa4.test.js src/etapa4b.test.js src/fase1.test.js src/fase2.test.js src/fase3.test.js src/fase4.test.js src/fase5.test.js src/estoqueVendas.test.js src/mestre120.test.js src/barcodePrinterFix.test.js src/linuxCups.test.js src/entregasFluxo.test.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",

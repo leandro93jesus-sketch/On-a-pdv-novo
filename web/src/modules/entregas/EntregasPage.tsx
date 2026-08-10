@@ -127,7 +127,7 @@ export default function EntregasPage() {
           className={`btn ${mode === 'pedidos' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => setMode('pedidos')}
         >
-          Pedidos (pagamento)
+          Pedidos (nova entrega / leitor)
         </button>
         <button
           type="button"
