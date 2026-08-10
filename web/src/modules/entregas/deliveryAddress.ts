@@ -104,9 +104,15 @@ export function buildDeliveryRouteWhatsAppMessage(order: DeliveryOrder, mapUrl: 
     `STATUS: ${status}`,
   ];
 
-  if (order.payment_status === 'pagamento_na_entrega' || order.payment_status === 'nao_pago') {
+  if (
+    order.payment_status === 'pagamento_na_entrega' ||
+    order.payment_status === 'nao_pago' ||
+    order.payment_status === 'pix_pendente' ||
+    order.payment_status === 'parcial'
+  ) {
+    lines.push('', '⚠ PAGAMENTO PENDENTE', `Valor a receber: ${formatMoneyBRL(due)}`);
     if (order.payment_status === 'pagamento_na_entrega') {
-      lines.push('', 'ATENÇÃO:', `Receber do cliente: ${formatMoneyBRL(due)}`);
+      lines.push('PAGAMENTO NA ENTREGA');
       if (order.expected_payment_method) {
         lines.push(`Forma prevista: ${String(order.expected_payment_method).toUpperCase()}`);
       }
@@ -117,8 +123,6 @@ export function buildDeliveryRouteWhatsAppMessage(order: DeliveryOrder, mapUrl: 
       ) {
         lines.push(`Troco para: ${formatMoneyBRL(Number(order.change_for_cents))}`);
       }
-    } else if (order.payment_status === 'nao_pago' || order.payment_status === 'pix_pendente') {
-      lines.push('', 'ATENÇÃO: Pedido ainda NÃO está pago.');
     }
   }
 

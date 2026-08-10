@@ -113,6 +113,7 @@ export default function DeliveryOrdersPanel() {
   const [scanBusy, setScanBusy] = useState(false);
   const [productNotFound, setProductNotFound] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [discountInput, setDiscountInput] = useState('0,00');
 
   // Pagamento / detalhe
   const [showPay, setShowPay] = useState(false);
@@ -133,7 +134,14 @@ export default function DeliveryOrdersPanel() {
   const [sepBusy, setSepBusy] = useState(false);
   const [exceptionReason, setExceptionReason] = useState('');
 
-  const cartTotal = cart.reduce((s, l) => s + l.unit_price_cents * l.quantity, 0);
+  const cartSubtotal = cart.reduce((s, l) => s + l.unit_price_cents * l.quantity, 0);
+  const cartUnits = cart.reduce((s, l) => s + l.quantity, 0);
+  const discountCents = (() => {
+    const n = Number(String(discountInput).replace(/\./g, '').replace(',', '.'));
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return Math.min(Math.round(n * 100), cartSubtotal);
+  })();
+  const cartTotal = Math.max(0, cartSubtotal - discountCents);
 
   async function load() {
     try {
@@ -186,6 +194,7 @@ export default function DeliveryOrdersPanel() {
     setNovaAddr(emptyDeliveryAddress());
     setDraftScan('');
     setCart([]);
+    setDiscountInput('0,00');
     setProductNotFound(false);
     setCreating(false);
   }
@@ -305,6 +314,7 @@ export default function DeliveryOrdersPanel() {
         zip_code: novaAddr.zip_code.trim() || null,
         reference_note: novaAddr.reference_note.trim() || null,
         notes: novaAddr.notes.trim() || null,
+        discount_cents: discountCents,
         items: cart.map((l) => ({
           product_id: l.product_id,
           quantity: l.quantity,
@@ -558,10 +568,22 @@ export default function DeliveryOrdersPanel() {
 
   return (
     <>
-      <p className="muted-line" style={{ marginBottom: 8 }}>
-        Fluxo: Nova entrega → passar produtos no leitor → criar pedido → AGUARDANDO PAGAMENTO → confirmar
-        recebimento → entra no caixa. Passar produto ou criar pedido não é pagamento.
-      </p>
+      <div className="entregas-hero-cta" data-testid="entregas-hero">
+        <div>
+          <strong>PEDIDOS DE ENTREGA</strong>
+          <p className="muted-line" style={{ margin: '4px 0 0' }}>
+            Monte o pedido com leitor → salve como AGUARDANDO PAGAMENTO → só depois confirme recebimento.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn btn-primary btn-entregas-novo"
+          data-testid="btn-novo-pedido-entrega"
+          onClick={openNova}
+        >
+          NOVO PEDIDO DE ENTREGA
+        </button>
+      </div>
 
       <ModuleToolbar>
         <select className="field-input" value={listFilter} onChange={(e) => setListFilter(e.target.value)}>
@@ -578,11 +600,23 @@ export default function DeliveryOrdersPanel() {
           <option value="pagamento_na_entrega">Pagamento na entrega</option>
           <option value="parcial">Parcial</option>
         </select>
-        <button type="button" className="btn btn-ghost" onClick={() => { setView('lista'); void load(); }}>
-          Pedidos
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => {
+            setView('lista');
+            void load();
+          }}
+        >
+          Lista de pedidos
         </button>
-        <button type="button" className="btn btn-primary" onClick={openNova}>
-          Nova entrega
+        <button
+          type="button"
+          className="btn btn-accent"
+          data-testid="btn-novo-pedido-entrega-toolbar"
+          onClick={openNova}
+        >
+          NOVO PEDIDO DE ENTREGA
         </button>
       </ModuleToolbar>
 
@@ -598,9 +632,14 @@ export default function DeliveryOrdersPanel() {
       )}
 
       {view === 'nova' && (
-        <div className="side-card" style={{ marginBottom: 16 }}>
-          <h2 style={{ marginTop: 0 }}>NOVA ENTREGA</h2>
+        <div className="side-card entregas-nova-pedido" style={{ marginBottom: 16 }} data-testid="tela-novo-pedido-entrega">
+          <h2 style={{ marginTop: 0 }}>NOVO PEDIDO DE ENTREGA</h2>
+          <div className="alert alert-ok" style={{ marginBottom: 12 }}>
+            Isto <strong>não é venda paga</strong>. Ao criar: status AGUARDANDO PAGAMENTO · reserva estoque ·{' '}
+            <strong>não entra no caixa</strong>.
+          </div>
 
+          <h3>Cliente</h3>
           <div className="form-grid">
             <label className="span-2">
               Cliente
@@ -611,8 +650,9 @@ export default function DeliveryOrdersPanel() {
                   setCustomer(null);
                   setCustomerQuery(e.target.value);
                 }}
-                placeholder="Selecionar cliente (nome)"
+                placeholder="SELECIONAR CLIENTE (nome)"
                 list="entrega-clientes"
+                data-testid="entrega-cliente"
               />
               <datalist id="entrega-clientes">
                 {customerOptions.map((c) => (
@@ -650,45 +690,45 @@ export default function DeliveryOrdersPanel() {
               )}
             </label>
           </div>
+
+          <h3>ENDEREÇO DE ENTREGA</h3>
           <DeliveryAddressForm value={novaAddr} onChange={setNovaAddr} showCustomerHint />
 
-          <label style={{ display: 'block', marginTop: 16, marginBottom: 8 }}>
-            <strong>LER CÓDIGO DE BARRAS / BUSCAR PRODUTO</strong>
-            <input
-              ref={draftScanRef}
-              className="field-input"
-              style={{ fontSize: 18, padding: '14px 12px', marginTop: 6 }}
-              value={draftScan}
-              disabled={scanBusy || creating}
-              placeholder="Passe o produto no leitor ou digite nome/código..."
-              onChange={(e) => {
-                setDraftScan(e.target.value);
-                setProductNotFound(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  void handleDraftScan();
-                }
-              }}
-              autoFocus
-            />
-          </label>
+          <h3 style={{ marginTop: 16 }}>LER CÓDIGO / BUSCAR PRODUTO</h3>
+          <input
+            ref={draftScanRef}
+            className="field-input entrega-scan-input"
+            data-testid="entrega-scan-input"
+            value={draftScan}
+            disabled={scanBusy || creating}
+            placeholder="Passe o código de barras ou digite o produto..."
+            onChange={(e) => {
+              setDraftScan(e.target.value);
+              setProductNotFound(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void handleDraftScan();
+              }
+            }}
+            autoFocus
+          />
 
           {productNotFound && (
-            <div className="alert alert-error" style={{ marginBottom: 12 }}>
+            <div className="alert alert-error" style={{ marginTop: 12, marginBottom: 12 }}>
               <strong>PRODUTO NÃO ENCONTRADO</strong>
               <div>Não foi criado produto automaticamente. Passe outro código.</div>
             </div>
           )}
 
-          <h3>Itens da entrega</h3>
-          <table className="data-table">
+          <h3 data-testid="carrinho-entrega-titulo">CARRINHO DA ENTREGA</h3>
+          <table className="data-table" data-testid="carrinho-entrega">
             <thead>
               <tr>
                 <th>PRODUTO</th>
-                <th>QUANTIDADE</th>
                 <th>VALOR UNITÁRIO</th>
+                <th>QUANTIDADE</th>
                 <th>SUBTOTAL</th>
                 <th>REMOVER</th>
               </tr>
@@ -697,7 +737,7 @@ export default function DeliveryOrdersPanel() {
               {cart.length === 0 && (
                 <tr>
                   <td colSpan={5} className="muted-line">
-                    Nenhum produto. Use o leitor para montar o pedido.
+                    Carrinho vazio. Use o leitor ou digite o produto acima.
                   </td>
                 </tr>
               )}
@@ -707,6 +747,7 @@ export default function DeliveryOrdersPanel() {
                     {line.name}
                     {line.barcode ? <div className="muted-line">{line.barcode}</div> : null}
                   </td>
+                  <td>{formatBRL(line.unit_price_cents)}</td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <button type="button" className="btn btn-ghost" onClick={() => bumpQty(line.key, -1)}>
@@ -725,7 +766,6 @@ export default function DeliveryOrdersPanel() {
                       </button>
                     </div>
                   </td>
-                  <td>{formatBRL(line.unit_price_cents)}</td>
                   <td>{formatBRL(line.unit_price_cents * line.quantity)}</td>
                   <td>
                     <button type="button" className="btn btn-danger" onClick={() => removeLine(line.key)}>
@@ -737,9 +777,29 @@ export default function DeliveryOrdersPanel() {
             </tbody>
           </table>
 
-          <p style={{ fontSize: 18, marginTop: 12 }}>
-            <strong>TOTAL DO PEDIDO:</strong> {formatBRL(cartTotal)}
-          </p>
+          <div className="entrega-cart-footer" data-testid="entrega-cart-footer">
+            <div>
+              Itens: <strong>{cart.length}</strong>
+            </div>
+            <div>
+              Total de unidades: <strong>{cartUnits}</strong>
+            </div>
+            <div>
+              Subtotal: <strong>{formatBRL(cartSubtotal)}</strong>
+            </div>
+            <label>
+              Desconto (R$)
+              <input
+                className="field-input"
+                value={discountInput}
+                onChange={(e) => setDiscountInput(e.target.value)}
+                inputMode="decimal"
+              />
+            </label>
+            <div className="entrega-cart-total">
+              TOTAL DO PEDIDO: <strong>{formatBRL(cartTotal)}</strong>
+            </div>
+          </div>
 
           <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
             <button
@@ -750,11 +810,12 @@ export default function DeliveryOrdersPanel() {
                 setView('lista');
               }}
             >
-              Voltar
+              Voltar à lista
             </button>
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn btn-primary btn-entregas-novo"
+              data-testid="btn-criar-pedido-entrega"
               disabled={creating || cart.length === 0}
               onClick={() => void createOrder()}
             >
@@ -767,22 +828,34 @@ export default function DeliveryOrdersPanel() {
       {view === 'lista' && (
         <div className="split-layout">
           <div>
-            <table className="data-table">
+            <table className="data-table" data-testid="lista-pedidos-entrega">
               <thead>
                 <tr>
                   <th>PEDIDO</th>
                   <th>CLIENTE</th>
+                  <th>ENDEREÇO</th>
                   <th>TOTAL</th>
                   <th>STATUS</th>
-                  <th>DATA</th>
+                  <th>DATA/HORA</th>
                   <th>AÇÕES</th>
                 </tr>
               </thead>
               <tbody>
+                {orders.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="muted-line">
+                      Nenhum pedido ainda. Clique em <strong>NOVO PEDIDO DE ENTREGA</strong>.
+                    </td>
+                  </tr>
+                )}
                 {orders.map((o) => (
                   <tr key={o.id} style={{ cursor: 'pointer' }} onClick={() => void openOrder(o.id)}>
                     <td>{o.order_number}</td>
                     <td>{o.customer_name || '—'}</td>
+                    <td>
+                      {[o.address, o.address_number, o.neighborhood, o.city].filter(Boolean).join(', ') ||
+                        '—'}
+                    </td>
                     <td>{formatBRL(o.total_cents)}</td>
                     <td>
                       <StatusPill tone={tone(o.status, o.payment_status)}>{statusLabel(o)}</StatusPill>
@@ -791,7 +864,7 @@ export default function DeliveryOrdersPanel() {
                     <td>
                       <button
                         type="button"
-                        className="btn btn-ghost"
+                        className="btn btn-primary"
                         onClick={(e) => {
                           e.stopPropagation();
                           void openOrder(o.id);
@@ -807,16 +880,75 @@ export default function DeliveryOrdersPanel() {
           </div>
 
           {selected && (
-            <div className="side-card">
+            <div className="side-card" data-testid="detalhe-pedido-entrega">
               <h3>
-                {selected.order_number}{' '}
+                Nº {selected.order_number}{' '}
                 <StatusPill tone={tone(selected.status, selected.payment_status)}>
                   {statusLabel(selected)}
                 </StatusPill>
               </h3>
 
+              <div className="entrega-acoes-principais" data-testid="entrega-acoes-principais">
+                {unpaid && (
+                  <>
+                    <button type="button" className="btn btn-ghost" onClick={openEdit}>
+                      EDITAR PEDIDO
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setPayAmount(
+                          ((selected.total_cents - selected.amount_paid_cents) / 100).toFixed(2)
+                        );
+                        setReceived('');
+                        setPayMethod('dinheiro');
+                        setShowPay(true);
+                      }}
+                    >
+                      CONFIRMAR PAGAMENTO / RECEBIMENTO
+                    </button>
+                    {selected.payment_status !== 'pagamento_na_entrega' &&
+                      selected.payment_status !== 'pix_pendente' && (
+                        <button
+                          type="button"
+                          className="btn btn-accent"
+                          onClick={() => {
+                            setPayAmount(
+                              ((selected.total_cents - selected.amount_paid_cents) / 100).toFixed(2)
+                            );
+                            setPayMethod('dinheiro');
+                            setShowPay(true);
+                            setNotice(
+                              'Escolha a forma prevista e use “Pagar na entrega (sem caixa)”.'
+                            );
+                          }}
+                        >
+                          PAGAMENTO NA ENTREGA
+                        </button>
+                      )}
+                  </>
+                )}
+                {selected.status !== 'cancelado' && unpaid && (
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => {
+                      const el = document.getElementById('entrega-cancel-block');
+                      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }}
+                  >
+                    CANCELAR PEDIDO
+                  </button>
+                )}
+              </div>
+
               <p>
-                <strong>STATUS:</strong> {statusLabel(selected)}
+                <strong>STATUS FINANCEIRO:</strong> {statusLabel(selected)}
+              </p>
+              <p>
+                <strong>STATUS DA ENTREGA:</strong>{' '}
+                {String(selected.status || '').replaceAll('_', ' ').toUpperCase()}
               </p>
               <p>
                 <strong>Cliente:</strong> {selected.customer_name || '—'}
@@ -884,28 +1016,6 @@ export default function DeliveryOrdersPanel() {
               )}
 
               <div className="modal-actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
-                {unpaid && (
-                  <button type="button" className="btn btn-ghost" onClick={openEdit}>
-                    EDITAR PEDIDO
-                  </button>
-                )}
-                {unpaid && selected.payment_status !== 'pix_pendente' && (
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => {
-                      setPayAmount(
-                        ((selected.total_cents - selected.amount_paid_cents) / 100).toFixed(2)
-                      );
-                      setReceived('');
-                      setPayMethod('dinheiro');
-                      setShowPay(true);
-                    }}
-                  >
-                    CONFIRMAR PAGAMENTO
-                  </button>
-                )}
-
                 {unpaid && selected.payment_status === 'pix_pendente' && (
                   <>
                     <div className="alert alert-error" style={{ width: '100%' }}>
@@ -928,41 +1038,25 @@ export default function DeliveryOrdersPanel() {
                 )}
 
                 {unpaid && selected.payment_status === 'pagamento_na_entrega' && (
-                  <button
-                    type="button"
-                    className="btn btn-accent"
-                    onClick={() => {
-                      setPayAmount(
-                        ((selected.total_cents - selected.amount_paid_cents) / 100).toFixed(2)
-                      );
-                      setPayMethod('dinheiro');
-                      setShowPay(true);
-                    }}
-                  >
-                    CONFIRMAR RECEBIMENTO
-                  </button>
-                )}
-
-                {unpaid &&
-                  selected.payment_status !== 'pagamento_na_entrega' &&
-                  selected.payment_status !== 'pix_pendente' && (
+                  <>
+                    <div className="alert alert-error" style={{ width: '100%' }}>
+                      PAGAMENTO PENDENTE NA ENTREGA — sem entrada no caixa até confirmar.
+                    </div>
                     <button
                       type="button"
-                      className="btn btn-ghost"
+                      className="btn btn-accent"
                       onClick={() => {
                         setPayAmount(
                           ((selected.total_cents - selected.amount_paid_cents) / 100).toFixed(2)
                         );
                         setPayMethod('dinheiro');
                         setShowPay(true);
-                        setNotice(
-                          'Escolha a forma prevista e use “Pagar na entrega” (sem lançar no caixa).'
-                        );
                       }}
                     >
-                      PAGAMENTO NA ENTREGA
+                      RECEBIMENTO CONFIRMADO
                     </button>
-                  )}
+                  </>
+                )}
 
                 {paidConfirmed && (
                   <>
@@ -1067,9 +1161,9 @@ export default function DeliveryOrdersPanel() {
               )}
 
               {unpaid && (
-                <div style={{ marginTop: 12 }}>
+                <div id="entrega-cancel-block" style={{ marginTop: 12 }}>
                   <label>
-                    Cancelar pedido (libera reserva, sem caixa)
+                    CANCELAR PEDIDO (libera reserva, sem caixa)
                     <input
                       className="field-input"
                       value={cancelReason}
@@ -1083,7 +1177,7 @@ export default function DeliveryOrdersPanel() {
                     style={{ marginTop: 8 }}
                     onClick={() => void cancelOrder()}
                   >
-                    Cancelar pedido
+                    CANCELAR PEDIDO
                   </button>
                 </div>
               )}
