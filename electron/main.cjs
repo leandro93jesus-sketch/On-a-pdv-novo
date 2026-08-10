@@ -12,6 +12,15 @@ const http = require('node:http');
 const path = require('node:path');
 const fs = require('node:fs');
 
+/**
+ * Linux: AppImage/pacotes sem chrome-sandbox setuid travam ou recusam iniciar.
+ * Aplica somente em Linux — Windows permanece inalterado.
+ */
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('no-sandbox');
+  app.commandLine.appendSwitch('disable-gpu-sandbox');
+}
+
 const DEFAULT_PORT = 3847;
 let mainWindow = null;
 let serverProcess = null;

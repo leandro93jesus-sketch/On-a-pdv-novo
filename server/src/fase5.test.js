@@ -55,14 +55,15 @@ test('exporta produtos CSV', () => {
   assert.ok(file.content.includes('name') || file.content.includes('id'));
 });
 
-test('diagnóstico sem senhas', () => {
-  const report = buildDiagnosticReport();
+test('diagnóstico sem senhas', async () => {
+  const report = await buildDiagnosticReport();
   assert.ok(report.app_version);
   assert.ok(report.db_path);
   assert.equal(report.integrity_check, 'ok');
   const blob = JSON.stringify(report);
   assert.ok(!/password_hash/i.test(blob));
   assert.ok(!/password_salt/i.test(blob));
+  assert.ok(report.os?.platform);
 });
 
 test('API export e support', async () => {

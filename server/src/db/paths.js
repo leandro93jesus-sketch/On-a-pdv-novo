@@ -51,12 +51,17 @@ export function getAssetsDir() {
   return join(getDataDir(), 'assets');
 }
 
+export function getConfigDir() {
+  return join(getDataDir(), 'configuracoes');
+}
+
 export function ensureDataDir() {
   const dataDir = getDataDir();
   mkdirSync(dataDir, { recursive: true });
   mkdirSync(getBackupsDir(), { recursive: true });
   mkdirSync(getLogsDir(), { recursive: true });
   mkdirSync(getAssetsDir(), { recursive: true });
+  mkdirSync(getConfigDir(), { recursive: true });
   mkdirSync(dirname(getDbPath()), { recursive: true });
   return dataDir;
 }

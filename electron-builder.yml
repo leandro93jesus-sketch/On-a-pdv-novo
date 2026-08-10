@@ -47,12 +47,16 @@ nsis:
   # Evita pós-processamento que exige Wine estável neste ambiente
   differentialPackage: false
 linux:
+  # tar.gz não depende de FUSE (AppImage falha sem libfuse2 em Ubuntu 24.04+)
   target:
     - AppImage
+    - tar.gz
     - dir
   category: Office
   executableName: onca-pdv
   artifactName: ONCA-PDV-${version}-linux-x86_64.${ext}
+  synopsis: ONÇA PDV — ponto de venda local-first
+  description: Sistema profissional de PDV com SQLite local. Dados em ~/.config (não dentro do AppImage).
 mac:
   target: dir
 # Electron 33+ = Windows 10/11. Sem suporte declarado a Windows 7.

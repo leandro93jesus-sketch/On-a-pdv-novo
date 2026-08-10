@@ -39,6 +39,7 @@ export interface OncaDesktopApi {
     cancelled?: boolean;
   }>;
   cancelBluetooth?: () => Promise<{ ok: boolean; cancelled?: boolean }>;
+  getLinuxPrintDiag?: () => Promise<Record<string, unknown>>;
 }
 
 declare global {

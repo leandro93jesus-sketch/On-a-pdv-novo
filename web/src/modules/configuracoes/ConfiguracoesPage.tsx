@@ -69,6 +69,7 @@ export default function ConfiguracoesPage() {
   const [btLoading, setBtLoading] = useState(false);
   const [printerOpError, setPrinterOpError] = useState<string | null>(null);
   const [portableWarn, setPortableWarn] = useState<string | null>(null);
+  const [linuxDiag, setLinuxDiag] = useState<Record<string, unknown> | null>(null);
   const printersGenRef = useRef(0);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [audit, setAudit] = useState<AuditLog[]>([]);
@@ -1055,7 +1056,25 @@ export default function ConfiguracoesPage() {
                   onClick={() =>
                     void (async () => {
                       try {
-                        setSupportInfo(await fetchSupportDiagnostics());
+                        const info = await fetchSupportDiagnostics();
+                        setSupportInfo(info);
+                        setLinuxDiag(
+                          (info.linux_print as Record<string, unknown>) ||
+                            (info.os as Record<string, unknown>) ||
+                            null
+                        );
+                        if (window.oncaDesktop?.getLinuxPrintDiag) {
+                          try {
+                            const desk = await withUiTimeout(
+                              window.oncaDesktop.getLinuxPrintDiag(),
+                              15000,
+                              { error: 'Timeout no diagnóstico desktop Linux.' }
+                            );
+                            setLinuxDiag((prev) => ({ ...(prev || {}), desktop: desk }));
+                          } catch {
+                            /* desktop opcional */
+                          }
+                        }
                       } catch (e) {
                         setError(e instanceof Error ? e.message : 'Erro no diagnóstico');
                       }
@@ -1083,7 +1102,95 @@ export default function ConfiguracoesPage() {
                   Gerar relatório de diagnóstico
                 </button>
               </ModuleToolbar>
-              <pre className="code-block" style={{ maxHeight: 360, overflow: 'auto' }}>
+
+              <div className="side-card" style={{ marginTop: 12 }}>
+                <h3>LINUX / IMPRESSÃO</h3>
+                <p className="muted-line">
+                  Diagnóstico do host. Bluetooth pareado ≠ impressora CUPS pronta.
+                </p>
+                {linuxDiag ? (
+                  <div className="kv-list">
+                    <div>
+                      <span>Sistema operacional</span>
+                      <strong>
+                        {String(
+                          (linuxDiag as { platform?: string }).platform ||
+                            window.oncaDesktop?.platform ||
+                            '—'
+                        )}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Distribuição</span>
+                      <strong>{String((linuxDiag as { distribution?: string }).distribution || '—')}</strong>
+                    </div>
+                    <div>
+                      <span>Arquitetura</span>
+                      <strong>{String((linuxDiag as { arch?: string }).arch || '—')}</strong>
+                    </div>
+                    <div>
+                      <span>CUPS</span>
+                      <strong>
+                        {String(
+                          ((linuxDiag as { cups?: { message?: string } }).cups?.message) ||
+                            ((linuxDiag as { desktop?: { cups?: { message?: string } } }).desktop?.cups
+                              ?.message) ||
+                            '—'
+                        )}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>lpstat</span>
+                      <strong>
+                        {(linuxDiag as { cups?: { lpstat?: boolean } }).cups?.lpstat
+                          ? 'DISPONÍVEL'
+                          : 'INDISPONÍVEL'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Bluetooth (bluetoothctl)</span>
+                      <strong>{String((linuxDiag as { bluetoothctl?: string }).bluetoothctl || '—')}</strong>
+                    </div>
+                    <div>
+                      <span>Electron getPrintersAsync</span>
+                      <strong>
+                        {(() => {
+                          const desk = (linuxDiag as { desktop?: { electron_getPrintersAsync?: { ok?: boolean; count?: number; error?: string } } }).desktop
+                            ?.electron_getPrintersAsync;
+                          if (!desk) return '— (abra no desktop Linux)';
+                          return desk.ok ? `OK (${desk.count})` : `FALHA${desk.error ? `: ${desk.error}` : ''}`;
+                        })()}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Impressoras (CUPS)</span>
+                      <strong>
+                        {String(
+                          (linuxDiag as { cups?: { printers_count?: number } }).cups?.printers_count ??
+                            (linuxDiag as { desktop?: { printers_count?: number } }).desktop?.printers_count ??
+                            '—'
+                        )}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Impressora padrão</span>
+                      <strong>
+                        {String(
+                          (linuxDiag as { cups?: { default_printer?: string | null } }).cups
+                            ?.default_printer ||
+                            (linuxDiag as { desktop?: { default_printer?: string | null } }).desktop
+                              ?.default_printer ||
+                            '—'
+                        )}
+                      </strong>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="muted-line">Clique em Atualizar diagnóstico.</p>
+                )}
+              </div>
+
+              <pre className="code-block" style={{ maxHeight: 360, overflow: 'auto', marginTop: 12 }}>
                 {JSON.stringify(diagnostic || supportInfo || { tip: 'Clique em atualizar diagnóstico' }, null, 2)}
               </pre>
             </>

@@ -1,6 +1,6 @@
 {
   "name": "onca-pdv",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "private": true,
   "author": "ONÇA Produtos de Limpeza",
   "description": "ONÇA PDV — sistema profissional de ponto de venda local-first.",
@@ -38,10 +38,11 @@
     "etapa5:test-data": "node scripts/etapa5-test-data-report.mjs",
     "etapa5:restore-isolated": "node scripts/etapa5-backup-restore-isolated.mjs",
     "desktop:prepare": "node scripts/prepare-desktop.mjs",
-    "desktop:dist:linux": "electron-builder --linux AppImage dir --config electron-builder.yml",
+    "desktop:dist:linux": "electron-builder --linux AppImage tar.gz dir --config electron-builder.yml",
     "desktop:dist:win": "electron-builder --win nsis zip --x64 --config electron-builder.yml",
     "desktop:pack": "npm run build && npm run desktop:prepare && npm run desktop:dist:linux",
     "desktop:portable:readme": "node scripts/write-portable-readme.mjs",
+    "desktop:linux:portable": "node scripts/pack-linux-portable.mjs",
     "validate:etapa3": "npm test && npm run lint && npm run build && npm run review:etapa1 && npm run review:etapa2 && npm run review:etapa3 && npm run e2e:etapa3 && npm run e2e:ui:etapa3",
     "validate:etapa4": "npm test && npm run lint && npm run build && npm run review:etapa1 && npm run review:etapa2 && npm run review:etapa3 && npm run review:etapa4 && npm run e2e:etapa4",
     "validate:etapa5": "npm test && npm run lint && npm run build && npm run review:etapa1 && npm run review:etapa2 && npm run review:etapa3 && npm run review:etapa4 && npm run review:etapa5 && npm run etapa5:test-data && npm run etapa5:restore-isolated && npm run e2e:etapa5 && npm run e2e:ui:etapa5"

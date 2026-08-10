@@ -1,6 +1,7 @@
 /**
  * IPC de impressoras/Bluetooth com timeout e cancelamento.
- * Nunca deve deixar o renderer esperando indefinidamente.
+ * Linux: Electron getPrintersAsync + fallback CUPS.
+ * Windows: fluxo Electron existente (não alterado em comportamento).
  */
 const { execFile } = require('node:child_process');
 
@@ -80,7 +81,7 @@ function listBluetoothDevicesOs(signalGen) {
             error:
               err.killed || err.signal
                 ? 'Busca Bluetooth cancelada ou expirou.'
-                : 'BlueZ/bluetoothctl indisponível. Pareie pelo sistema e atualize a lista de impressoras.',
+                : 'BlueZ/bluetoothctl indisponível. Pareie pelo sistema; dispositivo pareado ≠ impressora CUPS.',
           });
           return;
         }
@@ -126,41 +127,167 @@ function cancelBluetooth() {
   return { ok: true, cancelled: true };
 }
 
+async function listPrintersElectron(mainWindow) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return { printers: [], error: 'Janela indisponível', source: 'electron' };
+  }
+  try {
+    const printers = await mainWindow.webContents.getPrintersAsync();
+    return {
+      printers: (printers || []).map((p) => ({
+        name: p.name,
+        displayName: p.displayName || p.name,
+        description: p.description || '',
+        status: p.status,
+        isDefault: Boolean(p.isDefault),
+        source: 'electron',
+      })),
+      source: 'electron',
+    };
+  } catch (err) {
+    return {
+      printers: [],
+      error: err.message || 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA.',
+      source: 'electron',
+    };
+  }
+}
+
+/** LinuxPrinterAdapter: Electron primeiro, CUPS se vazio/falha/timeout. */
+async function listPrintersLinux(mainWindow) {
+  const { listCupsPrinters } = require('./cupsLinux.cjs');
+  const electronRes = await withTimeout(
+    listPrintersElectron(mainWindow),
+    PRINTERS_LIST_TIMEOUT_MS,
+    {
+      printers: [],
+      error: 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA.',
+      timeout: true,
+      source: 'electron',
+    }
+  );
+
+  if ((electronRes.printers || []).length > 0 && !electronRes.timeout) {
+    return { ...electronRes, cups_fallback: false };
+  }
+
+  const cupsRes = await withTimeout(
+    listCupsPrinters(),
+    PRINTERS_LIST_TIMEOUT_MS,
+    {
+      printers: [],
+      error: 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA (CUPS).',
+      timeout: true,
+      cups: { available: false },
+    }
+  );
+
+  if ((cupsRes.printers || []).length > 0) {
+    return {
+      printers: cupsRes.printers,
+      source: 'cups',
+      cups_fallback: true,
+      electron_error: electronRes.error || null,
+      cups: cupsRes.cups,
+    };
+  }
+
+  return {
+    printers: [],
+    source: cupsRes.cups?.available ? 'cups' : 'none',
+    cups_fallback: true,
+    error:
+      cupsRes.error ||
+      electronRes.error ||
+      (cupsRes.cups?.error) ||
+      'Nenhuma impressora encontrada.',
+    hint: cupsRes.hint || cupsRes.cups?.hint || null,
+    cups: cupsRes.cups || null,
+    electron_error: electronRes.error || null,
+  };
+}
+
+async function listPrintersWindows(mainWindow) {
+  return withTimeout(
+    listPrintersElectron(mainWindow),
+    PRINTERS_LIST_TIMEOUT_MS,
+    {
+      printers: [],
+      error: 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA.',
+      timeout: true,
+      source: 'electron',
+    }
+  );
+}
+
+function electronPrint(mainWindow, opts = {}) {
+  const deviceName = opts.deviceName || undefined;
+  const copies = Math.max(1, Number(opts.copies || 1));
+  return new Promise((resolve) => {
+    try {
+      mainWindow.webContents.print(
+        {
+          silent: Boolean(deviceName),
+          printBackground: true,
+          deviceName,
+          copies,
+          margins: { marginType: 'default' },
+        },
+        (success, failureReason) => {
+          if (!success) {
+            resolve({
+              ok: false,
+              error:
+                failureReason ||
+                'Impressora indisponível ou impressão cancelada. A venda não é afetada.',
+              via: 'electron',
+            });
+            return;
+          }
+          resolve({ ok: true, via: 'electron' });
+        }
+      );
+    } catch (err) {
+      resolve({
+        ok: false,
+        error: err.message || 'Falha ao imprimir. A venda não é afetada.',
+        via: 'electron',
+      });
+    }
+  });
+}
+
+async function testPrintLinux(mainWindow, opts = {}) {
+  const { printTestViaCups } = require('./cupsLinux.cjs');
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const electronRes = await withTimeout(
+      electronPrint(mainWindow, opts),
+      PRINT_TEST_TIMEOUT_MS,
+      { ok: false, error: 'Timeout na impressão Electron.', timeout: true, via: 'electron' }
+    );
+    if (electronRes.ok) return electronRes;
+  }
+  const cupsRes = await withTimeout(
+    printTestViaCups({ deviceName: opts.deviceName, title: opts.title }),
+    PRINT_TEST_TIMEOUT_MS,
+    {
+      ok: false,
+      error: 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA.',
+      timeout: true,
+      via: 'cups',
+    }
+  );
+  return cupsRes;
+}
+
 function registerPrinterIpc(ipcMain, getMainWindow) {
   ipcMain.handle('printers:list', async () => {
     const mainWindow = getMainWindow();
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      return { printers: [], error: 'Janela indisponível' };
-    }
     try {
-      const result = await withTimeout(
-        (async () => {
-          try {
-            const printers = await mainWindow.webContents.getPrintersAsync();
-            return {
-              printers: (printers || []).map((p) => ({
-                name: p.name,
-                displayName: p.displayName || p.name,
-                description: p.description || '',
-                status: p.status,
-                isDefault: Boolean(p.isDefault),
-              })),
-            };
-          } catch (err) {
-            return {
-              printers: [],
-              error: err.message || 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA.',
-            };
-          }
-        })(),
-        PRINTERS_LIST_TIMEOUT_MS,
-        {
-          printers: [],
-          error: 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA.',
-          timeout: true,
-        }
-      );
-      return result;
+      if (process.platform === 'linux') {
+        return await listPrintersLinux(mainWindow);
+      }
+      return await listPrintersWindows(mainWindow);
     } catch (err) {
       return {
         printers: [],
@@ -171,55 +298,32 @@ function registerPrinterIpc(ipcMain, getMainWindow) {
 
   ipcMain.handle('printers:test', async (_evt, opts = {}) => {
     const mainWindow = getMainWindow();
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      return { ok: false, error: 'Janela indisponível' };
-    }
-    const deviceName = opts.deviceName || undefined;
-    const copies = Math.max(1, Number(opts.copies || 1));
-
-    const printPromise = new Promise((resolve) => {
-      try {
-        mainWindow.webContents.print(
-          {
-            silent: Boolean(deviceName),
-            printBackground: true,
-            deviceName,
-            copies,
-            margins: { marginType: 'default' },
-          },
-          (success, failureReason) => {
-            if (!success) {
-              resolve({
-                ok: false,
-                error:
-                  failureReason ||
-                  'Impressora indisponível ou impressão cancelada. A venda não é afetada.',
-              });
-              return;
-            }
-            resolve({ ok: true });
-          }
-        );
-      } catch (err) {
-        resolve({
-          ok: false,
-          error: err.message || 'Falha ao imprimir. A venda não é afetada.',
-        });
+    try {
+      if (process.platform === 'linux') {
+        return await testPrintLinux(mainWindow, opts || {});
       }
-    });
-
-    return withTimeout(printPromise, PRINT_TEST_TIMEOUT_MS, {
-      ok: false,
-      error: 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA.',
-      timeout: true,
-    });
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        return { ok: false, error: 'Janela indisponível' };
+      }
+      return await withTimeout(
+        electronPrint(mainWindow, opts || {}),
+        PRINT_TEST_TIMEOUT_MS,
+        {
+          ok: false,
+          error: 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA.',
+          timeout: true,
+        }
+      );
+    } catch (err) {
+      return { ok: false, error: err.message || 'Falha ao imprimir. A venda não é afetada.' };
+    }
   });
 
   ipcMain.handle('bluetooth:list', async () => {
     const gen = btGeneration;
     return withTimeout(listBluetoothDevicesOs(gen), BLUETOOTH_TIMEOUT_MS, {
       devices: [],
-      error: 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA.',
+      error: 'Busca Bluetooth expirou. Tente novamente.',
       timeout: true,
     });
   });
@@ -249,6 +353,42 @@ function registerPrinterIpc(ipcMain, getMainWindow) {
   });
 
   ipcMain.handle('bluetooth:cancel', async () => cancelBluetooth());
+
+  ipcMain.handle('linux:print-diag', async () => {
+    if (process.platform !== 'linux') {
+      return { platform: process.platform, note: 'Diagnóstico Linux indisponível nesta plataforma.' };
+    }
+    const mainWindow = getMainWindow();
+    const { linuxPrintDiagnostics } = require('./cupsLinux.cjs');
+    const cupsDiag = await withTimeout(linuxPrintDiagnostics(), 12000, {
+      platform: 'linux',
+      cups: { available: false, error: 'Timeout no diagnóstico CUPS.' },
+      printers_count: 0,
+      timeout: true,
+    });
+    let electronPrinters = { ok: false, count: 0, error: null };
+    try {
+      const er = await withTimeout(listPrintersElectron(mainWindow), 8000, {
+        printers: [],
+        error: 'timeout',
+        timeout: true,
+      });
+      electronPrinters = {
+        ok: !er.error && !er.timeout,
+        count: (er.printers || []).length,
+        error: er.error || null,
+      };
+    } catch (e) {
+      electronPrinters = { ok: false, count: 0, error: e.message };
+    }
+    return {
+      ...cupsDiag,
+      electron_getPrintersAsync: electronPrinters,
+      arch: process.arch,
+      electron_version: process.versions.electron,
+      node_version: process.versions.node,
+    };
+  });
 }
 
 module.exports = { registerPrinterIpc, cancelBluetooth };
