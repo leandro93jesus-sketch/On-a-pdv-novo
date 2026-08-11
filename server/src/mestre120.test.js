@@ -150,7 +150,7 @@ test('pedido: pagamento parcial lança só o valor pago; quitação converte res
     client_request_id: `m120-pay-full-${Date.now()}`,
     payments: [
       { method: 'dinheiro', amount_cents: 2000, amount_received_cents: 2000 },
-      { method: 'cartao', amount_cents: 2000 },
+      { method: 'cartao', amount_cents: 2000, card_type: 'CREDIT' },
     ],
   });
   assert.equal(full.status, 200, JSON.stringify(full.json));

@@ -7,6 +7,7 @@ export type MixedAmounts = {
   cartao: number;
   crediario: number;
   amount_received_cents: number;
+  card_type?: 'CREDIT' | 'DEBIT' | null;
 };
 
 type Props = {
@@ -35,6 +36,7 @@ export default function MixedPaymentModal({ totalCents, hasCustomer, onCancel, o
   const [cartao, setCartao] = useState('');
   const [crediario, setCrediario] = useState('');
   const [received, setReceived] = useState('');
+  const [cardType, setCardType] = useState<'CREDIT' | 'DEBIT' | ''>('');
   const [error, setError] = useState<string | null>(null);
 
   const parsed = useMemo(() => {
@@ -80,6 +82,10 @@ export default function MixedPaymentModal({ totalCents, hasCustomer, onCancel, o
       setError('Crediário no misto exige cliente selecionado.');
       return;
     }
+    if (parsed.cartao > 0 && !cardType) {
+      setError('Informe se o cartão é Crédito ou Débito.');
+      return;
+    }
     if (dinheiroPart > 0) {
       if (parsed.received == null || receivedCents < dinheiroPart) {
         setError('Valor recebido em dinheiro insuficiente.');
@@ -92,6 +98,7 @@ export default function MixedPaymentModal({ totalCents, hasCustomer, onCancel, o
       cartao: parsed.cartao,
       crediario: parsed.crediario,
       amount_received_cents: dinheiroPart > 0 ? receivedCents : 0,
+      card_type: parsed.cartao > 0 ? cardType : null,
     });
   }
 
@@ -157,6 +164,24 @@ export default function MixedPaymentModal({ totalCents, hasCustomer, onCancel, o
             />
           </label>
         </div>
+        {(parsed.cartao ?? 0) > 0 ? (
+          <div className="payment-options" style={{ marginTop: 10 }}>
+            <button
+              type="button"
+              className={cardType === 'CREDIT' ? 'pay-btn active' : 'pay-btn'}
+              onClick={() => setCardType('CREDIT')}
+            >
+              Crédito
+            </button>
+            <button
+              type="button"
+              className={cardType === 'DEBIT' ? 'pay-btn active' : 'pay-btn'}
+              onClick={() => setCardType('DEBIT')}
+            >
+              Débito
+            </button>
+          </div>
+        ) : null}
         {dinheiroPart > 0 && (
           <div className="form-grid" style={{ marginTop: 12 }}>
             <label>

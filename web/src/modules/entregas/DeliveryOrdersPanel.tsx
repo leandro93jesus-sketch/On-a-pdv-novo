@@ -118,6 +118,7 @@ export default function DeliveryOrdersPanel() {
   // Pagamento / detalhe
   const [showPay, setShowPay] = useState(false);
   const [payMethod, setPayMethod] = useState('dinheiro');
+  const [payCardType, setPayCardType] = useState<'CREDIT' | 'DEBIT' | ''>('');
   const [payAmount, setPayAmount] = useState('');
   const [received, setReceived] = useState('');
   const [mistoSecond, setMistoSecond] = useState('pix');
@@ -376,11 +377,23 @@ export default function DeliveryOrdersPanel() {
           setError('No pagamento misto, informe dois valores que somem o saldo do pedido');
           return;
         }
+        if (mistoSecond === 'cartao' && !payCardType) {
+          setError('Informe se o cartão é Crédito ou Débito.');
+          return;
+        }
         payments = [
           { method: 'dinheiro', amount_cents: a1, amount_received_cents: a1 },
-          { method: mistoSecond, amount_cents: a2 },
+          {
+            method: mistoSecond,
+            amount_cents: a2,
+            ...(mistoSecond === 'cartao' ? { card_type: payCardType } : {}),
+          },
         ];
       } else {
+        if (payMethod === 'cartao' && !payCardType) {
+          setError('Informe se o cartão é Crédito ou Débito.');
+          return;
+        }
         payments = [
           {
             method: payMethod,
@@ -388,6 +401,7 @@ export default function DeliveryOrdersPanel() {
             ...(payMethod === 'dinheiro' && received
               ? { amount_received_cents: Math.round(Number(String(received).replace(',', '.')) * 100) }
               : {}),
+            ...(payMethod === 'cartao' ? { card_type: payCardType } : {}),
           },
         ];
       }
@@ -1209,7 +1223,12 @@ export default function DeliveryOrdersPanel() {
                 <select
                   className="field-input"
                   value={payMethod}
-                  onChange={(e) => setPayMethod(e.target.value)}
+                  onChange={(e) => {
+                    setPayMethod(e.target.value);
+                    if (e.target.value !== 'cartao' && mistoSecond !== 'cartao') {
+                      setPayCardType('');
+                    }
+                  }}
                 >
                   <option value="dinheiro">DINHEIRO</option>
                   <option value="pix">PIX</option>
@@ -1218,6 +1237,20 @@ export default function DeliveryOrdersPanel() {
                   <option value="misto">MISTO</option>
                 </select>
               </label>
+              {(payMethod === 'cartao' || (payMethod === 'misto' && mistoSecond === 'cartao')) && (
+                <label>
+                  Cartão
+                  <select
+                    className="field-input"
+                    value={payCardType}
+                    onChange={(e) => setPayCardType(e.target.value as 'CREDIT' | 'DEBIT' | '')}
+                  >
+                    <option value="">Selecione…</option>
+                    <option value="CREDIT">CRÉDITO</option>
+                    <option value="DEBIT">DÉBITO</option>
+                  </select>
+                </label>
+              )}
               <label>
                 Valor (R$)
                 <input
@@ -1243,7 +1276,10 @@ export default function DeliveryOrdersPanel() {
                     <select
                       className="field-input"
                       value={mistoSecond}
-                      onChange={(e) => setMistoSecond(e.target.value)}
+                      onChange={(e) => {
+                        setMistoSecond(e.target.value);
+                        if (e.target.value !== 'cartao') setPayCardType('');
+                      }}
                     >
                       <option value="pix">PIX</option>
                       <option value="cartao">CARTÃO</option>

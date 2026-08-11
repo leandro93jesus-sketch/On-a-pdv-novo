@@ -72,6 +72,7 @@ export default function VendasPage() {
   const [suggestions, setSuggestions] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [payment, setPayment] = useState<PaymentMethod>('dinheiro');
+  const [cardType, setCardType] = useState<'CREDIT' | 'DEBIT' | null>(null);
   const [creditEntryInput, setCreditEntryInput] = useState('0,00');
   const [creditInstallments, setCreditInstallments] = useState(1);
   const [creditFirstDue, setCreditFirstDue] = useState(() => {
@@ -520,6 +521,15 @@ export default function VendasPage() {
     }
     const mixed = mixedOverride || mixedDraft;
 
+    if (mode === 'cartao' && !cardType) {
+      setError('Informe se o cartão é Crédito ou Débito.');
+      return;
+    }
+    if (mode === 'misto' && mixed && mixed.cartao > 0 && !mixed.card_type) {
+      setError('Informe se o cartão (no misto) é Crédito ou Débito.');
+      return;
+    }
+
     if ((mode === 'crediario' || (mixed && mixed.crediario > 0)) && !customer) {
       setError('Venda no crediário exige cliente selecionado.');
       return;
@@ -585,15 +595,20 @@ export default function VendasPage() {
               [
                 { method: 'dinheiro', amount_cents: mixed.dinheiro },
                 { method: 'pix', amount_cents: mixed.pix },
-                { method: 'cartao', amount_cents: mixed.cartao },
+                {
+                  method: 'cartao',
+                  amount_cents: mixed.cartao,
+                  card_type: mixed.card_type || undefined,
+                },
                 { method: 'crediario', amount_cents: mixed.crediario },
-              ] as Array<{ method: string; amount_cents: number }>
+              ] as Array<{ method: string; amount_cents: number; card_type?: string }>
             ).filter((p) => p.amount_cents > 0)
           : undefined;
 
       const sale = await createSale({
         payment_method: mode === 'misto' ? undefined : mode,
         payments,
+        card_type: mode === 'cartao' ? cardType : undefined,
         amount_received_cents:
           mode === 'misto' && mixed ? mixed.amount_received_cents : amountReceivedCents,
         discount_cents: discountParse.cents,
@@ -622,6 +637,7 @@ export default function VendasPage() {
       setCart([]);
       setDiscountInput('0,00');
       setPayment('dinheiro');
+      setCardType(null);
       setCreditEntryInput('0,00');
       setCreditInstallments(1);
       setCashReceivedInput('');
@@ -972,12 +988,31 @@ export default function VendasPage() {
                     onClick={() => {
                       setPayment(m.id);
                       setMixedDraft(null);
+                      if (m.id !== 'cartao') setCardType(null);
                     }}
                   >
                     {m.label}
                   </button>
                 ))}
               </div>
+              {payment === 'cartao' ? (
+                <div className="payment-options" style={{ marginTop: 8 }} data-testid="card-type-options">
+                  <button
+                    type="button"
+                    className={cardType === 'CREDIT' ? 'pay-btn active' : 'pay-btn'}
+                    onClick={() => setCardType('CREDIT')}
+                  >
+                    Crédito
+                  </button>
+                  <button
+                    type="button"
+                    className={cardType === 'DEBIT' ? 'pay-btn active' : 'pay-btn'}
+                    onClick={() => setCardType('DEBIT')}
+                  >
+                    Débito
+                  </button>
+                </div>
+              ) : null}
               <div className="payment-options" style={{ marginTop: 8 }}>
                 {PAYMENTS_ROW2.map((m) => (
                   <button
@@ -987,10 +1022,12 @@ export default function VendasPage() {
                     onClick={() => {
                       if (m.id === 'misto') {
                         setPayment('misto');
+                        setCardType(null);
                         setShowMixed(true);
                         return;
                       }
                       setPayment(m.id);
+                      setCardType(null);
                       setMixedDraft(null);
                     }}
                   >

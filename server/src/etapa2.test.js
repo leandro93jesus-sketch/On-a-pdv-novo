@@ -274,6 +274,7 @@ test('13 e 14. cancelamento pós-venda e estorno de estoque', async () => {
   const p = await api('POST', '/api/products', { name: 'Cancelável', price_cents: 700, stock_qty: 10 });
   const sale = await api('POST', '/api/sales', {
     payment_method: 'cartao',
+    card_type: 'DEBIT',
     items: [{ product_id: p.json.id, quantity: 2 }],
   });
   assert.equal(sale.res.status, 201);

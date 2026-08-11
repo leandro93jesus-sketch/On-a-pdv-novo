@@ -35,6 +35,7 @@ export interface SalePayment {
   id: number;
   method: string;
   amount_cents: number;
+  card_type?: 'CREDIT' | 'DEBIT' | null;
   created_at: string;
 }
 
@@ -150,7 +151,8 @@ export interface CreateSalePayload {
   }>;
   discount_cents?: number;
   payment_method?: string;
-  payments?: Array<{ method: string; amount_cents: number }>;
+  payments?: Array<{ method: string; amount_cents: number; card_type?: 'CREDIT' | 'DEBIT' | null }>;
+  card_type?: 'CREDIT' | 'DEBIT' | null;
   amount_received_cents?: number;
   change_cents?: number;
   client_request_id?: string;
@@ -734,14 +736,22 @@ export function exportDatasetApi(dataset: string): Promise<{
   return apiFetch(`/api/export/${dataset}`, { method: 'POST' }).then((r) => handle(r));
 }
 
-export function paymentLabel(method: string | null | undefined): string {
+export function paymentLabel(method: string | null | undefined, cardType?: string | null): string {
+  if (method === 'cartao') {
+    const t = cardType ? String(cardType).toUpperCase() : '';
+    if (t === 'CREDIT') return 'Cartão Crédito';
+    if (t === 'DEBIT') return 'Cartão Débito';
+    return 'Cartão';
+  }
   switch (method) {
     case 'dinheiro':
       return 'Dinheiro';
     case 'pix':
       return 'Pix';
-    case 'cartao':
-      return 'Cartão';
+    case 'cartao_credito':
+      return 'Cartão Crédito';
+    case 'cartao_debito':
+      return 'Cartão Débito';
     case 'crediario':
       return 'Crediário';
     case 'misto':

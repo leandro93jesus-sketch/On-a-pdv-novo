@@ -284,6 +284,7 @@ test('14. bloqueio devolução acima da quantidade', async () => {
   const product = await seedProduct(5, 300);
   const sale = await api('POST', '/api/sales', {
     payment_method: 'cartao',
+    card_type: 'CREDIT',
     items: [{ product_id: product.id, quantity: 2 }],
   });
   const itemId = sale.json.items[0].id;
