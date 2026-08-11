@@ -257,6 +257,20 @@ export function computeExpectedCash(session) {
 export function getCashConference(sessionId) {
   const session = getCashSessionById(sessionId);
   const expected = computeExpectedCash(session);
+  const db = getDb();
+  const cardSplit = db
+    .prepare(
+      `SELECT
+         COALESCE(SUM(CASE WHEN sp.card_type = 'CREDIT' THEN sp.amount_cents ELSE 0 END), 0) AS credit_cents,
+         COALESCE(SUM(CASE WHEN sp.card_type = 'DEBIT' THEN sp.amount_cents ELSE 0 END), 0) AS debit_cents,
+         COALESCE(SUM(CASE WHEN sp.card_type IS NULL THEN sp.amount_cents ELSE 0 END), 0) AS legacy_cents
+       FROM sale_payments sp
+       INNER JOIN sales s ON s.id = sp.sale_id
+       WHERE s.cash_session_id = ?
+         AND s.status = 'completed'
+         AND sp.method = 'cartao'`
+    )
+    .get(Number(sessionId));
   return {
     session,
     expected_amount_cents: expected,
@@ -266,6 +280,9 @@ export function getCashConference(sessionId) {
       sales_dinheiro_cents: session.sales_dinheiro_cents,
       sales_pix_cents: session.sales_pix_cents,
       sales_cartao_cents: session.sales_cartao_cents,
+      sales_cartao_credito_cents: Number(cardSplit?.credit_cents || 0),
+      sales_cartao_debito_cents: Number(cardSplit?.debit_cents || 0),
+      sales_cartao_legado_cents: Number(cardSplit?.legacy_cents || 0),
       sales_crediario_cents: session.sales_crediario_cents || 0,
       cash_in_cents: session.cash_in_cents,
       cash_out_cents: session.cash_out_cents,

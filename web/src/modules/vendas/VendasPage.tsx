@@ -20,6 +20,7 @@ import { isDeliveryAddressComplete } from '../entregas/deliveryAddress';
 import CustomerPicker from './CustomerPicker';
 import MiscItemModal from './MiscItemModal';
 import MixedPaymentModal, { type MixedAmounts } from './MixedPaymentModal';
+import CardPaymentModal, { type CardType } from './CardPaymentModal';
 import ReceiptModal from './ReceiptModal';
 import SalesHistoryModal from './SalesHistoryModal';
 import {
@@ -72,7 +73,8 @@ export default function VendasPage() {
   const [suggestions, setSuggestions] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [payment, setPayment] = useState<PaymentMethod>('dinheiro');
-  const [cardType, setCardType] = useState<'CREDIT' | 'DEBIT' | null>(null);
+  const [cardType, setCardType] = useState<CardType | null>(null);
+  const [showCardModal, setShowCardModal] = useState(false);
   const [creditEntryInput, setCreditEntryInput] = useState('0,00');
   const [creditInstallments, setCreditInstallments] = useState(1);
   const [creditFirstDue, setCreditFirstDue] = useState(() => {
@@ -129,7 +131,7 @@ export default function VendasPage() {
     window.setTimeout(() => searchRef.current?.focus(), 0);
   }
 
-  const anyModalOpen = showMisc || showMixed || showHistory || Boolean(receipt);
+  const anyModalOpen = showMisc || showMixed || showHistory || showCardModal || Boolean(receipt);
   const showSuggestions = query.trim().length > 0;
 
   async function searchProducts(q?: string, barcode?: string) {
@@ -195,6 +197,11 @@ export default function VendasPage() {
           focusSearch();
           return;
         }
+        if (showCardModal) {
+          setShowCardModal(false);
+          focusSearch();
+          return;
+        }
         if (showMixed) {
           setShowMixed(false);
           if (!mixedDraft) setPayment('dinheiro');
@@ -255,11 +262,13 @@ export default function VendasPage() {
     anyModalOpen,
     showMisc,
     showMixed,
+    showCardModal,
     showHistory,
     receipt,
     mixedDraft,
     cart,
     payment,
+    cardType,
     discountInput,
     customer,
     query,
@@ -497,7 +506,7 @@ export default function VendasPage() {
     }
   }
 
-  async function finalizeSale(mixedOverride?: MixedAmounts) {
+  async function finalizeSale(mixedOverride?: MixedAmounts, cardTypeOverride?: CardType | null) {
     if (isDeliveryMode) {
       await createDeliveryOrderFromCart();
       return;
@@ -514,20 +523,29 @@ export default function VendasPage() {
       return;
     }
 
-    const mode = mixedOverride ? 'misto' : payment;
+    const effectiveCardType = cardTypeOverride ?? cardType;
+    const mode = mixedOverride ? 'misto' : payment === 'cartao' || cardTypeOverride ? 'cartao' : payment;
     if (mode === 'misto' && !mixedOverride && !mixedDraft) {
       setShowMixed(true);
       return;
     }
     const mixed = mixedOverride || mixedDraft;
 
-    if (mode === 'cartao' && !cardType) {
-      setError('Informe se o cartão é Crédito ou Débito.');
+    if (mode === 'cartao' && !effectiveCardType) {
+      setShowCardModal(true);
       return;
     }
-    if (mode === 'misto' && mixed && mixed.cartao > 0 && !mixed.card_type) {
-      setError('Informe se o cartão (no misto) é Crédito ou Débito.');
-      return;
+    if (
+      mode === 'misto' &&
+      mixed &&
+      (mixed.cartao_credito ?? 0) + (mixed.cartao_debito ?? 0) + (mixed.cartao ?? 0) > 0
+    ) {
+      const hasSplit =
+        (mixed.cartao_credito ?? 0) > 0 || (mixed.cartao_debito ?? 0) > 0;
+      if (!hasSplit && !mixed.card_type) {
+        setError('Informe se o cartão (no misto) é Crédito ou Débito.');
+        return;
+      }
     }
 
     if ((mode === 'crediario' || (mixed && mixed.crediario > 0)) && !customer) {
@@ -597,9 +615,23 @@ export default function VendasPage() {
                 { method: 'pix', amount_cents: mixed.pix },
                 {
                   method: 'cartao',
-                  amount_cents: mixed.cartao,
-                  card_type: mixed.card_type || undefined,
+                  amount_cents: mixed.cartao_credito ?? 0,
+                  card_type: 'CREDIT' as const,
                 },
+                {
+                  method: 'cartao',
+                  amount_cents: mixed.cartao_debito ?? 0,
+                  card_type: 'DEBIT' as const,
+                },
+                ...(mixed.cartao && mixed.card_type
+                  ? [
+                      {
+                        method: 'cartao',
+                        amount_cents: mixed.cartao,
+                        card_type: mixed.card_type,
+                      },
+                    ]
+                  : []),
                 { method: 'crediario', amount_cents: mixed.crediario },
               ] as Array<{ method: string; amount_cents: number; card_type?: string }>
             ).filter((p) => p.amount_cents > 0)
@@ -608,7 +640,7 @@ export default function VendasPage() {
       const sale = await createSale({
         payment_method: mode === 'misto' ? undefined : mode,
         payments,
-        card_type: mode === 'cartao' ? cardType : undefined,
+        card_type: mode === 'cartao' ? effectiveCardType : undefined,
         amount_received_cents:
           mode === 'misto' && mixed ? mixed.amount_received_cents : amountReceivedCents,
         discount_cents: discountParse.cents,
@@ -986,30 +1018,31 @@ export default function VendasPage() {
                     type="button"
                     className={m.id === payment ? 'pay-btn active' : 'pay-btn'}
                     onClick={() => {
+                      if (m.id === 'cartao') {
+                        setMixedDraft(null);
+                        setShowCardModal(true);
+                        return;
+                      }
                       setPayment(m.id);
                       setMixedDraft(null);
-                      if (m.id !== 'cartao') setCardType(null);
+                      setCardType(null);
                     }}
                   >
                     {m.label}
                   </button>
                 ))}
               </div>
-              {payment === 'cartao' ? (
-                <div className="payment-options" style={{ marginTop: 8 }} data-testid="card-type-options">
+              {payment === 'cartao' && cardType ? (
+                <div className="muted-line" style={{ marginTop: 8 }} data-testid="card-type-selected">
+                  Selecionado:{' '}
+                  <strong>{cardType === 'CREDIT' ? 'CARTÃO CRÉDITO' : 'CARTÃO DÉBITO'}</strong>
                   <button
                     type="button"
-                    className={cardType === 'CREDIT' ? 'pay-btn active' : 'pay-btn'}
-                    onClick={() => setCardType('CREDIT')}
+                    className="linkish"
+                    style={{ marginLeft: 8 }}
+                    onClick={() => setShowCardModal(true)}
                   >
-                    Crédito
-                  </button>
-                  <button
-                    type="button"
-                    className={cardType === 'DEBIT' ? 'pay-btn active' : 'pay-btn'}
-                    onClick={() => setCardType('DEBIT')}
-                  >
-                    Débito
+                    Alterar
                   </button>
                 </div>
               ) : null}
@@ -1075,7 +1108,12 @@ export default function VendasPage() {
                 <div className="muted-line" style={{ marginTop: 8 }}>
                   Misto configurado · informado{' '}
                   {formatBRL(
-                    mixedDraft.dinheiro + mixedDraft.pix + mixedDraft.cartao + mixedDraft.crediario
+                    mixedDraft.dinheiro +
+                      mixedDraft.pix +
+                      (mixedDraft.cartao_credito ?? 0) +
+                      (mixedDraft.cartao_debito ?? 0) +
+                      (mixedDraft.cartao ?? 0) +
+                      mixedDraft.crediario
                   )}
                   <button
                     type="button"
@@ -1181,6 +1219,28 @@ export default function VendasPage() {
             setNotice(null);
             setError(null);
             focusSearch();
+          }}
+        />
+      )}
+
+      {showCardModal && (
+        <CardPaymentModal
+          totalCents={total}
+          initialType={cardType}
+          onBack={() => {
+            setShowCardModal(false);
+            focusSearch();
+          }}
+          onConfirm={(selected) => {
+            setCardType(selected);
+            setPayment('cartao');
+            setMixedDraft(null);
+            setShowCardModal(false);
+            if (cart.length === 0) {
+              setError('Adicione itens ao carrinho antes de confirmar o pagamento.');
+              return;
+            }
+            void finalizeSale(undefined, selected);
           }}
         />
       )}

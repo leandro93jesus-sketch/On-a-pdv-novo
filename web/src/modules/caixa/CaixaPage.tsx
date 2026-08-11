@@ -181,6 +181,18 @@ export default function CaixaPage() {
                 <div><span>Total Pix</span><strong>{formatBRL(current.sales_pix_cents)}</strong></div>
                 <div><span>Total cartão</span><strong>{formatBRL(current.sales_cartao_cents)}</strong></div>
                 <div>
+                  <span>Cartão crédito</span>
+                  <strong>
+                    {formatBRL(conference?.breakdown?.sales_cartao_credito_cents || 0)}
+                  </strong>
+                </div>
+                <div>
+                  <span>Cartão débito</span>
+                  <strong>
+                    {formatBRL(conference?.breakdown?.sales_cartao_debito_cents || 0)}
+                  </strong>
+                </div>
+                <div>
                   <span>Total crediário</span>
                   <strong>{formatBRL(current.sales_crediario_cents || 0)}</strong>
                 </div>
