@@ -52,11 +52,6 @@ nsis:
   include: electron/nsis/installer.nsh
   # Evita pós-processamento que exige Wine estável neste ambiente
   differentialPackage: false
-  # Mensagens alinhadas à atualização segura
-  installerLanguages:
-    - PortugueseBR
-    - English
-  displayLanguageSelector: false
 linux:
   # tar.gz não depende de FUSE (AppImage falha sem libfuse2 em Ubuntu 24.04+)
   target:
