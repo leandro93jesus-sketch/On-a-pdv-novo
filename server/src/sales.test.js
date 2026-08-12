@@ -205,6 +205,7 @@ test('permite estoque negativo quando allow_negative_stock = 1', async () => {
 
   const { res } = await postSale({
     payment_method: 'cartao',
+    card_type: 'CREDIT',
     items: [{ product_id: id, quantity: 3 }],
   });
   assert.equal(res.status, 201);
@@ -268,12 +269,14 @@ test('grava dinheiro, pix e cartão corretamente', async () => {
     const id = insertProduct({ name: `Prod ${method}`, price_cents: 100, stock_qty: 5 });
     const { res, json: sale } = await postSale({
       payment_method: method,
+      ...(method === 'cartao' ? { card_type: 'CREDIT' } : {}),
       items: [{ product_id: id, quantity: 1 }],
     });
     assert.equal(res.status, 201);
-    assert.equal(sale.payment_method, method);
-    const pay = db.prepare('SELECT method FROM sale_payments WHERE sale_id = ?').get(sale.id);
+    assert.equal(sale.payment_method, method === 'cartao' ? 'cartao_credito' : method);
+    const pay = db.prepare('SELECT method, card_type FROM sale_payments WHERE sale_id = ?').get(sale.id);
     assert.equal(pay.method, method);
+    if (method === 'cartao') assert.equal(pay.card_type, 'CREDIT');
   }
 });
 
@@ -331,6 +334,7 @@ test('comprovante e histórico contêm dados completos', async () => {
   const id = insertProduct({ name: 'Detergente', barcode: '999', price_cents: 390, stock_qty: 8 });
   const { json: created } = await postSale({
     payment_method: 'cartao',
+    card_type: 'CREDIT',
     discount_cents: 40,
     items: [
       { product_id: id, quantity: 2 },
@@ -353,7 +357,7 @@ test('comprovante e histórico contêm dados completos', async () => {
   assert.equal(row.sale_number, sale.sale_number);
   assert.ok(row.created_at);
   assert.equal(row.total_cents, sale.total_cents);
-  assert.equal(row.payment_method, 'cartao');
+  assert.equal(row.payment_method, 'cartao_credito');
 });
 
 test('venda sem caixa aberto é bloqueada', async () => {

@@ -14,6 +14,27 @@ import { getCurrentOperator } from './settingsService.js';
 import { beginOperation, commitOperation, failOperation } from './recoveryService.js';
 
 const PAYMENT_METHODS = new Set(['dinheiro', 'pix', 'cartao', 'crediario']);
+const CARD_TYPES = new Set(['CREDIT', 'DEBIT']);
+
+function normalizeCardType(raw, { required = false } = {}) {
+  if (raw == null || String(raw).trim() === '') {
+    if (required) {
+      throw new AppError('Informe se o cartão é Crédito ou Débito', {
+        status: 400,
+        code: 'CARD_TYPE_REQUIRED',
+      });
+    }
+    return null;
+  }
+  const value = String(raw).trim().toUpperCase();
+  if (!CARD_TYPES.has(value)) {
+    throw new AppError('Tipo de cartão inválido (use CREDIT ou DEBIT)', {
+      status: 400,
+      code: 'INVALID_CARD_TYPE',
+    });
+  }
+  return value;
+}
 
 function nextSaleNumber(db) {
   const row = db.prepare(`SELECT COALESCE(MAX(id), 0) AS max_id FROM sales`).get();
@@ -50,7 +71,13 @@ function mapSale(row) {
 function resolvePaymentLabel(payments) {
   if (!payments?.length) return null;
   if (payments.length > 1) return 'misto';
-  return payments[0].method || null;
+  const p = payments[0];
+  if (p.method === 'cartao') {
+    if (p.card_type === 'CREDIT') return 'cartao_credito';
+    if (p.card_type === 'DEBIT') return 'cartao_debito';
+    return 'cartao';
+  }
+  return p.method || null;
 }
 
 function periodRange(period) {
@@ -106,7 +133,7 @@ export function getSaleById(id) {
 
   const payments = db
     .prepare(
-      `SELECT id, method, amount_cents, created_at
+      `SELECT id, method, amount_cents, card_type, created_at
        FROM sale_payments WHERE sale_id = ? ORDER BY id`
     )
     .all(id);
@@ -200,6 +227,7 @@ export function listSales({
       `SELECT s.*,
          (SELECT COUNT(*) FROM sale_payments spc WHERE spc.sale_id = s.id) AS payments_count,
          (SELECT method FROM sale_payments sp WHERE sp.sale_id = s.id ORDER BY sp.id LIMIT 1) AS first_payment_method,
+         (SELECT card_type FROM sale_payments sp WHERE sp.sale_id = s.id ORDER BY sp.id LIMIT 1) AS first_card_type,
          c.name AS customer_name,
          c.phone AS customer_phone
        FROM sales s
@@ -213,7 +241,11 @@ export function listSales({
   return rows.map((r) => ({
     ...mapSale(r),
     payment_method:
-      Number(r.payments_count) > 1 ? 'misto' : r.first_payment_method || null,
+      Number(r.payments_count) > 1
+        ? 'misto'
+        : resolvePaymentLabel([
+            { method: r.first_payment_method, card_type: r.first_card_type },
+          ]),
     customer_name: r.customer_name ?? null,
     customer_phone: r.customer_phone ?? null,
   }));
@@ -352,7 +384,13 @@ export function createSale(payload = {}) {
         code: 'INVALID_PAYMENT_METHOD',
       });
     }
-    payments = [{ method, amount_cents: total }];
+    payments = [
+      {
+        method,
+        amount_cents: total,
+        card_type: payload.card_type,
+      },
+    ];
   }
 
   let paymentsSum = 0;
@@ -371,8 +409,18 @@ export function createSale(payload = {}) {
         code: 'INVALID_PAYMENT_AMOUNT',
       });
     }
+    const card_type =
+      method === 'cartao'
+        ? normalizeCardType(p.card_type, { required: true })
+        : null;
+    if (method !== 'cartao' && p.card_type != null && String(p.card_type).trim() !== '') {
+      throw new AppError('Tipo de cartão só se aplica à forma Cartão', {
+        status: 400,
+        code: 'CARD_TYPE_NOT_ALLOWED',
+      });
+    }
     paymentsSum += amount;
-    return { method, amount_cents: amount };
+    return { method, amount_cents: amount, card_type };
   });
 
   if (paymentsSum !== total) {
@@ -447,8 +495,8 @@ export function createSale(payload = {}) {
     )
   `);
   const insertPayment = db.prepare(`
-    INSERT INTO sale_payments (sale_id, method, amount_cents)
-    VALUES (?, ?, ?)
+    INSERT INTO sale_payments (sale_id, method, amount_cents, card_type)
+    VALUES (?, ?, ?, ?)
   `);
 
   const opKey = clientRequestId || `sale-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -518,7 +566,7 @@ export function createSale(payload = {}) {
       }
 
       for (const p of normalizedPayments) {
-        insertPayment.run(id, p.method, p.amount_cents);
+        insertPayment.run(id, p.method, p.amount_cents, p.card_type);
       }
 
       recordSaleOnCash(db, {

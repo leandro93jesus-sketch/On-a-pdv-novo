@@ -691,7 +691,11 @@ export function confirmDeliveryOrderPayment(orderId, payload = {}) {
   if (paySum > 0) {
     const sale = createSale({
       payment_method: payments.length === 1 ? payments[0].method : undefined,
-      payments: payments.map((p) => ({ method: p.method, amount_cents: p.amount_cents })),
+      payments: payments.map((p) => ({
+        method: p.method,
+        amount_cents: p.amount_cents,
+        card_type: p.card_type || null,
+      })),
       amount_received_cents: payments.find((p) => p.method === 'dinheiro')?.amount_received_cents,
       discount_cents: 0,
       customer_id: order.customer_id,
@@ -727,13 +731,31 @@ export function confirmDeliveryOrderPayment(orderId, payload = {}) {
 
     const insertPay = db.prepare(
       `INSERT INTO delivery_order_payments (
-         order_id, method, amount_cents, amount_received_cents, change_cents, note, user_name, client_request_id
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+         order_id, method, amount_cents, amount_received_cents, change_cents, note, user_name, client_request_id, card_type
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     for (const p of payments) {
       const received = p.amount_received_cents != null ? Number(p.amount_received_cents) : null;
       const change =
         received != null && Number.isInteger(received) ? Math.max(0, received - Number(p.amount_cents)) : 0;
+      const cardType =
+        p.method === 'cartao'
+          ? p.card_type
+            ? String(p.card_type).trim().toUpperCase()
+            : null
+          : null;
+      if (p.method === 'cartao' && !cardType) {
+        throw new AppError('Informe se o cartão é Crédito ou Débito', {
+          status: 400,
+          code: 'CARD_TYPE_REQUIRED',
+        });
+      }
+      if (cardType && cardType !== 'CREDIT' && cardType !== 'DEBIT') {
+        throw new AppError('Tipo de cartão inválido (use CREDIT ou DEBIT)', {
+          status: 400,
+          code: 'INVALID_CARD_TYPE',
+        });
+      }
       insertPay.run(
         Number(orderId),
         p.method,
@@ -746,7 +768,8 @@ export function confirmDeliveryOrderPayment(orderId, payload = {}) {
           ? String(payload.client_request_id)
           : p.client_request_id
             ? String(p.client_request_id)
-            : null
+            : null,
+        cardType
       );
     }
 

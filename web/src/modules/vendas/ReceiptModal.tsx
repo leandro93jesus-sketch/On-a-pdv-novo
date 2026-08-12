@@ -169,7 +169,7 @@ export default function ReceiptModal({
             </div>
             {(sale.payments ?? []).map((p) => (
               <div className="summary-row" key={p.id}>
-                <span>{paymentLabel(p.method)}</span>
+                <span>{paymentLabel(p.method, p.card_type)}</span>
                 <span>{formatBRL(p.amount_cents)}</span>
               </div>
             ))}

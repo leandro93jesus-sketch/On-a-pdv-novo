@@ -1,12 +1,17 @@
 import { useMemo, useState } from 'react';
 import { formatBRL } from '../../api/client';
+import type { CardType } from './CardPaymentModal';
 
 export type MixedAmounts = {
   dinheiro: number;
   pix: number;
-  cartao: number;
+  /** @deprecated prefer cartao_credito / cartao_debito */
+  cartao?: number;
+  cartao_credito?: number;
+  cartao_debito?: number;
   crediario: number;
   amount_received_cents: number;
+  card_type?: CardType | null;
 };
 
 type Props = {
@@ -32,7 +37,8 @@ function centsToInput(cents: number): string {
 export default function MixedPaymentModal({ totalCents, hasCustomer, onCancel, onConfirm }: Props) {
   const [dinheiro, setDinheiro] = useState('');
   const [pix, setPix] = useState('');
-  const [cartao, setCartao] = useState('');
+  const [cartaoCredito, setCartaoCredito] = useState('');
+  const [cartaoDebito, setCartaoDebito] = useState('');
   const [crediario, setCrediario] = useState('');
   const [received, setReceived] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -41,14 +47,19 @@ export default function MixedPaymentModal({ totalCents, hasCustomer, onCancel, o
     return {
       dinheiro: parseMoney(dinheiro),
       pix: parseMoney(pix),
-      cartao: parseMoney(cartao),
+      cartao_credito: parseMoney(cartaoCredito),
+      cartao_debito: parseMoney(cartaoDebito),
       crediario: parseMoney(crediario),
       received: parseMoney(received),
     };
-  }, [dinheiro, pix, cartao, crediario, received]);
+  }, [dinheiro, pix, cartaoCredito, cartaoDebito, crediario, received]);
 
   const informed =
-    (parsed.dinheiro ?? 0) + (parsed.pix ?? 0) + (parsed.cartao ?? 0) + (parsed.crediario ?? 0);
+    (parsed.dinheiro ?? 0) +
+    (parsed.pix ?? 0) +
+    (parsed.cartao_credito ?? 0) +
+    (parsed.cartao_debito ?? 0) +
+    (parsed.crediario ?? 0);
   const remaining = totalCents - informed;
   const dinheiroPart = parsed.dinheiro ?? 0;
   const receivedCents = parsed.received == null ? dinheiroPart : parsed.received;
@@ -58,7 +69,8 @@ export default function MixedPaymentModal({ totalCents, hasCustomer, onCancel, o
     if (
       parsed.dinheiro == null ||
       parsed.pix == null ||
-      parsed.cartao == null ||
+      parsed.cartao_credito == null ||
+      parsed.cartao_debito == null ||
       parsed.crediario == null
     ) {
       setError('Valores inválidos.');
@@ -89,9 +101,12 @@ export default function MixedPaymentModal({ totalCents, hasCustomer, onCancel, o
     onConfirm({
       dinheiro: parsed.dinheiro,
       pix: parsed.pix,
-      cartao: parsed.cartao,
+      cartao_credito: parsed.cartao_credito,
+      cartao_debito: parsed.cartao_debito,
+      cartao: 0,
       crediario: parsed.crediario,
       amount_received_cents: dinheiroPart > 0 ? receivedCents : 0,
+      card_type: null,
     });
   }
 
@@ -137,13 +152,25 @@ export default function MixedPaymentModal({ totalCents, hasCustomer, onCancel, o
             />
           </label>
           <label>
-            Cartão
+            Cartão Crédito
             <input
               className="field-input"
-              value={cartao}
-              onChange={(e) => setCartao(e.target.value)}
+              value={cartaoCredito}
+              onChange={(e) => setCartaoCredito(e.target.value)}
               inputMode="decimal"
               placeholder="0,00"
+              data-testid="mixed-cartao-credito"
+            />
+          </label>
+          <label>
+            Cartão Débito
+            <input
+              className="field-input"
+              value={cartaoDebito}
+              onChange={(e) => setCartaoDebito(e.target.value)}
+              inputMode="decimal"
+              placeholder="0,00"
+              data-testid="mixed-cartao-debito"
             />
           </label>
           <label>

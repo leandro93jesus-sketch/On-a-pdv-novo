@@ -103,7 +103,7 @@ test('misto rejeita soma menor ou maior', async () => {
     client_request_id: `f3-low-${Date.now()}`,
     payments: [
       { method: 'pix', amount_cents: 200 },
-      { method: 'cartao', amount_cents: 200 },
+      { method: 'cartao', amount_cents: 200, card_type: 'CREDIT' },
     ],
     items: [{ product_id: p.id, quantity: 1 }],
   });
@@ -114,7 +114,7 @@ test('misto rejeita soma menor ou maior', async () => {
     client_request_id: `f3-high-${Date.now()}`,
     payments: [
       { method: 'pix', amount_cents: 600 },
-      { method: 'cartao', amount_cents: 600 },
+      { method: 'cartao', amount_cents: 600, card_type: 'DEBIT' },
     ],
     items: [{ product_id: p.id, quantity: 1 }],
   });
@@ -188,7 +188,7 @@ test('item diversos continua funcionando com misto', async () => {
     client_request_id: `f3-misc-${Date.now()}`,
     payments: [
       { method: 'pix', amount_cents: 300 },
-      { method: 'cartao', amount_cents: 200 },
+      { method: 'cartao', amount_cents: 200, card_type: 'CREDIT' },
     ],
     items: [
       {
