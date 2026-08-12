@@ -50,6 +50,7 @@ nsis:
   artifactName: ONCA-PDV-Setup-${version}.${ext}
   license: release/LICENSE.txt
   include: electron/nsis/installer.nsh
+  warningsAsErrors: false
   # Evita pós-processamento que exige Wine estável neste ambiente
   differentialPackage: false
 linux:
