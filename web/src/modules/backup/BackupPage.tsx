@@ -45,6 +45,7 @@ export default function BackupPage() {
   const [restoreTarget, setRestoreTarget] = useState<BackupRecord | null>(null);
   const [restorePreview, setRestorePreview] = useState<Record<string, unknown> | null>(null);
   const [restoreConfirm, setRestoreConfirm] = useState(false);
+  const [allowOverwriteNewer, setAllowOverwriteNewer] = useState(false);
   const [restoreReport, setRestoreReport] = useState<Record<string, unknown> | null>(null);
 
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -96,6 +97,7 @@ export default function BackupPage() {
     setBusy(true);
     setError(null);
     setRestoreConfirm(false);
+    setAllowOverwriteNewer(false);
     setRestoreReport(null);
     try {
       const preview = await previewRestoreApi(b.filepath);
@@ -113,10 +115,21 @@ export default function BackupPage() {
       setError('Marque a confirmação para restaurar.');
       return;
     }
+    const needsForce = Boolean(restorePreview?.requires_allow_overwrite_newer_data);
+    if (needsForce && !allowOverwriteNewer) {
+      setError(
+        'O banco atual parece mais novo que este backup. Marque a confirmação de sobrescrita ou cancele para preservar os dados atuais.'
+      );
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      const result = await restoreBackupApi(restoreTarget.filepath, true);
+      const result = await restoreBackupApi(
+        restoreTarget.filepath,
+        true,
+        needsForce ? allowOverwriteNewer : false
+      );
       if (!result.ok || !result.verified) {
         setError('Restauração não verificada. Os dados podem não ter sido carregados.');
         return;
@@ -131,6 +144,7 @@ export default function BackupPage() {
       setRestoreTarget(null);
       setRestorePreview(null);
       setRestoreConfirm(false);
+      setAllowOverwriteNewer(false);
       await loadBackups();
       await loadActiveDb();
       window.setTimeout(() => {
@@ -180,6 +194,7 @@ export default function BackupPage() {
         });
         setRestorePreview(preview);
         setRestoreConfirm(false);
+        setAllowOverwriteNewer(false);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro no upload');
@@ -499,6 +514,14 @@ export default function BackupPage() {
                   {String(restorePreview.warning || '')} Será criado{' '}
                   <strong>PRE-RESTAURACAO-*</strong> antes.
                 </p>
+                {restorePreview.app_version ? (
+                  <p className="muted-line">Versão do backup: {String(restorePreview.app_version)}</p>
+                ) : null}
+                {restorePreview.current_has_newer_data ? (
+                  <p style={{ color: 'var(--danger, #b42318)', marginTop: 8 }}>
+                    Banco atual parece mais novo/completo. Preferir preservar o banco atual.
+                  </p>
+                ) : null}
 
                 <label className="check-inline">
                   <input
@@ -508,6 +531,16 @@ export default function BackupPage() {
                   />
                   Confirmo restaurar este backup no banco atual em uso
                 </label>
+                {restorePreview.requires_allow_overwrite_newer_data ? (
+                  <label className="check-inline">
+                    <input
+                      type="checkbox"
+                      checked={allowOverwriteNewer}
+                      onChange={(e) => setAllowOverwriteNewer(e.target.checked)}
+                    />
+                    Entendo que o banco atual parece mais novo e desejo sobrescrever mesmo assim
+                  </label>
+                ) : null}
                 <div className="modal-actions">
                   <button
                     type="button"
@@ -516,6 +549,7 @@ export default function BackupPage() {
                       setRestoreTarget(null);
                       setRestorePreview(null);
                       setRestoreConfirm(false);
+                      setAllowOverwriteNewer(false);
                     }}
                   >
                     CANCELAR
@@ -523,7 +557,12 @@ export default function BackupPage() {
                   <button
                     type="button"
                     className="btn btn-danger"
-                    disabled={busy || !restoreConfirm}
+                    disabled={
+                      busy ||
+                      !restoreConfirm ||
+                      (Boolean(restorePreview.requires_allow_overwrite_newer_data) &&
+                        !allowOverwriteNewer)
+                    }
                     onClick={() => void confirmRestore()}
                   >
                     IMPORTAR / RESTAURAR

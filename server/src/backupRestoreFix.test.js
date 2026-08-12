@@ -118,10 +118,20 @@ test('restore cria PRE-RESTAURACAO, verifica contagens e reabre mesmo DB', async
   assert.equal(preview.json.counts_in_backup.products, 1);
   assert.equal(preview.json.counts_current.products, 2);
   assert.equal(preview.json.destination_db, process.env.PDV_DB_PATH);
+  assert.equal(preview.json.current_has_newer_data, true);
+  assert.equal(preview.json.requires_allow_overwrite_newer_data, true);
+
+  const blocked = await api('POST', '/api/backups/restore', {
+    filepath: b1.json.filepath,
+    confirm: true,
+  });
+  assert.equal(blocked.status, 409);
+  assert.equal(blocked.json.code, 'CURRENT_DB_NEWER_THAN_BACKUP');
 
   const restored = await api('POST', '/api/backups/restore', {
     filepath: b1.json.filepath,
     confirm: true,
+    allow_overwrite_newer_data: true,
   });
   assert.equal(restored.status, 200);
   assert.equal(restored.json.ok, true);

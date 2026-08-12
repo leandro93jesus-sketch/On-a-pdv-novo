@@ -77,6 +77,7 @@ router.post('/restore', requireAuth, requireAdmin, (req, res, next) => {
     const result = restoreBackup(req.body?.filepath, {
       createdBy: req.user?.name,
       confirm: Boolean(req.body?.confirm),
+      allow_overwrite_newer_data: Boolean(req.body?.allow_overwrite_newer_data),
     });
     res.json(result);
   } catch (err) {

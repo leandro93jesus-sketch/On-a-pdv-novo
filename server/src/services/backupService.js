@@ -531,9 +531,57 @@ export function validateBackupFile(filePath) {
   };
 }
 
+/**
+ * Detecta se o banco ATIVO parece mais novo/completo que o backup.
+ * Usado para NÃO sobrescrever vendas recentes com backup antigo.
+ */
+export function assessCurrentVsBackup(currentCounts = {}, backupCounts = {}, meta = {}) {
+  const curSales = Number(currentCounts?.sales || 0);
+  const bakSales = Number(backupCounts?.sales || 0);
+  const curProducts = Number(currentCounts?.products || 0);
+  const bakProducts = Number(backupCounts?.products || 0);
+  const curCustomers = Number(currentCounts?.customers || 0);
+  const bakCustomers = Number(backupCounts?.customers || 0);
+  const reasons = [];
+
+  if (curSales > bakSales) {
+    reasons.push(`vendas atuais (${curSales}) > backup (${bakSales})`);
+  }
+  if (curSales === bakSales && curProducts > bakProducts) {
+    reasons.push(`produtos atuais (${curProducts}) > backup (${bakProducts})`);
+  }
+  if (curSales === bakSales && curCustomers > bakCustomers) {
+    reasons.push(`clientes atuais (${curCustomers}) > backup (${bakCustomers})`);
+  }
+
+  const currentMtime = meta.current_mtime ? Date.parse(meta.current_mtime) : NaN;
+  const backupMtime = meta.backup_mtime ? Date.parse(meta.backup_mtime) : NaN;
+  if (
+    Number.isFinite(currentMtime) &&
+    Number.isFinite(backupMtime) &&
+    currentMtime > backupMtime &&
+    (curSales > bakSales || curProducts > bakProducts || curCustomers > bakCustomers)
+  ) {
+    reasons.push('arquivo do banco atual é mais recente que o backup');
+  }
+
+  const unique = [...new Set(reasons)];
+  return {
+    current_has_newer_data: unique.length > 0,
+    reasons: unique,
+    recommendation: unique.length
+      ? 'PRESERVAR o banco atual. Não restaurar este backup por cima, salvo decisão explícita do operador.'
+      : 'Backup pode ser restaurado com confirmação (será criado PRE-RESTAURACAO).',
+  };
+}
+
 export function previewRestore(filePath) {
   const validation = validateBackupFile(filePath);
   const active = getActiveDbInfo();
+  const comparison = assessCurrentVsBackup(active.counts, validation.counts, {
+    current_mtime: active.mtime,
+    backup_mtime: validation.mtime,
+  });
   return {
     valid: true,
     detected_type: 'DB',
@@ -560,8 +608,13 @@ export function previewRestore(filePath) {
     app_version: validation.app_version,
     db_schema_version: validation.db_schema_version,
     tables: validation.tables,
-    warning:
-      'A restauração substituirá o banco ATUAL em uso. Será criado PRE-RESTAURACAO-* antes. Sucesso só após reabrir o banco e conferir contagens.',
+    current_has_newer_data: comparison.current_has_newer_data,
+    comparison_reasons: comparison.reasons,
+    recommendation: comparison.recommendation,
+    requires_allow_overwrite_newer_data: comparison.current_has_newer_data,
+    warning: comparison.current_has_newer_data
+      ? `ATENÇÃO: o banco ATUAL parece mais novo/completo que este backup (${comparison.reasons.join('; ')}). Restaurar apagaria dados recentes. Só continue com confirmação explícita de sobrescrita.`
+      : 'A restauração substituirá o banco ATUAL em uso. Será criado PRE-RESTAURACAO-* antes. Sucesso só após reabrir o banco e conferir contagens.',
   };
 }
 
@@ -604,7 +657,10 @@ export function registerUploadedBackup(filepath, { createdBy = null, originalNam
   };
 }
 
-export function restoreBackup(filePath, { createdBy = null, confirm = false } = {}) {
+export function restoreBackup(
+  filePath,
+  { createdBy = null, confirm = false, allow_overwrite_newer_data = false } = {}
+) {
   if (!confirm) {
     throw new AppError('Confirmação explícita necessária (confirm=true)', {
       status: 400,
@@ -629,6 +685,26 @@ export function restoreBackup(filePath, { createdBy = null, confirm = false } = 
         status: 500,
         code: 'DB_PATH_MISMATCH',
         details: { active: activeBefore.db_path, destination: dbPath },
+      }
+    );
+  }
+
+  const comparison = assessCurrentVsBackup(countsBefore, countsExpected, {
+    current_mtime: activeBefore.mtime,
+    backup_mtime: validation.mtime,
+  });
+  if (comparison.current_has_newer_data && !allow_overwrite_newer_data) {
+    throw new AppError(
+      'BANCO ATUAL PARECE MAIS NOVO QUE O BACKUP — restauração bloqueada para não perder vendas/dados recentes. Preserve o banco atual ou confirme allow_overwrite_newer_data=true conscientemente.',
+      {
+        status: 409,
+        code: 'CURRENT_DB_NEWER_THAN_BACKUP',
+        details: {
+          reasons: comparison.reasons,
+          counts_current: countsBefore,
+          counts_in_backup: countsExpected,
+          recommendation: comparison.recommendation,
+        },
       }
     );
   }
