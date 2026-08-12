@@ -43,11 +43,14 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: ONÇA PDV
   uninstallDisplayName: ONÇA PDV
+  # CRÍTICO: nunca apagar AppData/banco do usuário na desinstalação/atualização
   deleteAppDataOnUninstall: false
   packElevateHelper: false
   runAfterFinish: false
   artifactName: ONCA-PDV-Setup-${version}.${ext}
   license: release/LICENSE.txt
+  include: electron/nsis/installer.nsh
+  warningsAsErrors: false
   # Evita pós-processamento que exige Wine estável neste ambiente
   differentialPackage: false
 linux:

@@ -5,7 +5,9 @@ import {
   getDbPath,
   getDataDir,
   migrateLegacyDbIfNeeded,
+  findExistingProductionDb,
 } from './db/paths.js';
+import { prepareDatabaseForOpen, writePostOpenCounts } from './db/safeUpdate.js';
 import { ensureBootstrapAdmin } from './services/authService.js';
 import { setSetting } from './services/settingsService.js';
 import { recoverIncompleteOperations } from './services/recoveryService.js';
@@ -15,6 +17,15 @@ import { APP_NAME, APP_VERSION } from './version.js';
 
 /** Inicializa diretórios, banco, migrations e bootstrap de admin. */
 export function bootstrapRuntime() {
+  // Preferir banco de produção já existente (não mover; não criar vazio por engano).
+  const existing = findExistingProductionDb();
+  if (existing) {
+    logger.info('Banco de produção localizado', {
+      path: existing.path,
+      size: existing.size,
+    });
+  }
+
   ensureDataDir();
   let releaseLock = () => {};
   try {
@@ -33,10 +44,28 @@ export function bootstrapRuntime() {
     logger.info('DB legado copiado para data dir', migrated);
   }
 
+  let safeUpdate;
+  try {
+    safeUpdate = prepareDatabaseForOpen();
+  } catch (err) {
+    if (err?.code === 'DB_NOT_FOUND_ON_UPGRADE' || err?.code === 'DB_CORRUPT') {
+      logger.error(err.message, err.details || {});
+      console.error(`[onca-pdv] ${err.message}`);
+      if (err.details) {
+        console.error('[onca-pdv] detalhes:', JSON.stringify(err.details));
+      }
+      // Código distinto para o Electron oferecer "Localizar banco"
+      process.exit(78);
+    }
+    throw err;
+  }
+
   getDb();
   ensureBootstrapAdmin();
   setSetting('app_version', APP_VERSION);
   setSetting('app_name', APP_NAME);
+
+  const countsAfter = writePostOpenCounts(safeUpdate);
 
   try {
     const recovery = recoverIncompleteOperations();
@@ -62,5 +91,7 @@ export function bootstrapRuntime() {
     dataDir: getDataDir(),
     dbPath: getDbPath(),
     releaseLock,
+    safeUpdate,
+    countsAfter,
   };
 }
