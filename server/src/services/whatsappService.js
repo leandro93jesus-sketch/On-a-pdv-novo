@@ -1,5 +1,6 @@
 import { getSetting } from './settingsService.js';
 import { getSaleById } from './salesService.js';
+import { getDeliveryOrder } from './deliveryOrdersService.js';
 import { AppError } from '../utils/errors.js';
 
 function digitsOnly(phone) {
@@ -32,11 +33,15 @@ export function buildWhatsAppUrl({ phone, message } = {}) {
   return { phone: number, message: text, url };
 }
 
+const MANUAL_ATTACH_NOTE =
+  'PDF GERADO COM SUCESSO. O WhatsApp Web/Desktop não permite anexar o arquivo automaticamente neste ambiente. Abra o PDF ou a pasta e anexe o comprovante na conversa.';
+
 /**
- * Monta URL do WhatsApp Web/App com mensagem.
- * Não anexa PDF automaticamente — a plataforma geralmente não permite.
+ * Monta URL do WhatsApp com frase curta.
+ * NÃO lista produtos — o conteúdo principal é o PDF gerado.
+ * pdf_attached permanece false (limitação da plataforma).
  */
-export function buildWhatsAppShare({ saleId, phone, message } = {}) {
+export function buildWhatsAppShare({ saleId, phone, message, pdfMeta } = {}) {
   const sale = getSaleById(saleId);
   if (!sale) throw new AppError('Venda não encontrada', { status: 404, code: 'NOT_FOUND' });
 
@@ -47,11 +52,12 @@ export function buildWhatsAppShare({ saleId, phone, message } = {}) {
 
   const defaultMsg = getSetting(
     'whatsapp_default_message',
-    'Olá! Segue o comprovante da sua compra na Onça Produtos de Limpeza. Obrigado pela preferência.'
+    'Olá! Segue o comprovante da sua compra na Onça Produtos de Limpeza.'
   );
+  const fileHint = pdfMeta?.filename ? `\nArquivo: ${pdfMeta.filename}` : '';
   const text =
     message?.trim() ||
-    `${defaultMsg}\n\nComprovante: ${sale.sale_number}\nTotal: R$ ${(sale.total_cents / 100).toFixed(2).replace('.', ',')}`;
+    `${defaultMsg}\n\nComprovante: ${sale.sale_number}${fileHint}\n(Anexe o PDF do comprovante nesta conversa.)`;
 
   const built = buildWhatsAppUrl({ phone: number, message: text });
 
@@ -62,8 +68,7 @@ export function buildWhatsAppShare({ saleId, phone, message } = {}) {
     message: built.message,
     url: built.url,
     pdf_attached: false,
-    note:
-      'O WhatsApp Web/App não permite anexar o PDF automaticamente na maioria dos ambientes. Gere o PDF e anexe manualmente se necessário.',
+    note: MANUAL_ATTACH_NOTE,
   };
 }
 
@@ -86,6 +91,47 @@ export function buildDeliveryOrderWhatsAppShare({
     phone: built.phone,
     message: built.message,
     url: built.url,
+    financial_impact: false,
+  };
+}
+
+/**
+ * WhatsApp para documento PDF do pedido (pendente ou pago).
+ * Sem lista de produtos na mensagem.
+ */
+export function buildDeliveryOrderDocumentWhatsAppShare({
+  orderId,
+  phone,
+  message,
+  pdfMeta,
+} = {}) {
+  const order = getDeliveryOrder(orderId);
+  if (!order) throw new AppError('Pedido não encontrado', { status: 404, code: 'ORDER_NOT_FOUND' });
+
+  const number =
+    normalizeWhatsAppNumber(phone) ||
+    normalizeWhatsAppNumber(order.whatsapp) ||
+    normalizeWhatsAppNumber(order.phone);
+
+  const pending = order.payment_status !== 'pago';
+  const defaultMsg = pending
+    ? 'Olá! Segue o pedido de entrega da Onça Produtos de Limpeza (pagamento pendente).'
+    : 'Olá! Segue o comprovante da sua compra na Onça Produtos de Limpeza.';
+  const fileHint = pdfMeta?.filename ? `\nArquivo: ${pdfMeta.filename}` : '';
+  const text =
+    message?.trim() ||
+    `${defaultMsg}\n\nPedido: ${order.order_number}${fileHint}\n(Anexe o PDF nesta conversa.)`;
+
+  const built = buildWhatsAppUrl({ phone: number, message: text });
+  return {
+    order_id: order.id,
+    order_number: order.order_number,
+    phone: built.phone,
+    message: built.message,
+    url: built.url,
+    pdf_attached: false,
+    pending,
+    note: MANUAL_ATTACH_NOTE,
     financial_impact: false,
   };
 }

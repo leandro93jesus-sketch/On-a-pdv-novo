@@ -64,7 +64,9 @@ export default function SalesHistoryModal({ onClose, onOpenSale }: Props) {
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Histórico de vendas">
       <div className="modal modal-wide" style={{ width: 'min(980px, 100%)' }}>
         <h3>Histórico de vendas</h3>
-        <p className="muted-line">Somente consulta. Use Imprimir / WhatsApp no comprovante.</p>
+        <p className="muted-line">
+          Somente consulta. Use Visualizar PDF / Imprimir / Enviar PDF no WhatsApp no comprovante.
+        </p>
         <div className="form-grid" style={{ marginBottom: 12 }}>
           <label className="span-2">
             Busca (número, cliente, telefone, produto, valor…)
@@ -152,6 +154,17 @@ export default function SalesHistoryModal({ onClose, onOpenSale }: Props) {
                     </button>
                     <button
                       type="button"
+                      className="btn btn-ghost"
+                      onClick={() =>
+                        void fetchSale(s.id).then((sale) => {
+                          onOpenSale(sale);
+                        })
+                      }
+                    >
+                      Visualizar PDF
+                    </button>
+                    <button
+                      type="button"
                       className="btn btn-primary"
                       onClick={() =>
                         void fetchSale(s.id).then((sale) => {
@@ -159,7 +172,7 @@ export default function SalesHistoryModal({ onClose, onOpenSale }: Props) {
                         })
                       }
                     >
-                      Imprimir
+                      Imprimir / WhatsApp
                     </button>
                   </td>
                 </tr>
@@ -200,12 +213,21 @@ export default function SalesHistoryModal({ onClose, onOpenSale }: Props) {
               </button>
               <button
                 type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  onOpenSale(detail);
+                }}
+              >
+                Visualizar PDF
+              </button>
+              <button
+                type="button"
                 className="btn btn-primary"
                 onClick={() => {
                   onOpenSale(detail);
                 }}
               >
-                Imprimir / WhatsApp
+                Imprimir / Enviar PDF no WhatsApp
               </button>
             </div>
           </div>
