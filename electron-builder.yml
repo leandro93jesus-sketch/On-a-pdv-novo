@@ -43,13 +43,20 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: ONÇA PDV
   uninstallDisplayName: ONÇA PDV
+  # CRÍTICO: nunca apagar AppData/banco do usuário na desinstalação/atualização
   deleteAppDataOnUninstall: false
   packElevateHelper: false
   runAfterFinish: false
   artifactName: ONCA-PDV-Setup-${version}.${ext}
   license: release/LICENSE.txt
+  include: electron/nsis/installer.nsh
   # Evita pós-processamento que exige Wine estável neste ambiente
   differentialPackage: false
+  # Mensagens alinhadas à atualização segura
+  installerLanguages:
+    - PortugueseBR
+    - English
+  displayLanguageSelector: false
 linux:
   # tar.gz não depende de FUSE (AppImage falha sem libfuse2 em Ubuntu 24.04+)
   target:

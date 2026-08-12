@@ -35,6 +35,7 @@ let shuttingDown = false;
 let apiLogStream = null;
 let lastBootError = null;
 let bootInProgress = false;
+let lastDbResolution = null;
 
 function resolvePort() {
   const n = Number(process.env.PORT || DEFAULT_PORT);
@@ -240,7 +241,171 @@ function closeSplash() {
   splashWindow = null;
 }
 
-function startApiServer(port) {
+/** Candidatos a onca-pdv.db fora da pasta do instalador (AppData persistente). */
+function listProductionDbCandidates() {
+  const userData = app.getPath('userData');
+  const appData = process.env.APPDATA || '';
+  const list = [
+    path.join(userData, 'ONCA-PDV', 'onca-pdv.db'),
+    appData ? path.join(appData, 'ONCA-PDV', 'onca-pdv.db') : null,
+    appData ? path.join(appData, 'onca-pdv', 'ONCA-PDV', 'onca-pdv.db') : null,
+  ].filter(Boolean);
+  return [...new Set(list)];
+}
+
+function findExistingProductionDbFile() {
+  if (process.env.PDV_DB_PATH && fs.existsSync(process.env.PDV_DB_PATH)) {
+    return process.env.PDV_DB_PATH;
+  }
+  const found = [];
+  for (const p of listProductionDbCandidates()) {
+    try {
+      if (fs.existsSync(p)) {
+        const st = fs.statSync(p);
+        if (st.size > 100) found.push({ path: p, size: st.size, mtime: st.mtimeMs });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  if (!found.length) return null;
+  found.sort((a, b) => b.size - a.size || b.mtime - a.mtime);
+  return found[0].path;
+}
+
+function hasPriorInstallDataMarkers() {
+  const dirs = [
+    path.join(app.getPath('userData'), 'ONCA-PDV'),
+    process.env.APPDATA ? path.join(process.env.APPDATA, 'ONCA-PDV') : null,
+    process.env.APPDATA ? path.join(process.env.APPDATA, 'onca-pdv', 'ONCA-PDV') : null,
+  ].filter(Boolean);
+  for (const dir of dirs) {
+    if (!fs.existsSync(dir)) continue;
+    if (fs.existsSync(path.join(dir, 'onca-pdv.db'))) return true;
+    const backups = path.join(dir, 'backups');
+    if (fs.existsSync(backups)) {
+      try {
+        if (fs.readdirSync(backups).some((f) => /\.db$/i.test(f))) return true;
+      } catch {
+        /* ignore */
+      }
+    }
+    if (fs.existsSync(path.join(dir, 'configuracoes', 'impressoras.json'))) return true;
+  }
+  return false;
+}
+
+/**
+ * Antes de subir a API: garante banco de produção em atualização.
+ * NÃO cria banco vazio silenciosamente se parece upgrade.
+ * NÃO restaura backup antigo automaticamente.
+ */
+async function ensureProductionDatabaseReady() {
+  const existing = findExistingProductionDbFile();
+  if (existing) {
+    logApi(`banco produção encontrado: ${existing}`);
+    return { dbPath: existing, dataDir: path.dirname(existing) };
+  }
+
+  // Instalação nova (sem marcadores) — API pode criar banco vazio.
+  if (!app.isPackaged || !hasPriorInstallDataMarkers()) {
+    logApi('nenhum banco prévio — instalação nova permitida');
+    return { dbPath: null, dataDir: path.join(app.getPath('userData'), 'ONCA-PDV') };
+  }
+
+  logApi('ALERTA: marcadores de instalação sem onca-pdv.db');
+
+  while (true) {
+    const { response } = await dialog.showMessageBox({
+      type: 'warning',
+      title: 'BANCO DA VERSÃO ANTERIOR NÃO ENCONTRADO',
+      message: 'BANCO DA VERSÃO ANTERIOR NÃO ENCONTRADO',
+      detail:
+        'NÃO CONTINUE PARA EVITAR PERDA DE DADOS.\n\n' +
+        'O ONÇA PDV já foi usado neste computador, mas o arquivo onca-pdv.db não foi localizado nos caminhos padrão.\n\n' +
+        'Use LOCALIZAR BANCO para apontar o SQLite atual (o mais recente).\n' +
+        'Use LOCALIZAR BACKUP somente se tiver certeza de que é o arquivo correto (não restaura sozinho um backup antigo).',
+      buttons: ['LOCALIZAR BANCO', 'LOCALIZAR BACKUP', 'CANCELAR ATUALIZAÇÃO'],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+    });
+
+    if (response === 2) {
+      throw new Error('Atualização cancelada: banco da versão anterior não encontrado.');
+    }
+
+    const picked = await dialog.showOpenDialog({
+      title: response === 0 ? 'Localizar onca-pdv.db' : 'Localizar backup .db',
+      properties: ['openFile'],
+      filters: [
+        { name: 'SQLite ONÇA PDV', extensions: ['db', 'sqlite'] },
+        { name: 'Todos', extensions: ['*'] },
+      ],
+    });
+    if (picked.canceled || !picked.filePaths?.[0]) continue;
+
+    const selected = picked.filePaths[0];
+    try {
+      const st = fs.statSync(selected);
+      if (st.size < 100) throw new Error('Arquivo muito pequeno');
+      const fd = fs.openSync(selected, 'r');
+      const buf = Buffer.alloc(16);
+      fs.readSync(fd, buf, 0, 16, 0);
+      fs.closeSync(fd);
+      if (!buf.toString('utf8').startsWith('SQLite format 3')) {
+        throw new Error('Arquivo não é SQLite válido');
+      }
+    } catch (err) {
+      await dialog.showMessageBox({
+        type: 'error',
+        title: 'ONÇA PDV',
+        message: 'Arquivo inválido',
+        detail: err.message || String(err),
+        buttons: ['OK'],
+      });
+      continue;
+    }
+
+    if (response === 0) {
+      // Usar o banco no local atual — NÃO mover.
+      logApi(`operador localizou banco: ${selected}`);
+      return { dbPath: selected, dataDir: path.dirname(selected) };
+    }
+
+    // Backup: copiar para o data dir padrão SOMENTE com confirmação explícita.
+    const targetDir = path.join(app.getPath('userData'), 'ONCA-PDV');
+    const targetDb = path.join(targetDir, 'onca-pdv.db');
+    const { response: confirm } = await dialog.showMessageBox({
+      type: 'question',
+      title: 'Confirmar uso do backup',
+      message: 'Usar este backup como banco ativo?',
+      detail:
+        `Origem:\n${selected}\n\nDestino:\n${targetDb}\n\n` +
+        'Isso NÃO acontece automaticamente. Confirme apenas se este for o backup correto e mais recente.',
+      buttons: ['CONFIRMAR CÓPIA', 'VOLTAR'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (confirm !== 0) continue;
+    fs.mkdirSync(targetDir, { recursive: true });
+    if (fs.existsSync(targetDb)) {
+      const safety = path.join(
+        targetDir,
+        'backups',
+        `ONCA-PDV-PRE-RESTORE-${Date.now()}.db`
+      );
+      fs.mkdirSync(path.dirname(safety), { recursive: true });
+      fs.copyFileSync(targetDb, safety);
+    }
+    fs.copyFileSync(selected, targetDb);
+    logApi(`backup copiado manualmente para ${targetDb}`);
+    return { dbPath: targetDb, dataDir: targetDir };
+  }
+}
+
+function startApiServer(port, dbResolution = {}) {
   const entry = serverEntry();
   if (!fs.existsSync(entry)) {
     throw new Error(`Servidor não encontrado: ${entry}`);
@@ -258,6 +423,8 @@ function startApiServer(port) {
   logApi(`resourcesPath=${process.resourcesPath || '(dev)'}`);
   logApi(`userData=${app.getPath('userData')}`);
   logApi(`packaged=${app.isPackaged}`);
+  if (dbResolution.dbPath) logApi(`PDV_DB_PATH=${dbResolution.dbPath}`);
+  if (dbResolution.dataDir) logApi(`PDV_DATA_DIR=${dbResolution.dataDir}`);
 
   if (app.isPackaged && !fs.existsSync(nodePath)) {
     throw new Error(`Node embutido ausente: ${nodePath}`);
@@ -272,6 +439,8 @@ function startApiServer(port) {
     PDV_LOG_CONSOLE: '1',
     PDV_SEED: '0',
   };
+  if (dbResolution.dataDir) env.PDV_DATA_DIR = dbResolution.dataDir;
+  if (dbResolution.dbPath) env.PDV_DB_PATH = dbResolution.dbPath;
   // Evita que o filho herde ELECTRON_RUN_AS_NODE
   delete env.ELECTRON_RUN_AS_NODE;
 
@@ -299,6 +468,34 @@ function startApiServer(port) {
   serverProcess.on('exit', (code, signal) => {
     logApi(`exit code=${code ?? 'null'} signal=${signal ?? 'null'}`);
     serverProcess = null;
+    if (!shuttingDown && code === 78) {
+      dialog
+        .showMessageBox({
+          type: 'error',
+          title: 'BANCO DA VERSÃO ANTERIOR NÃO ENCONTRADO',
+          message: 'BANCO DA VERSÃO ANTERIOR NÃO ENCONTRADO',
+          detail:
+            'NÃO CONTINUE PARA EVITAR PERDA DE DADOS.\n\n' +
+            'A API local recusou criar um banco vazio porque há sinais de instalação anterior.\n' +
+            `Log: ${apiLogPath()}`,
+          buttons: ['LOCALIZAR BANCO…', 'FECHAR'],
+          defaultId: 0,
+          cancelId: 1,
+          noLink: true,
+        })
+        .then(async (r) => {
+          if (r.response === 0) {
+            try {
+              const resolved = await ensureProductionDatabaseReady();
+              lastDbResolution = resolved;
+              void boot();
+            } catch (e) {
+              logApi(`relocate-failed: ${e.message}`);
+            }
+          }
+        });
+      return;
+    }
     if (!shuttingDown && code !== 0 && mainWindow) {
       dialog.showMessageBox({
         type: 'error',
@@ -447,10 +644,17 @@ async function boot() {
       updateSplash({
         api: { text: 'INICIANDO…', kind: 'busy' },
         health: { text: 'AGUARDANDO…', kind: 'busy' },
+        message: 'Localizando banco de dados de produção…',
+        showActions: false,
+      });
+      lastDbResolution = await ensureProductionDatabaseReady();
+      updateSplash({
+        api: { text: 'INICIANDO…', kind: 'busy' },
+        health: { text: 'AGUARDANDO…', kind: 'busy' },
         message: `Iniciando API local na porta ${port}…`,
         showActions: false,
       });
-      startApiServer(port);
+      startApiServer(port, lastDbResolution || {});
       updateSplash({
         api: { text: 'INICIANDO…', kind: 'busy' },
         health: { text: 'VERIFICANDO…', kind: 'busy' },

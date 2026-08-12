@@ -1,4 +1,4 @@
-# Instruções de instalação — ONÇA PDV 1.0.0
+# Instruções de instalação / atualização — ONÇA PDV
 
 ## Requisitos
 
@@ -6,27 +6,48 @@
 - ~300 MB livres para o aplicativo
 - Espaço adicional para banco, backups e logs
 
-## Passos
+## Onde ficam os dados (IMPORTANTE)
 
-1. Feche qualquer instância anterior do ONÇA PDV.
-2. Execute o instalador `ONCA-PDV-Setup-1.0.0.exe`.
-3. Aceite o local de instalação (ou altere se necessário).
-4. Confirme a criação do atalho na área de trabalho.
-5. Conclua e abra o aplicativo pelo atalho **ONÇA PDV**.
+O banco **não** fica na pasta do programa (a que o instalador substitui).
 
-## Primeira execução
+Caminhos persistentes (AppData):
 
-- O app cria `%APPDATA%\ONCA-PDV\` se ainda não existir.
-- Migrations pendentes são aplicadas automaticamente.
-- Se já existir um banco nessa pasta, ele é **preservado** (não sobrescrito).
-- Faça login e troque a senha do administrador se solicitado.
+1. `%APPDATA%\onca-pdv\ONCA-PDV\onca-pdv.db` ← típico do Electron
+2. `%APPDATA%\ONCA-PDV\onca-pdv.db` ← legado / documentação antiga
 
-## Atualizações futuras
+A nova versão localiza o banco **já existente** e o reutiliza (não cria vazio por cima).
 
-Atualizações do aplicativo **não devem** substituir automaticamente:
+## Atualização em computador em uso (produção)
 
-- o banco SQLite
-- backups
-- configurações do usuário
+1. Termine vendas em andamento.
+2. Feche totalmente o ONÇA PDV.
+3. Execute `ONCA-PDV-Setup-[VERSAO].exe`.
+4. Se o instalador detectar banco/dados anteriores, verá o aviso **ATUALIZAÇÃO DO ONÇA PDV** (dados preservados).
+5. Clique para atualizar/instalar.
+6. Na primeira abertura da nova versão:
+   - o banco atual é validado (`integrity_check`);
+   - é criado `backups\ONCA-PDV-PRE-ATUALIZACAO-[DATA-HORA].db`;
+   - só então rodam migrations incrementais (se houver).
 
-Use sempre migrations versionadas.
+**Nunca** restaure automaticamente um backup antigo enquanto o computador continua vendendo.
+
+## Se o banco não for encontrado
+
+A aplicação **não** cria banco vazio silenciosamente em atualização.
+
+Aparecerá:
+
+**BANCO DA VERSÃO ANTERIOR NÃO ENCONTRADO**
+
+Opções: LOCALIZAR BANCO · LOCALIZAR BACKUP · CANCELAR ATUALIZAÇÃO
+
+## Instalação nova
+
+1. Execute o instalador.
+2. Abra pelo atalho **ONÇA PDV**.
+3. Faça login e troque a senha do administrador se solicitado.
+
+## Portátil (ZIP)
+
+Descompacte `ONCA-PDV-[VERSAO]-PORTATIL-WINDOWS-X64.zip` e execute o `.exe`.  
+Os dados de produção continuam em AppData (não dentro da pasta do ZIP), salvo se `PDV_DATA_DIR` / `PDV_DB_PATH` forem definidos.
