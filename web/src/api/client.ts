@@ -1069,19 +1069,31 @@ export interface ReportResult {
 }
 
 export interface BackupRecord {
-  id: number;
+  id?: number | null;
   filename: string;
   filepath: string;
   size_bytes?: number;
-  sha256?: string;
-  app_version?: string;
-  db_schema_version?: string;
-  kind?: string;
+  sha256?: string | null;
+  app_version?: string | null;
+  db_schema_version?: string | null;
+  kind?: string | null;
   created_by?: string | null;
   notes?: string | null;
   created_at?: string;
-  valid?: number | boolean;
+  valid?: number | boolean | null;
   exists?: boolean;
+  source?: string;
+}
+
+export interface ActiveDbInfo {
+  db_path: string;
+  data_dir: string;
+  backups_dir: string;
+  exists: boolean;
+  filename: string;
+  size_bytes: number | null;
+  mtime: string | null;
+  counts: Record<string, number | null> | null;
 }
 
 export interface ImportRun {
@@ -1460,6 +1472,10 @@ export function createBackupApi(payload?: { notes?: string }): Promise<BackupRec
 
 export function listBackupsApi(): Promise<BackupRecord[]> {
   return apiFetch('/api/backups').then((r) => handle<BackupRecord[]>(r));
+}
+
+export function fetchActiveDbInfoApi(): Promise<ActiveDbInfo> {
+  return apiFetch('/api/backups/active-db').then((r) => handle<ActiveDbInfo>(r));
 }
 
 export function previewRestoreApi(filepath: string): Promise<Record<string, unknown>> {
