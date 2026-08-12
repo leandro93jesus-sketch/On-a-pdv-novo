@@ -633,7 +633,11 @@ export default function VendasPage() {
                     ]
                   : []),
                 { method: 'crediario', amount_cents: mixed.crediario },
-              ] as Array<{ method: string; amount_cents: number; card_type?: string }>
+              ] as Array<{
+                method: string;
+                amount_cents: number;
+                card_type?: 'CREDIT' | 'DEBIT';
+              }>
             ).filter((p) => p.amount_cents > 0)
           : undefined;
 
