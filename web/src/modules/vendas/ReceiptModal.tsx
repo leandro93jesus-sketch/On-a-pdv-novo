@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import type { Sale } from '../../api/client';
+import type { ReceiptPdfMeta, Sale } from '../../api/client';
 import {
   buildReceiptPdfUrl,
   formatBRL,
+  generateSaleReceiptPdfApi,
   paymentLabel,
   whatsappShareApi,
 } from '../../api/client';
@@ -30,14 +31,22 @@ export default function ReceiptModal({
   const [waNote, setWaNote] = useState<string | null>(null);
   const [waBusy, setWaBusy] = useState(false);
   const [waPhone, setWaPhone] = useState(sale.customer?.phone || sale.customer?.whatsapp || '');
+  const [showOtherPhone, setShowOtherPhone] = useState(false);
+  const [pdfMeta, setPdfMeta] = useState<ReceiptPdfMeta | null>(null);
   const [choosePrinter, setChoosePrinter] = useState(false);
   const [printNote, setPrintNote] = useState<string | null>(null);
   const [printBusy, setPrintBusy] = useState(false);
   const brand = companyName?.trim() || 'ONÇA PRODUTOS DE LIMPEZA';
   const showSuccess = successBanner && !cancelled;
 
-  function openPdf() {
-    window.open(buildReceiptPdfUrl(sale.id), '_blank', 'noopener,noreferrer');
+  function openPdf(opts?: { download?: boolean; regen?: boolean }) {
+    window.open(buildReceiptPdfUrl(sale.id, opts), '_blank', 'noopener,noreferrer');
+  }
+
+  async function ensurePdf(force = false) {
+    const meta = await generateSaleReceiptPdfApi(sale.id, { force });
+    setPdfMeta(meta);
+    return meta;
   }
 
   async function doPrint(choice: ChoosePrinterResult) {
@@ -65,22 +74,38 @@ export default function ReceiptModal({
     }
   }
 
-  async function sendWhatsApp() {
+  async function sendWhatsAppPdf() {
     setWaBusy(true);
     setWaNote(null);
     try {
       const share = await whatsappShareApi(sale.id, {
         phone: waPhone.trim() || undefined,
       });
+      if (share.pdf) setPdfMeta(share.pdf);
       setWaNote(
         share.note ||
-          'O PDF não é anexado automaticamente. Gere o PDF e anexe manualmente se necessário.'
+          'PDF GERADO COM SUCESSO. Anexe o arquivo PDF na conversa do WhatsApp (anexo automático indisponível neste ambiente).'
       );
-      window.open(share.url, '_blank', 'noopener,noreferrer');
+      // Abre o PDF para facilitar o anexo; depois a conversa.
+      window.open(share.pdf?.view_url || buildReceiptPdfUrl(sale.id), '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => {
+        window.open(share.url, '_blank', 'noopener,noreferrer');
+      }, 350);
     } catch (e) {
-      setWaNote(e instanceof Error ? e.message : 'Falha ao montar link do WhatsApp');
+      setWaNote(e instanceof Error ? e.message : 'Falha ao gerar PDF / WhatsApp');
     } finally {
       setWaBusy(false);
+    }
+  }
+
+  async function copyPath() {
+    const meta = pdfMeta || (await ensurePdf(false));
+    const text = meta.absolute_path || meta.relative_path;
+    try {
+      await navigator.clipboard.writeText(text);
+      setWaNote(`Caminho copiado: ${text}`);
+    } catch {
+      setWaNote(`Caminho do PDF: ${text}`);
     }
   }
 
@@ -117,6 +142,11 @@ export default function ReceiptModal({
                 <strong>Cliente</strong> {sale.customer.name}
               </div>
             )}
+            {(sale.customer?.phone || sale.customer?.whatsapp) && (
+              <div>
+                <strong>Telefone</strong> {sale.customer?.whatsapp || sale.customer?.phone}
+              </div>
+            )}
             {cancelled && (
               <>
                 <div>
@@ -137,6 +167,7 @@ export default function ReceiptModal({
               <tr>
                 <th>Item</th>
                 <th>Qtd</th>
+                <th>Unit.</th>
                 <th>Total</th>
               </tr>
             </thead>
@@ -148,6 +179,7 @@ export default function ReceiptModal({
                     {item.is_misc ? ' (Diversos)' : ''}
                   </td>
                   <td>{item.quantity}</td>
+                  <td>{formatBRL(item.unit_price_cents)}</td>
                   <td>{formatBRL(item.line_total_cents)}</td>
                 </tr>
               ))}
@@ -190,24 +222,68 @@ export default function ReceiptModal({
 
         {!cancelled && (
           <div className="no-print" style={{ marginTop: 12 }}>
-            <label style={{ display: 'grid', gap: 4, fontSize: '0.9rem' }}>
-              WhatsApp (opcional)
-              <input
-                className="field-input"
-                placeholder="DDD + número"
-                value={waPhone}
-                onChange={(e) => setWaPhone(e.target.value)}
-              />
-            </label>
+            {(showOtherPhone || !(sale.customer?.phone || sale.customer?.whatsapp)) && (
+              <label style={{ display: 'grid', gap: 4, fontSize: '0.9rem' }}>
+                Número do WhatsApp
+                <input
+                  className="field-input"
+                  placeholder="DDD + número"
+                  value={waPhone}
+                  onChange={(e) => setWaPhone(e.target.value)}
+                />
+              </label>
+            )}
+            {!showOtherPhone && (sale.customer?.phone || sale.customer?.whatsapp) ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ marginTop: 8 }}
+                onClick={() => setShowOtherPhone(true)}
+              >
+                Informar outro número
+              </button>
+            ) : null}
           </div>
         )}
 
-        {waNote && <div className="alert alert-ok no-print">{waNote}</div>}
+        {waNote && (
+          <div className="alert alert-ok no-print" style={{ marginTop: 12 }}>
+            <strong>PDF GERADO COM SUCESSO</strong>
+            <div style={{ marginTop: 6 }}>{waNote}</div>
+            {pdfMeta && (
+              <div style={{ marginTop: 6, fontSize: '0.9rem' }}>
+                Arquivo: <code>{pdfMeta.filename}</code>
+                <br />
+                Pasta: <code>{pdfMeta.folder_path}</code>
+              </div>
+            )}
+            <div className="modal-actions" style={{ marginTop: 10, justifyContent: 'flex-start' }}>
+              <button type="button" className="btn btn-ghost" onClick={() => openPdf()}>
+                Abrir PDF
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={() => void copyPath()}>
+                Copiar caminho
+              </button>
+              <button
+                type="button"
+                className="btn btn-accent"
+                onClick={() => openPdf({ download: true })}
+              >
+                Baixar PDF
+              </button>
+            </div>
+          </div>
+        )}
         {printNote && (
           <div className="alert alert-error no-print">
             {printNote}
             <div style={{ marginTop: 8 }}>
-              <button type="button" className="btn btn-accent" disabled={printBusy} onClick={() => setChoosePrinter(true)}>
+              <button
+                type="button"
+                className="btn btn-accent"
+                disabled={printBusy}
+                onClick={() => setChoosePrinter(true)}
+              >
                 Tentar novamente
               </button>
             </div>
@@ -220,17 +296,6 @@ export default function ReceiptModal({
               Cancelar venda
             </button>
           )}
-          <button type="button" className="btn btn-ghost" onClick={openPdf}>
-            PDF
-          </button>
-          <button
-            type="button"
-            className="btn btn-accent"
-            disabled={waBusy || cancelled}
-            onClick={() => void sendWhatsApp()}
-          >
-            Enviar no WhatsApp
-          </button>
           <button
             type="button"
             className="btn btn-ghost"
@@ -238,6 +303,21 @@ export default function ReceiptModal({
             onClick={() => setChoosePrinter(true)}
           >
             Imprimir
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => void ensurePdf(false).then(() => openPdf())}
+          >
+            Visualizar PDF
+          </button>
+          <button
+            type="button"
+            className="btn btn-accent"
+            disabled={waBusy || cancelled}
+            onClick={() => void sendWhatsAppPdf()}
+          >
+            Enviar PDF no WhatsApp
           </button>
           <button type="button" className="btn btn-primary" onClick={onClose}>
             {showSuccess ? 'Nova venda' : 'Fechar'}

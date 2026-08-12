@@ -55,6 +55,11 @@ export function getConfigDir() {
   return join(getDataDir(), 'configuracoes');
 }
 
+/** Pasta de comprovantes PDF (relativa ao data dir portátil). */
+export function getReceiptsDir() {
+  return join(getDataDir(), 'comprovantes');
+}
+
 export function ensureDataDir() {
   const dataDir = getDataDir();
   mkdirSync(dataDir, { recursive: true });
@@ -62,6 +67,7 @@ export function ensureDataDir() {
   mkdirSync(getLogsDir(), { recursive: true });
   mkdirSync(getAssetsDir(), { recursive: true });
   mkdirSync(getConfigDir(), { recursive: true });
+  mkdirSync(getReceiptsDir(), { recursive: true });
   mkdirSync(dirname(getDbPath()), { recursive: true });
   return dataDir;
 }

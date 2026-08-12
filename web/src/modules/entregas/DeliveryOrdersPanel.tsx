@@ -4,11 +4,13 @@ import {
   confirmDeliveryOrderItemManualApi,
   confirmDeliveryOrderPaymentApi,
   createDeliveryOrderApi,
+  deliveryOrderWhatsappShareApi,
   fetchCustomers,
   fetchDeliveryOrderApi,
   fetchDeliveryOrdersApi,
   fetchProducts,
   formatBRL,
+  generateDeliveryOrderPdfApi,
   getStoredAuthUser,
   scanDeliveryOrderBarcodeApi,
   updateDeliveryOrderApi,
@@ -165,6 +167,40 @@ export default function DeliveryOrdersPanel() {
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar pedidos');
+    }
+  }
+
+  async function openOrderPdf(orderId: number) {
+    try {
+      const meta = await generateDeliveryOrderPdfApi(orderId);
+      window.open(meta.view_url, '_blank', 'noopener,noreferrer');
+      setNotice(
+        meta.pending
+          ? `PDF do pedido gerado (pagamento pendente): ${meta.filename}`
+          : `Comprovante PDF gerado: ${meta.filename}`
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao gerar PDF do pedido');
+    }
+  }
+
+  async function sendOrderPdfWhatsApp(order: DeliveryOrder) {
+    try {
+      const share = await deliveryOrderWhatsappShareApi(order.id, {
+        phone: order.whatsapp || order.phone || undefined,
+      });
+      if (share.pdf?.view_url) {
+        window.open(share.pdf.view_url, '_blank', 'noopener,noreferrer');
+      }
+      window.setTimeout(() => {
+        window.open(share.url, '_blank', 'noopener,noreferrer');
+      }, 350);
+      setNotice(
+        share.note ||
+          `PDF gerado (${share.pdf?.filename || 'arquivo'}). Anexe o PDF na conversa do WhatsApp.`
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao enviar PDF no WhatsApp');
     }
   }
 
@@ -1032,6 +1068,20 @@ export default function DeliveryOrdersPanel() {
               )}
 
               <div className="modal-actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => void openOrderPdf(selected.id)}
+                >
+                  {paidConfirmed ? 'Visualizar comprovante PDF' : 'PDF pedido (pagamento pendente)'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-accent"
+                  onClick={() => void sendOrderPdfWhatsApp(selected)}
+                >
+                  Enviar PDF no WhatsApp
+                </button>
                 {unpaid && selected.payment_status === 'pix_pendente' && (
                   <>
                     <div className="alert alert-error" style={{ width: '100%' }}>

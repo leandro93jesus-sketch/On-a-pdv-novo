@@ -979,6 +979,7 @@ export interface DeliveryOrder {
   customer_id?: number | null;
   customer_name?: string | null;
   phone?: string | null;
+  whatsapp?: string | null;
   address?: string | null;
   address_number?: string | null;
   neighborhood?: string | null;
@@ -1535,13 +1536,43 @@ export function fetchAuditLogs(params?: {
   ).then((r) => handle<AuditLog[]>(r));
 }
 
-export function buildReceiptPdfUrl(saleId: number): string {
-  return `/api/receipts/sales/${saleId}/pdf`;
+export function buildReceiptPdfUrl(saleId: number, opts?: { download?: boolean; regen?: boolean }): string {
+  const sp = new URLSearchParams();
+  if (opts?.download) sp.set('download', '1');
+  if (opts?.regen) sp.set('regen', '1');
+  const q = sp.toString();
+  return `/api/receipts/sales/${saleId}/pdf${q ? `?${q}` : ''}`;
+}
+
+export type ReceiptPdfMeta = {
+  sale_id?: number;
+  sale_number?: string;
+  order_id?: number;
+  order_number?: string;
+  filename: string;
+  relative_path: string;
+  absolute_path: string;
+  folder_path: string;
+  regenerated?: boolean;
+  pending?: boolean;
+  download_url: string;
+  view_url: string;
+};
+
+export function generateSaleReceiptPdfApi(
+  saleId: number,
+  opts?: { force?: boolean }
+): Promise<ReceiptPdfMeta> {
+  return apiFetch(`/api/receipts/sales/${saleId}/pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force: opts?.force === true }),
+  }).then((r) => handle(r));
 }
 
 export function whatsappShareApi(
   saleId: number,
-  opts?: { phone?: string; message?: string }
+  opts?: { phone?: string; message?: string; force?: boolean }
 ): Promise<{
   sale_id: number;
   sale_number: string;
@@ -1550,8 +1581,52 @@ export function whatsappShareApi(
   url: string;
   pdf_attached: boolean;
   note?: string;
+  pdf?: ReceiptPdfMeta;
 }> {
   return apiFetch(`/api/receipts/sales/${saleId}/whatsapp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts || {}),
+  }).then((r) => handle(r));
+}
+
+export function buildDeliveryOrderPdfUrl(
+  orderId: number,
+  opts?: { download?: boolean; regen?: boolean }
+): string {
+  const sp = new URLSearchParams();
+  if (opts?.download) sp.set('download', '1');
+  if (opts?.regen) sp.set('regen', '1');
+  const q = sp.toString();
+  return `/api/receipts/delivery-orders/${orderId}/pdf${q ? `?${q}` : ''}`;
+}
+
+export function generateDeliveryOrderPdfApi(
+  orderId: number,
+  opts?: { force?: boolean }
+): Promise<ReceiptPdfMeta> {
+  return apiFetch(`/api/receipts/delivery-orders/${orderId}/pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force: opts?.force === true }),
+  }).then((r) => handle(r));
+}
+
+export function deliveryOrderWhatsappShareApi(
+  orderId: number,
+  opts?: { phone?: string; message?: string; force?: boolean }
+): Promise<{
+  order_id: number;
+  order_number: string;
+  phone: string | null;
+  message: string;
+  url: string;
+  pdf_attached: boolean;
+  pending?: boolean;
+  note?: string;
+  pdf?: ReceiptPdfMeta;
+}> {
+  return apiFetch(`/api/receipts/delivery-orders/${orderId}/whatsapp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(opts || {}),
