@@ -19,7 +19,7 @@ export default function CardPaymentModal({
   totalCents,
   title = 'PAGAMENTO COM CARTÃO',
   initialType = null,
-  confirmLabel = 'CONFIRMAR',
+  confirmLabel = 'CONFIRMAR PAGAMENTO',
   onBack,
   onConfirm,
 }: Props) {
