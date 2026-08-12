@@ -17,12 +17,24 @@ import DeliveryAddressForm, {
   type DeliveryAddressFormValue,
 } from '../entregas/DeliveryAddressForm';
 import { isDeliveryAddressComplete } from '../entregas/deliveryAddress';
+import CancelSaleConfirmModal from './CancelSaleConfirmModal';
 import CustomerPicker from './CustomerPicker';
 import MiscItemModal from './MiscItemModal';
 import MixedPaymentModal, { type MixedAmounts } from './MixedPaymentModal';
 import CardPaymentModal, { type CardType } from './CardPaymentModal';
+import QuickProductModal from './QuickProductModal';
 import ReceiptModal from './ReceiptModal';
+import SaleRecoveryModal from './SaleRecoveryModal';
 import SalesHistoryModal from './SalesHistoryModal';
+import {
+  clearDraft,
+  getMemoryDraft,
+  hasOpenSaleContent,
+  loadPersistedDraft,
+  saveDraft,
+  type SaleDraft,
+  type SaleMode,
+} from './saleDraftStore';
 import {
   lineCode,
   lineTotal,
@@ -65,7 +77,11 @@ function newRequestId(): string {
   return `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-type SaleMode = 'normal' | 'entrega';
+function defaultCreditFirstDue(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 1);
+  return d.toISOString().slice(0, 10);
+}
 
 export default function VendasPage() {
   const [saleMode, setSaleMode] = useState<SaleMode>('normal');
@@ -77,11 +93,7 @@ export default function VendasPage() {
   const [showCardModal, setShowCardModal] = useState(false);
   const [creditEntryInput, setCreditEntryInput] = useState('0,00');
   const [creditInstallments, setCreditInstallments] = useState(1);
-  const [creditFirstDue, setCreditFirstDue] = useState(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() + 1);
-    return d.toISOString().slice(0, 10);
-  });
+  const [creditFirstDue, setCreditFirstDue] = useState(defaultCreditFirstDue);
   const [cashReceivedInput, setCashReceivedInput] = useState('');
   const [discountInput, setDiscountInput] = useState('0,00');
   const [error, setError] = useState<string | null>(null);
@@ -100,12 +112,33 @@ export default function VendasPage() {
   const [receiptFromHistory, setReceiptFromHistory] = useState(false);
   const [highlightIdx, setHighlightIdx] = useState(0);
   const [deliveryAddr, setDeliveryAddr] = useState<DeliveryAddressFormValue>(emptyDeliveryAddress);
+  const [draftReady, setDraftReady] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
+  const [pendingRecovery, setPendingRecovery] = useState<SaleDraft | null>(null);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [quickBarcode, setQuickBarcode] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const searchTimer = useRef<number | null>(null);
   const submittingRef = useRef(false);
   const requestIdRef = useRef<string | null>(null);
   const lastBarcodeRef = useRef<{ code: string; at: number } | null>(null);
   const isDeliveryMode = saleMode === 'entrega';
+
+  function applyDraft(draft: SaleDraft) {
+    setSaleMode(draft.saleMode || 'normal');
+    setCart(Array.isArray(draft.cart) ? draft.cart : []);
+    setCustomer(draft.customer ?? null);
+    setDiscountInput(draft.discountInput || '0,00');
+    setPayment(draft.payment || 'dinheiro');
+    setCardType(draft.cardType ?? null);
+    setCashReceivedInput(draft.cashReceivedInput || '');
+    setCreditEntryInput(draft.creditEntryInput || '0,00');
+    setCreditInstallments(draft.creditInstallments || 1);
+    setCreditFirstDue(draft.creditFirstDue || defaultCreditFirstDue());
+    setMixedDraft(draft.mixedDraft ?? null);
+    setDeliveryAddr(draft.deliveryAddr || emptyDeliveryAddress());
+    setQtyDrafts({});
+  }
 
   function fillDeliveryFromCustomer(c: Customer | null) {
     if (!c) return;
@@ -127,11 +160,56 @@ export default function VendasPage() {
     setDeliveryAddr(emptyDeliveryAddress());
   }
 
+  function resetOpenSaleFields() {
+    setCart([]);
+    setDiscountInput('0,00');
+    setPayment('dinheiro');
+    setCardType(null);
+    setCreditEntryInput('0,00');
+    setCreditInstallments(1);
+    setCreditFirstDue(defaultCreditFirstDue());
+    setCashReceivedInput('');
+    setMixedDraft(null);
+    setShowMixed(false);
+    setQtyDrafts({});
+    setCustomer(null);
+    clearDeliveryFields();
+    requestIdRef.current = null;
+    clearDraft();
+  }
+
+  function buildCurrentDraft(): SaleDraft {
+    return {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      saleMode,
+      cart,
+      customer,
+      discountInput,
+      payment,
+      cardType,
+      cashReceivedInput,
+      creditEntryInput,
+      creditInstallments,
+      creditFirstDue,
+      mixedDraft,
+      deliveryAddr,
+    };
+  }
+
   function focusSearch() {
     window.setTimeout(() => searchRef.current?.focus(), 0);
   }
 
-  const anyModalOpen = showMisc || showMixed || showHistory || showCardModal || Boolean(receipt);
+  const anyModalOpen =
+    showMisc ||
+    showMixed ||
+    showHistory ||
+    showCardModal ||
+    showRecovery ||
+    showCancelConfirm ||
+    Boolean(quickBarcode) ||
+    Boolean(receipt);
   const showSuggestions = query.trim().length > 0;
 
   async function searchProducts(q?: string, barcode?: string) {
@@ -157,6 +235,51 @@ export default function VendasPage() {
       }
     })();
   }, []);
+
+  // Carrinho persistente: memória (troca de menu) + localStorage (fechamento inesperado).
+  useEffect(() => {
+    const mem = getMemoryDraft();
+    if (hasOpenSaleContent(mem)) {
+      applyDraft(mem!);
+      setDraftReady(true);
+      return;
+    }
+    const persisted = loadPersistedDraft();
+    if (hasOpenSaleContent(persisted)) {
+      setPendingRecovery(persisted);
+      setShowRecovery(true);
+      setDraftReady(true);
+      return;
+    }
+    setDraftReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady || showRecovery) return;
+    const draft = buildCurrentDraft();
+    if (hasOpenSaleContent(draft)) {
+      saveDraft(draft);
+    } else {
+      clearDraft();
+    }
+    // buildCurrentDraft lê estado atual; deps listam todos os campos persistidos.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    draftReady,
+    showRecovery,
+    saleMode,
+    cart,
+    customer,
+    discountInput,
+    payment,
+    cardType,
+    cashReceivedInput,
+    creditEntryInput,
+    creditInstallments,
+    creditFirstDue,
+    mixedDraft,
+    deliveryAddr,
+  ]);
 
   useEffect(() => {
     if (searchTimer.current) window.clearTimeout(searchTimer.current);
@@ -200,6 +323,15 @@ export default function VendasPage() {
         if (showCardModal) {
           setShowCardModal(false);
           focusSearch();
+          return;
+        }
+        if (quickBarcode) {
+          setQuickBarcode(null);
+          focusSearch();
+          return;
+        }
+        if (showCancelConfirm) {
+          setShowCancelConfirm(false);
           return;
         }
         if (showMixed) {
@@ -264,6 +396,8 @@ export default function VendasPage() {
     showMixed,
     showCardModal,
     showHistory,
+    showCancelConfirm,
+    quickBarcode,
     receipt,
     mixedDraft,
     cart,
@@ -388,15 +522,21 @@ export default function VendasPage() {
     setCart((prev) => prev.filter((l) => l.key !== key));
   }
 
-  function cancelSale() {
+  function requestCancelSale() {
     if (cart.length === 0) return;
-    setCart([]);
-    setDiscountInput('0,00');
-    setPayment('dinheiro');
+    setShowCancelConfirm(true);
+  }
+
+  function confirmCancelSale() {
+    setShowCancelConfirm(false);
+    resetOpenSaleFields();
     setError(null);
-    setNotice('Venda cancelada antes da conclusão. Nada foi registrado.');
+    setNotice(
+      isDeliveryMode
+        ? 'Pedido limpo. Nada foi registrado.'
+        : 'Venda cancelada antes da conclusão. Nada foi registrado.'
+    );
     setReceipt(null);
-    requestIdRef.current = null;
     clearSearch();
   }
 
@@ -420,7 +560,8 @@ export default function VendasPage() {
           return;
         }
         if (found.length === 0) {
-          setError(`Nenhum produto com código de barras ${term}`);
+          setError(null);
+          setQuickBarcode(term);
           return;
         }
         setSuggestions(found.slice(0, SUGGESTION_LIMIT));
@@ -489,11 +630,8 @@ export default function VendasPage() {
         })),
       });
 
-      setCart([]);
-      setDiscountInput('0,00');
-      setQtyDrafts({});
-      clearDeliveryFields();
-      requestIdRef.current = null;
+      resetOpenSaleFields();
+      setSaleMode('entrega');
       setNotice(
         `Pedido ${order.order_number} criado — AGUARDANDO PAGAMENTO. Estoque reservado. Não entrou no caixa.`
       );
@@ -670,17 +808,7 @@ export default function VendasPage() {
       const full = await fetchSale(sale.id);
       setReceiptFromHistory(false);
       setReceipt(full);
-      setCart([]);
-      setDiscountInput('0,00');
-      setPayment('dinheiro');
-      setCardType(null);
-      setCreditEntryInput('0,00');
-      setCreditInstallments(1);
-      setCashReceivedInput('');
-      setMixedDraft(null);
-      setShowMixed(false);
-      setQtyDrafts({});
-      requestIdRef.current = null;
+      resetOpenSaleFields();
       setNotice(`Venda ${full.sale_number} concluída com sucesso.`);
       await loadCash();
       clearSearch();
@@ -1186,7 +1314,7 @@ export default function VendasPage() {
             <button
               type="button"
               className="btn btn-danger"
-              onClick={cancelSale}
+              onClick={requestCancelSale}
               disabled={cart.length === 0 || submitting}
             >
               {isDeliveryMode ? 'Limpar pedido' : 'Cancelar venda'}
@@ -1224,6 +1352,56 @@ export default function VendasPage() {
             setError(null);
             focusSearch();
           }}
+        />
+      )}
+
+      {quickBarcode && (
+        <QuickProductModal
+          barcode={quickBarcode}
+          onCancel={() => {
+            setQuickBarcode(null);
+            clearSearch();
+          }}
+          onCreated={(product) => {
+            setQuickBarcode(null);
+            addProduct(product);
+            setNotice(`Produto "${product.name}" cadastrado e adicionado à venda.`);
+          }}
+          onUseExisting={(product) => {
+            setQuickBarcode(null);
+            addProduct(product);
+            setNotice(`Produto existente "${product.name}" adicionado à venda.`);
+          }}
+        />
+      )}
+
+      {showRecovery && pendingRecovery && (
+        <SaleRecoveryModal
+          itemCount={pendingRecovery.cart.length}
+          onRecover={() => {
+            applyDraft(pendingRecovery);
+            saveDraft({ ...pendingRecovery, updatedAt: new Date().toISOString() });
+            setPendingRecovery(null);
+            setShowRecovery(false);
+            setNotice('Venda recuperada. Continue de onde parou.');
+            focusSearch();
+          }}
+          onDiscard={() => {
+            clearDraft();
+            setPendingRecovery(null);
+            setShowRecovery(false);
+            setNotice('Rascunho de venda descartado.');
+            focusSearch();
+          }}
+        />
+      )}
+
+      {showCancelConfirm && (
+        <CancelSaleConfirmModal
+          title="EXISTEM ITENS NO CARRINHO"
+          confirmLabel={isDeliveryMode ? 'LIMPAR PEDIDO' : 'CANCELAR VENDA'}
+          onBack={() => setShowCancelConfirm(false)}
+          onConfirm={confirmCancelSale}
         />
       )}
 
