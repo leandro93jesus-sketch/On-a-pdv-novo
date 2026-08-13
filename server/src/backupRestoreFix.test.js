@@ -136,18 +136,27 @@ test('restore cria PRE-RESTAURACAO, verifica contagens e reabre mesmo DB', async
   assert.equal(restored.status, 200);
   assert.equal(restored.json.ok, true);
   assert.equal(restored.json.verified, true);
-  assert.ok(String(restored.json.safety_backup.filename).startsWith('PRE-RESTAURACAO-'));
+  assert.ok(
+    String(restored.json.safety_backup.filename).startsWith('ONCA-PDV-PRE-RESTAURACAO-')
+  );
   assert.ok(existsSync(restored.json.safety_backup.filepath));
   assert.equal(restored.json.counts_after.products, 1);
   assert.equal(restored.json.counts_after.customers, 1);
   assert.equal(restored.json.destination_db, process.env.PDV_DB_PATH);
   assert.equal(restored.json.active_db_after, process.env.PDV_DB_PATH);
+  assert.equal(restored.json.session_reattached, true);
+  assert.equal(restored.json.data_visible.products, true);
 
-  // re-login (sessões restauradas)
-  const login = await api('POST', '/api/auth/login', { login: 'admin', password: 'admin123' }, null);
-  token = login.json.token;
+  // Mesmo token continua válido após restore (sessão reanexada)
   const active = await api('GET', '/api/backups/active-db');
+  assert.equal(active.status, 200);
   assert.equal(active.json.counts.products, 1);
+
+  // "Reinício": reabre o mesmo DB e confere contagens
+  closeDb();
+  setDb(openDatabase(process.env.PDV_DB_PATH));
+  assert.equal(getDb().prepare('SELECT COUNT(*) c FROM products').get().c, 1);
+  assert.equal(getDb().prepare('SELECT COUNT(*) c FROM customers').get().c, 1);
 });
 
 test('lista inclui arquivos .db da pasta mesmo sem history', async () => {
@@ -155,4 +164,73 @@ test('lista inclui arquivos .db da pasta mesmo sem history', async () => {
   copyFileSync(process.env.PDV_DB_PATH, orphan);
   const list = await api('GET', '/api/backups');
   assert.ok(list.json.some((b) => b.filepath === orphan || b.filename === 'orphan-manual.db'));
+});
+
+test('selecionar .db (upload) → prévia → restaurar → dados + sessão', async () => {
+  // Monta um backup "rico" (cópia do banco atual com venda) e restaura de verdade.
+  const cash = getDb()
+    .prepare(
+      `INSERT INTO cash_sessions (status, opening_amount_cents, opened_at, operator_name)
+       VALUES ('open', 0, datetime('now'), 'op')`
+    )
+    .run();
+  const sale = getDb()
+    .prepare(
+      `INSERT INTO sales (sale_number, status, subtotal_cents, discount_cents, total_cents, cash_session_id, created_at)
+       VALUES ('T-RESTORE-1', 'completed', 100, 0, 100, ?, datetime('now'))`
+    )
+    .run(cash.lastInsertRowid);
+  getDb()
+    .prepare(
+      `INSERT INTO sale_items (sale_id, product_id, name, barcode, unit_price_cents, quantity, discount_cents, line_total_cents, is_misc)
+       VALUES (?, 1, 'Prod A', '111', 100, 1, 0, 100, 0)`
+    )
+    .run(sale.lastInsertRowid);
+  getDb()
+    .prepare(
+      `INSERT INTO sale_payments (sale_id, method, amount_cents, created_at)
+       VALUES (?, 'dinheiro', 100, datetime('now'))`
+    )
+    .run(sale.lastInsertRowid);
+
+  const backupName = 'onca-pdv-backup-2026-08-12-182432-copia-teste.db';
+  const created = await api('POST', '/api/backups', { notes: 'fonte-real-like' });
+  assert.equal(created.status, 201);
+  const buf = readFileSync(created.json.filepath);
+
+  // Esvazia o banco ativo (simula PC com poucos dados) e restaura o backup rico
+  getDb().prepare('DELETE FROM sale_payments').run();
+  getDb().prepare('DELETE FROM sale_items').run();
+  getDb().prepare('DELETE FROM sales').run();
+  assert.equal(getDb().prepare('SELECT COUNT(*) c FROM sales').get().c, 0);
+
+  const upload = await api('POST', '/api/backups/upload', {
+    filename: backupName,
+    content_base64: buf.toString('base64'),
+  });
+  assert.equal(upload.status, 201);
+  assert.ok(upload.json.preview);
+  assert.equal(upload.json.preview.integrity_check, 'ok');
+  assert.ok(Number(upload.json.preview.counts_in_backup.sales) >= 1);
+  assert.ok(Number(upload.json.preview.counts_in_backup.sale_payments) >= 1);
+
+  const restored = await api('POST', '/api/backups/restore', {
+    filepath: upload.json.filepath,
+    confirm: true,
+    allow_overwrite_newer_data: true,
+  });
+  assert.equal(restored.status, 200, JSON.stringify(restored.json));
+  assert.equal(restored.json.ok, true);
+  assert.equal(restored.json.verified, true);
+  assert.ok(Number(restored.json.counts_after.sales) >= 1);
+  assert.ok(Number(restored.json.counts_after.products) >= 1);
+  assert.match(String(restored.json.message), /BACKUP RESTAURADO/);
+
+  const products = await api('GET', '/api/products');
+  assert.equal(products.status, 200);
+  assert.ok(Array.isArray(products.json) && products.json.length >= 1);
+
+  const sales = await api('GET', '/api/sales?limit=20');
+  assert.equal(sales.status, 200);
+  assert.ok(Array.isArray(sales.json) && sales.json.length >= 1);
 });

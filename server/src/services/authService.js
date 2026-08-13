@@ -228,6 +228,46 @@ export function logout(token) {
   return { ok: true };
 }
 
+/**
+ * Após restaurar um .db, a tabela auth_sessions muda e o token da UI deixa de valer.
+ * Reanexa o mesmo Bearer no banco restaurado para a interface continuar carregando dados.
+ */
+export function reattachSessionAfterRestore(plainToken, { userId = null, login = null } = {}) {
+  if (!plainToken) return null;
+  const db = getDb();
+  let user = null;
+  if (userId) {
+    user = db.prepare('SELECT * FROM users WHERE id = ? AND active = 1').get(Number(userId));
+  }
+  if (!user && login) {
+    user = db
+      .prepare('SELECT * FROM users WHERE lower(login) = lower(?) AND active = 1')
+      .get(String(login));
+  }
+  if (!user) {
+    user = db
+      .prepare(
+        `SELECT * FROM users WHERE role = 'administrador' AND active = 1 ORDER BY id ASC LIMIT 1`
+      )
+      .get();
+  }
+  if (!user) {
+    ensureBootstrapAdmin();
+    user = db.prepare(`SELECT * FROM users WHERE login = 'admin' LIMIT 1`).get();
+  }
+  if (!user) return null;
+
+  const tokenHash = hashToken(plainToken);
+  const expiresAt = new Date(Date.now() + SESSION_HOURS * 3600 * 1000).toISOString();
+  db.prepare('DELETE FROM auth_sessions WHERE token_hash = ?').run(tokenHash);
+  db.prepare(
+    `INSERT INTO auth_sessions (user_id, token_hash, expires_at, ip, user_agent)
+     VALUES (?, ?, ?, NULL, 'post-restore')`
+  ).run(user.id, tokenHash, expiresAt);
+
+  return { token: plainToken, expires_at: expiresAt, user: publicUser(user) };
+}
+
 export function resolveSession(token) {
   if (!token) return null;
   const tokenHash = hashToken(token);

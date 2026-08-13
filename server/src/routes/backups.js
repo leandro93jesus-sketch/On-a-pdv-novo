@@ -12,7 +12,7 @@ import {
   getActiveDbInfo,
   registerUploadedBackup,
 } from '../services/backupService.js';
-import { requireAuth, requireAdmin, authOptional } from '../middleware/auth.js';
+import { requireAuth, requireAdmin, authOptional, extractBearer } from '../middleware/auth.js';
 import { AppError } from '../utils/errors.js';
 
 const router = Router();
@@ -78,6 +78,9 @@ router.post('/restore', requireAuth, requireAdmin, (req, res, next) => {
       createdBy: req.user?.name,
       confirm: Boolean(req.body?.confirm),
       allow_overwrite_newer_data: Boolean(req.body?.allow_overwrite_newer_data),
+      sessionToken: extractBearer(req) || req.authToken || null,
+      userId: req.user?.id ?? null,
+      userLogin: req.user?.login ?? null,
     });
     res.json(result);
   } catch (err) {
@@ -103,10 +106,10 @@ router.post('/upload', requireAuth, requireAdmin, (req, res, next) => {
       );
     }
     const ext = extname(lower);
-    if (!['.db', '.sqlite'].includes(ext)) {
-      throw new AppError('Apenas arquivos .db ou .sqlite para restauração SQLite', {
+    if (!['.db', '.sqlite', '.sqlite3'].includes(ext)) {
+      throw new AppError('BACKUP INVÁLIDO — use .db, .sqlite ou .sqlite3', {
         status: 400,
-        code: 'VALIDATION',
+        code: 'BACKUP_INVALID',
       });
     }
     const dir = getBackupDir();

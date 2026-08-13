@@ -16,6 +16,7 @@ import { getDb, closeDb, openDatabase, setDb } from '../db/index.js';
 import { getDbPath, ensureDataDir, getBackupsDir, getDataDir, getLogsDir } from '../db/paths.js';
 import { getSetting } from './settingsService.js';
 import { writeAudit } from './auditService.js';
+import { reattachSessionAfterRestore } from './authService.js';
 import { AppError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { APP_VERSION as APP_VERSION_CONST } from '../version.js';
@@ -30,11 +31,14 @@ const COUNT_TABLES = [
   ['customers', 'customers'],
   ['sales', 'sales'],
   ['sale_items', 'sale_items'],
+  ['sale_payments', 'sale_payments'],
   ['stock_movements', 'stock_movements'],
   ['delivery_orders', 'delivery_orders'],
+  ['deliveries', 'deliveries'],
   ['credit_accounts', 'credit_accounts'],
   ['suppliers', 'suppliers'],
   ['cash_sessions', 'cash_sessions'],
+  ['cash_movements', 'cash_movements'],
 ];
 
 function stampCompact(d = new Date()) {
@@ -289,11 +293,11 @@ export function createPreRestoreBackup({ createdBy = null, notes = null } = {}) 
   }
 
   const dir = getBackupDir();
-  const filename = `PRE-RESTAURACAO-${stampCompact()}.db`;
+  const filename = `ONCA-PDV-PRE-RESTAURACAO-${stampCompact()}.db`;
   const filepath = join(dir, filename);
   copyFileSync(dbPath, filepath);
   if (!existsSync(filepath) || statSync(filepath).size <= 0) {
-    throw new AppError('Falha ao criar PRE-RESTAURACAO', {
+    throw new AppError('FALHA AO CRIAR BACKUP DO BANCO ATUAL (PRE-RESTAURACAO)', {
       status: 500,
       code: 'PRE_RESTORE_BACKUP_FAILED',
     });
@@ -367,7 +371,7 @@ export function listBackups() {
   try {
     const dir = getBackupDir();
     for (const name of readdirSync(dir)) {
-      if (!/\.(db|sqlite)$/i.test(name)) continue;
+      if (!/\.(db|sqlite|sqlite3)$/i.test(name)) continue;
       if (/\.(restore-tmp|pre-restore-prev)$/i.test(name)) continue;
       const filepath = join(dir, name);
       if (byPath.has(filepath)) continue;
@@ -382,7 +386,7 @@ export function listBackups() {
           sha256: null,
           app_version: null,
           db_schema_version: null,
-          kind: name.startsWith('PRE-RESTAURACAO')
+          kind: name.startsWith('PRE-RESTAURACAO') || name.startsWith('ONCA-PDV-PRE-RESTAURACAO')
             ? 'pre_restore'
             : name.startsWith('ONCA-PDV-PRE-ATUALIZACAO')
               ? 'pre_update'
@@ -434,8 +438,11 @@ export function validateBackupFile(filePath) {
     );
   }
 
-  if (!['.db', '.sqlite', ''].includes(ext) && !filename.endsWith('.restore-tmp')) {
-    throw new AppError('Extensão não suportada para restauração SQLite (.db / .sqlite)', {
+  if (
+    !['.db', '.sqlite', '.sqlite3', ''].includes(ext) &&
+    !filename.endsWith('.restore-tmp')
+  ) {
+    throw new AppError('BACKUP INVÁLIDO — use .db, .sqlite ou .sqlite3', {
       status: 400,
       code: 'BACKUP_INVALID',
     });
@@ -505,10 +512,18 @@ export function validateBackupFile(filePath) {
   }
 
   if (integrity !== 'ok') {
-    throw new AppError('integrity_check do backup falhou', {
+    throw new AppError('BANCO CORROMPIDO — integrity_check falhou', {
       status: 400,
       code: 'BACKUP_CORRUPT',
       details: { integrity },
+    });
+  }
+
+  if (foreign_key_issues > 0) {
+    throw new AppError('BANCO CORROMPIDO — foreign_key_check encontrou inconsistências', {
+      status: 400,
+      code: 'BACKUP_CORRUPT',
+      details: { foreign_key_issues },
     });
   }
 
@@ -659,7 +674,14 @@ export function registerUploadedBackup(filepath, { createdBy = null, originalNam
 
 export function restoreBackup(
   filePath,
-  { createdBy = null, confirm = false, allow_overwrite_newer_data = false } = {}
+  {
+    createdBy = null,
+    confirm = false,
+    allow_overwrite_newer_data = false,
+    sessionToken = null,
+    userId = null,
+    userLogin = null,
+  } = {}
 ) {
   if (!confirm) {
     throw new AppError('Confirmação explícita necessária (confirm=true)', {
@@ -678,15 +700,17 @@ export function restoreBackup(
   let logPath = null;
   const dbPath = getDbPath();
 
+  logger.info('BANCO ATIVO: ' + dbPath);
+  logger.info('BANCO SELECIONADO: ' + filePath);
+  console.log(`[onca-pdv] BANCO ATIVO: ${dbPath}`);
+  console.log(`[onca-pdv] BANCO SELECIONADO: ${filePath}`);
+
   if (dbPath !== activeBefore.db_path) {
-    throw new AppError(
-      'BANCO RESTAURADO, MAS API ESTÁ APONTANDO PARA OUTRO ARQUIVO (inconsistência de caminho)',
-      {
-        status: 500,
-        code: 'DB_PATH_MISMATCH',
-        details: { active: activeBefore.db_path, destination: dbPath },
-      }
-    );
+    throw new AppError('API ESTÁ ABRINDO OUTRO BANCO (inconsistência de caminho)', {
+      status: 500,
+      code: 'DB_PATH_MISMATCH',
+      details: { active: activeBefore.db_path, destination: dbPath },
+    });
   }
 
   const comparison = assessCurrentVsBackup(countsBefore, countsExpected, {
@@ -695,7 +719,7 @@ export function restoreBackup(
   });
   if (comparison.current_has_newer_data && !allow_overwrite_newer_data) {
     throw new AppError(
-      'BANCO ATUAL PARECE MAIS NOVO QUE O BACKUP — restauração bloqueada para não perder vendas/dados recentes. Preserve o banco atual ou confirme allow_overwrite_newer_data=true conscientemente.',
+      'ATENÇÃO: O BANCO ATUAL PODE CONTER VENDAS MAIS RECENTES. Restauração bloqueada. Use FAZER BACKUP E CONTINUAR se tiver certeza.',
       {
         status: 409,
         code: 'CURRENT_DB_NEWER_THAN_BACKUP',
@@ -712,10 +736,10 @@ export function restoreBackup(
   try {
     safety = createPreRestoreBackup({
       createdBy,
-      notes: `PRE-RESTAURACAO antes de restaurar ${validation.filename}`,
+      notes: `ONCA-PDV-PRE-RESTAURACAO antes de restaurar ${validation.filename}`,
     });
     if (!existsSync(safety.filepath) || safety.integrity !== 'ok') {
-      throw new AppError('PRE-RESTAURACAO não foi criado/validado — restauração abortada', {
+      throw new AppError('FALHA AO CRIAR BACKUP DO BANCO ATUAL — restauração abortada', {
         status: 500,
         code: 'PRE_RESTORE_BACKUP_FAILED',
       });
@@ -727,8 +751,12 @@ export function restoreBackup(
       ok: false,
       stage: 'pre_restore_backup',
       selected_file: filePath,
+      active_db: dbPath,
       error: String(err.message || err),
       destination_db: dbPath,
+      integrity_check: validation.integrity,
+      foreign_key_check: validation.foreign_key_check,
+      counts_in_backup: countsExpected,
     });
     throw err;
   }
@@ -737,11 +765,28 @@ export function restoreBackup(
   const prevPath = `${dbPath}.pre-restore-prev`;
 
   try {
-    closeDb();
+    try {
+      closeDb();
+    } catch (err) {
+      throw new AppError('FALHA AO FECHAR CONEXÃO', {
+        status: 500,
+        code: 'DB_CLOSE_FAILED',
+        details: { message: String(err.message || err) },
+      });
+    }
     // Não apagar .restore-tmp aqui — ele ainda será usado no rename.
     removeDbSidecars(dbPath, { includeRestoreTmp: false });
 
-    copyFileSync(filePath, tempPath);
+    try {
+      copyFileSync(filePath, tempPath);
+    } catch (err) {
+      setDb(openDatabase(dbPath));
+      throw new AppError('FALHA AO COPIAR BANCO', {
+        status: 500,
+        code: 'RESTORE_COPY_FAILED',
+        details: { message: String(err.message || err) },
+      });
+    }
     const tempCheck = validateBackupFile(tempPath);
     if (tempCheck.integrity !== 'ok') {
       unlinkSync(tempPath);
@@ -763,24 +808,37 @@ export function restoreBackup(
     renameSync(tempPath, dbPath);
     removeDbSidecars(dbPath, { includeRestoreTmp: true });
 
-    setDb(openDatabase(dbPath));
+    try {
+      setDb(openDatabase(dbPath));
+    } catch (err) {
+      throw new AppError('FALHA NA MIGRATION ao reabrir o banco restaurado', {
+        status: 500,
+        code: 'RESTORE_MIGRATION_FAILED',
+        details: { message: String(err.message || err) },
+      });
+    }
 
     // Confirma que a API reabriu o MESMO arquivo restaurado
     const activeAfter = getActiveDbInfo();
     if (activeAfter.db_path !== dbPath || !activeAfter.exists) {
-      throw new AppError(
-        'BANCO RESTAURADO, MAS API ESTÁ APONTANDO PARA OUTRO ARQUIVO',
-        {
-          status: 500,
-          code: 'DB_PATH_MISMATCH',
-          details: { expected: dbPath, actual: activeAfter.db_path },
-        }
-      );
+      throw new AppError('API ESTÁ ABRINDO OUTRO BANCO', {
+        status: 500,
+        code: 'DB_PATH_MISMATCH',
+        details: { expected: dbPath, actual: activeAfter.db_path },
+      });
     }
 
     const countsAfter = countEntitiesInDbFile(dbPath);
     const mismatch = [];
-    for (const key of ['products', 'customers', 'sales', 'suppliers', 'credit_accounts']) {
+    for (const key of [
+      'products',
+      'customers',
+      'sales',
+      'sale_items',
+      'sale_payments',
+      'suppliers',
+      'credit_accounts',
+    ]) {
       if (countsExpected?.[key] != null && countsAfter?.[key] !== countsExpected[key]) {
         mismatch.push({
           key,
@@ -800,7 +858,58 @@ export function restoreBackup(
       );
     }
 
+    // Prova de que a API lê os dados do banco restaurado (não só contagem de arquivo).
+    let liveProducts = 0;
+    let liveCustomers = 0;
+    let liveSales = 0;
+    try {
+      const live = getDb();
+      liveProducts = Number(live.prepare('SELECT COUNT(*) AS c FROM products').get()?.c || 0);
+      liveCustomers = Number(live.prepare('SELECT COUNT(*) AS c FROM customers').get()?.c || 0);
+      liveSales = Number(live.prepare('SELECT COUNT(*) AS c FROM sales').get()?.c || 0);
+    } catch (err) {
+      throw new AppError('API reabriu o arquivo, mas não conseguiu ler os dados restaurados', {
+        status: 500,
+        code: 'RESTORE_READ_FAILED',
+        details: { message: String(err.message || err) },
+      });
+    }
+    if (
+      liveProducts !== Number(countsAfter.products || 0) ||
+      liveCustomers !== Number(countsAfter.customers || 0) ||
+      liveSales !== Number(countsAfter.sales || 0)
+    ) {
+      throw new AppError('API ESTÁ ABRINDO OUTRO BANCO (contagens ao vivo divergem)', {
+        status: 500,
+        code: 'DB_PATH_MISMATCH',
+        details: {
+          live: { products: liveProducts, customers: liveCustomers, sales: liveSales },
+          countsAfter,
+        },
+      });
+    }
+
+    const session =
+      reattachSessionAfterRestore(sessionToken, {
+        userId,
+        login: userLogin,
+      }) || null;
+
     const postIntegrity = validateBackupFile(dbPath);
+    const dataVisible = {
+      products: liveProducts > 0 || Number(countsExpected.products || 0) === 0,
+      customers: liveCustomers > 0 || Number(countsExpected.customers || 0) === 0,
+      sales: liveSales > 0 || Number(countsExpected.sales || 0) === 0,
+    };
+    const verified =
+      dataVisible.products && dataVisible.customers && dataVisible.sales && postIntegrity.integrity === 'ok';
+    if (!verified) {
+      throw new AppError('Restauração não verificada — dados não ficaram visíveis na API', {
+        status: 500,
+        code: 'RESTORE_NOT_VERIFIED',
+        details: { dataVisible, countsAfter },
+      });
+    }
 
     writeAudit({
       action: 'backup.restore',
@@ -812,6 +921,8 @@ export function restoreBackup(
         counts_before: countsBefore,
         counts_after: countsAfter,
         destination_db: dbPath,
+        active_db_before: activeBefore.db_path,
+        selected_file: filePath,
       },
       userName: createdBy,
     });
@@ -829,14 +940,19 @@ export function restoreBackup(
       },
       safety_backup: safety,
       destination_db: dbPath,
+      active_db_before: activeBefore.db_path,
       active_db_after: activeAfter.db_path,
+      selected_file: filePath,
       counts_before: countsBefore,
       counts_after: countsAfter,
+      data_visible: dataVisible,
+      integrity_check: validation.integrity,
+      foreign_key_check: validation.foreign_key_check,
       integrity_after: postIntegrity.integrity,
       foreign_key_check_after: postIntegrity.foreign_key_check,
+      session_reattached: Boolean(session),
       reload_required: true,
-      message:
-        'RESTAURAÇÃO CONCLUÍDA. O ONÇA PDV SERÁ RECARREGADO PARA CARREGAR OS DADOS.',
+      message: `BACKUP RESTAURADO\nProdutos: ${liveProducts}\nClientes: ${liveCustomers}\nVendas: ${liveSales}`,
     };
 
     logPath = writeRestoreLog({
@@ -844,12 +960,18 @@ export function restoreBackup(
       ended_at: new Date().toISOString(),
       ok: true,
       selected_file: filePath,
+      active_db_before: activeBefore.db_path,
       type: 'DB',
       hash: validation.sha256,
       destination_db: dbPath,
       safety_backup: safety.filepath,
+      integrity_check: validation.integrity,
+      foreign_key_check: validation.foreign_key_check,
       counts_before: countsBefore,
       counts_after: countsAfter,
+      products: liveProducts,
+      customers: liveCustomers,
+      sales: liveSales,
       imported_or_restored: countsAfter,
     });
     result.log_path = logPath;
