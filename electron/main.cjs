@@ -244,104 +244,268 @@ function closeSplash() {
 const {
   findSidecarBackups,
   isSqliteFile,
+  validateSidecarBackup,
+  copySidecarToPersistent,
+  summarizeDbFile,
 } = require('./sidecarBackup.cjs');
 
+function persistentDataDir() {
+  return path.join(app.getPath('userData'), 'ONCA-PDV');
+}
+
+function persistentDbPath() {
+  return path.join(persistentDataDir(), 'onca-pdv.db');
+}
+
+function countLine(label, counts, key) {
+  const v = counts && counts[key] != null ? counts[key] : '—';
+  return `${label}: ${v}`;
+}
+
+function pickBestSidecar(candidates) {
+  if (!candidates.length) return null;
+  if (candidates.length === 1) return candidates[0];
+  // Mais recente (já ordenado) — informa que havia vários
+  return { ...candidates[0], multiple_found: candidates.length };
+}
+
+async function showInvalidSidecarDialog(detail) {
+  await dialog.showMessageBox({
+    type: 'error',
+    title: 'BACKUP ENCONTRADO, MAS NÃO PÔDE SER VALIDADO',
+    message: 'BACKUP ENCONTRADO, MAS NÃO PÔDE SER VALIDADO.',
+    detail: detail || 'O arquivo ao lado do EXE não passou na validação SQLite/manifesto.',
+    buttons: ['OK'],
+    noLink: true,
+  });
+}
+
 /**
- * Se não há banco atual: oferece backup encontrado ao lado do instalador/exe.
- * NUNCA importa automaticamente.
+ * Fluxo pendrive/instalador:
+ * - Detecta onca-pdv-backup-*.db ao lado do EXE / pasta do instalador / sidecar-from-installer
+ * - Valida integrity + manifesto
+ * - Copia para AppData (nunca usa o arquivo do pendrive em produção)
+ * - Nunca sobrescreve banco existente sem confirmação
  */
-async function offerSidecarBackupIfPresent() {
+async function resolveSidecarBackupFlow({ existingDbPath = null } = {}) {
+  const nodeBin = nodeBinary();
+  const cliScript = path.join(__dirname, 'validateSqliteCli.cjs');
   const candidates = findSidecarBackups({
     execPath: process.execPath,
     appPath: app.getAppPath(),
     resourcesPath: process.resourcesPath,
     cwd: process.cwd(),
+    userData: app.getPath('userData'),
   });
-  if (!candidates.length) return null;
-
-  const best = candidates[0];
-  const detailLines = [
-    `Arquivo: ${best.filename}`,
-    `Caminho: ${best.path}`,
-    `Tamanho: ${best.size_bytes} bytes`,
-    `Data: ${best.mtime}`,
-  ];
-  if (best.app_version) detailLines.push(`Versão no manifesto: ${best.app_version}`);
-  if (best.size_expected && best.size_expected !== best.size_bytes) {
-    detailLines.push(
-      `AVISO: tamanho do manifesto (${best.size_expected}) ≠ tamanho do arquivo (${best.size_bytes}).`
-    );
+  if (!candidates.length) {
+    logApi('sidecar: nenhum onca-pdv-backup-*.db ao lado do EXE/instalador');
+    return null;
   }
-  detailLines.push('');
-  detailLines.push('Nada será importado automaticamente.');
-  detailLines.push('Se este computador já tem vendas mais novas, NÃO importe um backup antigo.');
+
+  const best = pickBestSidecar(candidates);
+  logApi(`sidecar candidato: ${best.path} (de ${candidates.length})`);
+
+  const validation = validateSidecarBackup(best.path, {
+    nodeBinary: nodeBin,
+    cliScript,
+  });
+  if (!validation.ok) {
+    logApi(`sidecar inválido: ${validation.message}`);
+    await showInvalidSidecarDialog(validation.message);
+    return null;
+  }
+
+  const targetDir = persistentDataDir();
+  const targetDb = persistentDbPath();
+  const bakCounts = validation.counts || {};
+
+  // —— Computador JÁ tem banco ——
+  if (existingDbPath && fs.existsSync(existingDbPath)) {
+    const current = summarizeDbFile(existingDbPath, {
+      nodeBinary: nodeBin,
+      cliScript,
+    });
+    const curCounts = current.counts || {};
+    const curSales = Number(curCounts.sales || 0);
+    const bakSales = Number(bakCounts.sales || 0);
+    const newerWarning =
+      curSales > bakSales
+        ? '\n\nATENÇÃO — ESTE COMPUTADOR POSSUI VENDAS MAIS RECENTES.\nRecomenda-se MANTER BANCO ATUAL.'
+        : '';
+
+    const detail = [
+      'ESTE COMPUTADOR JÁ POSSUI DADOS.',
+      '',
+      'BANCO ATUAL:',
+      countLine('Produtos', curCounts, 'products'),
+      countLine('Clientes', curCounts, 'customers'),
+      countLine('Vendas', curCounts, 'sales'),
+      `Última venda: ${current.last_sale_at || '—'}`,
+      `Arquivo: ${existingDbPath}`,
+      '',
+      'BACKUP AO LADO DO EXE:',
+      `Arquivo: ${validation.filename}`,
+      countLine('Produtos', bakCounts, 'products'),
+      countLine('Clientes', bakCounts, 'customers'),
+      countLine('Vendas', bakCounts, 'sales'),
+      `Última venda: ${validation.last_sale_at || '—'}`,
+      `Origem: ${best.path}`,
+      newerWarning,
+      '',
+      'Nenhuma restauração automática será feita.',
+    ].join('\n');
+
+    const { response } = await dialog.showMessageBox({
+      type: curSales > bakSales ? 'warning' : 'question',
+      title: 'ESTE COMPUTADOR JÁ POSSUI DADOS',
+      message: 'ESTE COMPUTADOR JÁ POSSUI DADOS',
+      detail,
+      buttons: [
+        'MANTER BANCO ATUAL',
+        'FAZER BACKUP DO ATUAL E RESTAURAR',
+        'CANCELAR',
+      ],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+    });
+
+    if (response === 0 || response === 2) {
+      logApi('sidecar: operador manteve banco atual / cancelou');
+      return {
+        dbPath: existingDbPath,
+        dataDir: path.dirname(existingDbPath),
+        sidecar_action: response === 0 ? 'keep_current' : 'cancel',
+      };
+    }
+
+    // Restaurar com PRE-RESTAURACAO
+    try {
+      const copied = copySidecarToPersistent(best.path, existingDbPath, {
+        makePreRestore: true,
+      });
+      const again = validateSidecarBackup(existingDbPath, {
+        nodeBinary: nodeBin,
+        cliScript,
+      });
+      if (!again.ok) {
+        throw new Error(again.message || 'Validação pós-cópia falhou');
+      }
+      logApi(`BANCO COPIADO: ${copied.destination}`);
+      logApi(`PRE-RESTAURACAO: ${copied.pre_restore || '(n/a)'}`);
+      logApi(`BANCO ABERTO PELA API (previsto): ${existingDbPath}`);
+      await dialog.showMessageBox({
+        type: 'info',
+        title: 'BANCO COPIADO',
+        message: 'BANCO COPIADO',
+        detail:
+          `Origem (pendrive/pasta):\n${best.path}\n\n` +
+          `Destino no PC:\n${existingDbPath}\n\n` +
+          `Produtos: ${bakCounts.products ?? '—'}\n` +
+          `Clientes: ${bakCounts.customers ?? '—'}\n` +
+          `Vendas: ${bakCounts.sales ?? '—'}\n\n` +
+          'O ONÇA PDV usará a cópia local (pode retirar o pendrive).',
+        buttons: ['OK'],
+        noLink: true,
+      });
+      return {
+        dbPath: existingDbPath,
+        dataDir: path.dirname(existingDbPath),
+        sidecar_action: 'restored_over_existing',
+        source_backup: best.path,
+      };
+    } catch (err) {
+      await dialog.showMessageBox({
+        type: 'error',
+        title: 'ONÇA PDV',
+        message: 'Falha ao restaurar backup do pendrive',
+        detail: err.message || String(err),
+        buttons: ['OK'],
+      });
+      return {
+        dbPath: existingDbPath,
+        dataDir: path.dirname(existingDbPath),
+        sidecar_action: 'restore_failed',
+      };
+    }
+  }
+
+  // —— Computador NOVO (sem banco) ——
+  const multiNote =
+    best.multiple_found > 1
+      ? `\nForam encontrados ${best.multiple_found} backups; usando o mais recente.\n`
+      : '';
+  const detailNew = [
+    `Arquivo: ${validation.filename}`,
+    `Data: ${validation.mtime}`,
+    `Tamanho: ${validation.size_bytes} bytes`,
+    `Versão: ${validation.app_version || '—'}`,
+    `Manifesto: ${validation.manifest_present ? 'SIM' : 'NÃO'}`,
+    `integrity_check: ${validation.integrity_check}`,
+    multiNote,
+    countLine('Produtos', bakCounts, 'products'),
+    countLine('Clientes', bakCounts, 'customers'),
+    countLine('Vendas', bakCounts, 'sales'),
+    '',
+    'O backup será COPIADO para este computador (não fica no pendrive).',
+    `Destino: ${targetDb}`,
+  ].join('\n');
 
   const { response } = await dialog.showMessageBox({
     type: 'info',
     title: 'BACKUP DO ONÇA PDV ENCONTRADO',
     message: 'BACKUP DO ONÇA PDV ENCONTRADO',
-    detail: detailLines.join('\n'),
-    buttons: ['IMPORTAR ESTE BACKUP', 'ESCOLHER OUTRO', 'COMEÇAR SEM IMPORTAR'],
-    defaultId: 2,
+    detail: detailNew,
+    buttons: ['INSTALAR E CARREGAR ESTE BACKUP', 'INSTALAR SEM BACKUP', 'CANCELAR'],
+    defaultId: 0,
     cancelId: 2,
     noLink: true,
   });
 
-  if (response === 2) return null;
-
-  let selected = best.path;
+  if (response === 2) {
+    throw new Error('Instalação cancelada pelo operador.');
+  }
   if (response === 1) {
-    const picked = await dialog.showOpenDialog({
-      title: 'Escolher backup .db do ONÇA PDV',
-      properties: ['openFile'],
-      filters: [
-        { name: 'SQLite ONÇA PDV', extensions: ['db', 'sqlite'] },
-        { name: 'Todos', extensions: ['*'] },
-      ],
+    logApi('sidecar: instalar sem backup');
+    return { dbPath: null, dataDir: targetDir, sidecar_action: 'skip' };
+  }
+
+  try {
+    const copied = copySidecarToPersistent(best.path, targetDb, {
+      makePreRestore: false,
     });
-    if (picked.canceled || !picked.filePaths?.[0]) return null;
-    selected = picked.filePaths[0];
-    if (!isSqliteFile(selected)) {
-      await dialog.showMessageBox({
-        type: 'error',
-        title: 'ONÇA PDV',
-        message: 'Arquivo inválido',
-        detail: 'O arquivo selecionado não é um SQLite válido.',
-        buttons: ['OK'],
-      });
-      return null;
+    const again = validateSidecarBackup(targetDb, {
+      nodeBinary: nodeBin,
+      cliScript,
+    });
+    if (!again.ok) {
+      throw new Error(again.message || 'Validação pós-cópia falhou');
     }
+    logApi(`BANCO COPIADO: ${copied.destination}`);
+    logApi(`BANCO ABERTO PELA API (previsto): ${targetDb}`);
+    await dialog.showMessageBox({
+      type: 'info',
+      title: 'BANCO COPIADO',
+      message: 'BANCO COPIADO',
+      detail:
+        `Origem:\n${best.path}\n\nDestino no PC:\n${targetDb}\n\n` +
+        `Produtos: ${bakCounts.products ?? '—'}\n` +
+        `Clientes: ${bakCounts.customers ?? '—'}\n` +
+        `Vendas: ${bakCounts.sales ?? '—'}\n\n` +
+        'Pode retirar o pendrive. O ONÇA PDV usará a cópia local.',
+      buttons: ['OK'],
+      noLink: true,
+    });
+    return {
+      dbPath: targetDb,
+      dataDir: targetDir,
+      sidecar_action: 'imported_new',
+      source_backup: best.path,
+    };
+  } catch (err) {
+    await showInvalidSidecarDialog(err.message || String(err));
+    return { dbPath: null, dataDir: targetDir, sidecar_action: 'import_failed' };
   }
-
-  const targetDir = path.join(app.getPath('userData'), 'ONCA-PDV');
-  const targetDb = path.join(targetDir, 'onca-pdv.db');
-  const { response: confirm } = await dialog.showMessageBox({
-    type: 'question',
-    title: 'Confirmar importação do backup',
-    message: 'Importar este backup como banco ativo?',
-    detail:
-      `Origem:\n${selected}\n\nDestino:\n${targetDb}\n\n` +
-      'Confirme somente se NÃO houver banco atual com vendas mais recentes.',
-    buttons: ['CONFIRMAR IMPORTAÇÃO', 'CANCELAR'],
-    defaultId: 1,
-    cancelId: 1,
-    noLink: true,
-  });
-  if (confirm !== 0) return null;
-
-  fs.mkdirSync(targetDir, { recursive: true });
-  if (fs.existsSync(targetDb)) {
-    const safety = path.join(
-      targetDir,
-      'backups',
-      `ONCA-PDV-PRE-RESTAURACAO-${Date.now()}.db`
-    );
-    fs.mkdirSync(path.dirname(safety), { recursive: true });
-    fs.copyFileSync(targetDb, safety);
-  }
-  fs.copyFileSync(selected, targetDb);
-  logApi(`sidecar backup importado com confirmação: ${selected} → ${targetDb}`);
-  return { dbPath: targetDb, dataDir: targetDir };
 }
 
 /** Candidatos a onca-pdv.db fora da pasta do instalador (AppData persistente). */
@@ -402,19 +566,27 @@ function hasPriorInstallDataMarkers() {
  * Antes de subir a API: garante banco de produção em atualização.
  * NÃO cria banco vazio silenciosamente se parece upgrade.
  * NÃO restaura backup antigo automaticamente.
+ * Detecta backup ao lado do EXE/instalador (pendrive) com confirmação.
  */
 async function ensureProductionDatabaseReady() {
   const existing = findExistingProductionDbFile();
   if (existing) {
     logApi(`banco produção encontrado: ${existing}`);
-    // Há banco atual: NÃO importar backup sidecar automaticamente.
+    // Se houver backup ao lado do EXE, oferece escolha — sem sobrescrever automático.
+    const sidecar = await resolveSidecarBackupFlow({ existingDbPath: existing });
+    if (sidecar?.dbPath) {
+      return { dbPath: sidecar.dbPath, dataDir: sidecar.dataDir || path.dirname(sidecar.dbPath) };
+    }
     return { dbPath: existing, dataDir: path.dirname(existing) };
   }
 
   // Sem banco atual: oferecer backup ao lado do instalador (confirmação obrigatória).
-  const sidecar = await offerSidecarBackupIfPresent();
+  const sidecar = await resolveSidecarBackupFlow({ existingDbPath: null });
   if (sidecar?.dbPath) {
-    return sidecar;
+    return { dbPath: sidecar.dbPath, dataDir: sidecar.dataDir };
+  }
+  if (sidecar?.dataDir && sidecar.sidecar_action === 'skip') {
+    return { dbPath: null, dataDir: sidecar.dataDir };
   }
 
   // Instalação nova (sem marcadores) — API pode criar banco vazio.
