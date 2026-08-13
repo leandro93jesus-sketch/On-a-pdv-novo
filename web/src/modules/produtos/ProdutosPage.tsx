@@ -43,8 +43,6 @@ export default function ProdutosPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
-  const [confirmSimilar, setConfirmSimilar] = useState(false);
-  const [similarHint, setSimilarHint] = useState<string | null>(null);
 
   const [showDupes, setShowDupes] = useState(false);
   const [dupes, setDupes] = useState<DuplicateCandidate[]>([]);
@@ -81,15 +79,11 @@ export default function ProdutosPage() {
   function openCreate() {
     setEditing(null);
     setForm(emptyForm);
-    setConfirmSimilar(false);
-    setSimilarHint(null);
     setShowForm(true);
   }
 
   function openEdit(p: Product) {
     setEditing(p);
-    setConfirmSimilar(false);
-    setSimilarHint(null);
     setForm({
       name: p.name,
       sku: p.sku || '',
@@ -131,7 +125,6 @@ export default function ProdutosPage() {
         min_stock_qty: Number(form.min_stock_qty) || 0,
         notes: form.notes.trim() || null,
         active: form.active,
-        confirm_similar_name: confirmSimilar,
         ...(editing ? {} : { stock_qty: Number(form.stock_qty) || 0 }),
       };
       if (editing) await updateProduct(editing.id, payload);
@@ -140,14 +133,8 @@ export default function ProdutosPage() {
       setNotice(editing ? 'Produto atualizado.' : 'Produto cadastrado.');
       await load();
     } catch (e) {
-      const err = e as Error & { code?: string; details?: { similar?: Array<{ name: string }> } };
-      if (err.code === 'SIMILAR_NAME') {
-        const names = (err.details?.similar || []).map((s) => s.name).slice(0, 3).join(', ');
-        setSimilarHint(names ? `Possíveis duplicados: ${names}` : 'Nome semelhante detectado.');
-        setError('Nome semelhante encontrado. Confirme abaixo para continuar.');
-      } else {
-        setError(err.message || 'Erro ao salvar');
-      }
+      const err = e as Error & { code?: string };
+      setError(err.message || 'Erro ao salvar');
     } finally {
       setSaving(false);
     }
@@ -284,7 +271,13 @@ export default function ProdutosPage() {
           <tbody>
             {items.map((p) => (
               <tr key={p.id}>
-                <td>{p.name}</td>
+                <td>
+                  <div>{p.name}</div>
+                  <div className="muted-line" style={{ fontSize: '0.8rem' }}>
+                    Código: {p.sku || '—'}
+                    {p.barcode ? ` | Barras: ${p.barcode}` : ''}
+                  </div>
+                </td>
                 <td>{p.sku || '—'}</td>
                 <td>{p.barcode || '—'}</td>
                 <td>{p.category}</td>
@@ -462,17 +455,6 @@ export default function ProdutosPage() {
                 />
                 Ativo
               </label>
-              {(similarHint || confirmSimilar) && (
-                <label className="check-inline span-2">
-                  <input
-                    type="checkbox"
-                    checked={confirmSimilar}
-                    onChange={(e) => setConfirmSimilar(e.target.checked)}
-                  />
-                  Confirmo cadastro mesmo com nome semelhante
-                  {similarHint ? ` (${similarHint})` : ''}
-                </label>
-              )}
             </div>
             <div className="modal-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>

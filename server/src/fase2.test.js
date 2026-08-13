@@ -100,7 +100,7 @@ test('detecta duplicidade por código de barras e nome semelhante', async () => 
   assert.ok(found.totals.open >= 1);
 });
 
-test('bloqueia sku duplicado e avisa nome semelhante', async () => {
+test('bloqueia sku duplicado e permite mesmo nome', async () => {
   const p = await api('POST', '/api/products', {
     name: 'Água Sanitária 1L',
     sku: 'SKU-F2-AS',
@@ -114,23 +114,15 @@ test('bloqueia sku duplicado e avisa nome semelhante', async () => {
   });
   assert.equal(skuDup.status, 409);
   assert.equal(skuDup.json.code, 'DUPLICATE_SKU');
+  assert.match(String(skuDup.json.error || ''), /Já existe um produto com este código/i);
 
-  const similar = await api('POST', '/api/products', {
-    name: 'Agua Sanitaria 1 L',
+  const sameName = await api('POST', '/api/products', {
+    name: 'Água Sanitária 1L',
     sku: 'SKU-F2-AS2',
     price_cents: 410,
   });
-  assert.equal(similar.status, 409);
-  assert.equal(similar.json.code, 'SIMILAR_NAME');
-  assert.ok(Array.isArray(similar.json.details?.similar));
-
-  const ok = await api('POST', '/api/products', {
-    name: 'Agua Sanitaria 1 L',
-    sku: 'SKU-F2-AS2',
-    price_cents: 410,
-    confirm_similar_name: true,
-  });
-  assert.equal(ok.status, 201);
+  assert.equal(sameName.status, 201, JSON.stringify(sameName.json));
+  assert.equal(sameName.json.name, 'Água Sanitária 1L');
 });
 
 test('mesclagem segura consolida estoque e faz rollback em erro', async () => {
