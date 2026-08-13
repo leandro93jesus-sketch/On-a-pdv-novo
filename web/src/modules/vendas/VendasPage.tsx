@@ -991,7 +991,12 @@ export default function VendasPage() {
                         )}
                       </span>
                       <span className="suggestion-meta">
-                        {product.barcode || product.sku || '—'}
+                        Código: {product.sku || '—'}
+                        {product.barcode ? ` | Barras: ${product.barcode}` : ''}
+                        {' | '}
+                        Estoque: {product.stock_qty}
+                        {' | '}
+                        {formatBRL(product.price_cents)}
                       </span>
                       <span
                         className={

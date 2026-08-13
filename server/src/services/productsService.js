@@ -4,7 +4,8 @@ import { assertNonNegativeCents } from '../utils/money.js';
 import { applyStockMovement } from './stockService.js';
 import { writeAudit } from './auditService.js';
 import { getCurrentOperator } from './settingsService.js';
-import { findSimilarNameConflicts } from './duplicateProductsService.js';
+// Nome NÃO é único: produtos com o mesmo nome são permitidos.
+// Unicidade permanece apenas em sku/barcode (quando preenchidos).
 
 const PRODUCT_FIELDS = `
   p.id, p.sku, p.barcode, p.name, p.category, p.unit,
@@ -53,7 +54,7 @@ function assertUniqueCodes(db, { sku, barcode, excludeId = null }) {
       )
       .get(sku, excludeId, excludeId);
     if (row) {
-      throw new AppError('Código interno já cadastrado', {
+      throw new AppError('Já existe um produto com este código.', {
         status: 409,
         code: 'DUPLICATE_SKU',
       });
@@ -66,7 +67,7 @@ function assertUniqueCodes(db, { sku, barcode, excludeId = null }) {
       )
       .get(barcode, excludeId, excludeId);
     if (row) {
-      throw new AppError('Código de barras já cadastrado', {
+      throw new AppError('Já existe um produto com este código de barras.', {
         status: 409,
         code: 'DUPLICATE_BARCODE',
       });
@@ -179,22 +180,7 @@ export function createProduct(payload = {}) {
   const notes = normalizeOptionalText(payload.notes);
   const allow_negative_stock = payload.allow_negative_stock ? 1 : 0;
   const active = payload.active === 0 || payload.active === false ? 0 : 1;
-  const confirmSimilar =
-    payload.confirm_similar_name === true ||
-    payload.confirm_similar_name === 1 ||
-    payload.confirm_similar_name === '1';
-
-  const similar = findSimilarNameConflicts(name);
-  if (similar.length && !confirmSimilar) {
-    throw new AppError(
-      'Existe produto com nome semelhante. Confirme para continuar.',
-      {
-        status: 409,
-        code: 'SIMILAR_NAME',
-        details: { similar },
-      }
-    );
-  }
+  // Mesmo nome é permitido — não bloquear por similaridade/nome igual.
 
   return db.transaction(() => {
     assertUniqueCodes(db, { sku, barcode });
@@ -290,24 +276,9 @@ export function updateProduct(id, payload = {}) {
         : 0;
   const active =
     payload.active == null ? current.active : payload.active === 0 || payload.active === false ? 0 : 1;
-  const confirmSimilar =
-    payload.confirm_similar_name === true ||
-    payload.confirm_similar_name === 1 ||
-    payload.confirm_similar_name === '1';
-
-  if (name !== current.name) {
-    const similar = findSimilarNameConflicts(name, { excludeId: Number(id) });
-    if (similar.length && !confirmSimilar) {
-      throw new AppError(
-        'Existe produto com nome semelhante. Confirme para continuar.',
-        {
-          status: 409,
-          code: 'SIMILAR_NAME',
-          details: { similar },
-        }
-      );
-    }
-  }
+  // Edição cadastral permitida mesmo se o produto estiver em pedido de entrega.
+  // NÃO reescreve delivery_order_items (nome/preço/qtd históricos ficam intactos).
+  // NÃO altera stock_qty / reserved_qty aqui.
 
   return db.transaction(() => {
     assertUniqueCodes(db, { sku, barcode, excludeId: Number(id) });
@@ -379,8 +350,18 @@ export function deleteOrInactivateProduct(id) {
   const movCount = db
     .prepare('SELECT COUNT(*) AS c FROM stock_movements WHERE product_id = ?')
     .get(Number(id)).c;
+  let deliveryCount = 0;
+  try {
+    deliveryCount = db
+      .prepare('SELECT COUNT(*) AS c FROM delivery_order_items WHERE product_id = ?')
+      .get(Number(id)).c;
+  } catch {
+    deliveryCount = 0;
+  }
 
-  if (saleCount > 0 || movCount > 0) {
+  // Exclusão continua bloqueada por segurança quando há histórico (vendas/estoque/entregas).
+  // Edição cadastral NÃO passa por aqui.
+  if (saleCount > 0 || movCount > 0 || deliveryCount > 0) {
     db.prepare(
       `UPDATE products SET active = 0, updated_at = datetime('now') WHERE id = ?`
     ).run(Number(id));
@@ -388,7 +369,7 @@ export function deleteOrInactivateProduct(id) {
       action: 'product.inactivate',
       entityType: 'product',
       entityId: Number(id),
-      details: { reason: 'possui histórico', saleCount, movCount },
+      details: { reason: 'possui histórico', saleCount, movCount, deliveryCount },
     });
     return { ...getProductById(id), inactivated: true, deleted: false };
   }
