@@ -28,6 +28,7 @@ import DeliveryAddressForm, {
 import { isDeliveryAddressComplete } from './deliveryAddress';
 import DeliveryRoutePanel from './DeliveryRoutePanel';
 import CardPaymentModal, { type CardType } from '../vendas/CardPaymentModal';
+import QuickProductModal from '../vendas/QuickProductModal';
 
 type CartLine = {
   key: string;
@@ -36,6 +37,17 @@ type CartLine = {
   barcode?: string | null;
   unit_price_cents: number;
   quantity: number;
+};
+
+type EditLine = {
+  key: string;
+  product_id: number | null;
+  name: string;
+  barcode?: string | null;
+  quantity: number;
+  unit_price_cents: number;
+  is_misc: boolean;
+  note?: string;
 };
 
 function tone(status: string, pay?: string): 'ok' | 'warn' | 'danger' | 'muted' | 'info' {
@@ -93,6 +105,7 @@ export default function DeliveryOrdersPanel() {
   const isAdmin = me?.role === 'administrador';
   const scanRef = useRef<HTMLInputElement | null>(null);
   const draftScanRef = useRef<HTMLInputElement | null>(null);
+  const editScanRef = useRef<HTMLInputElement | null>(null);
 
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
   const [selected, setSelected] = useState<DeliveryOrder | null>(null);
@@ -102,9 +115,14 @@ export default function DeliveryOrdersPanel() {
   const [view, setView] = useState<'lista' | 'nova'>('lista');
   const [showEdit, setShowEdit] = useState(false);
   const [editAddr, setEditAddr] = useState<DeliveryAddressFormValue>(emptyDeliveryAddress());
-  const [editItems, setEditItems] = useState<
-    Array<{ product_id: number | null; name: string; quantity: number; unit_price_cents: number; is_misc: boolean }>
-  >([]);
+  const [editItems, setEditItems] = useState<EditLine[]>([]);
+  const [editScan, setEditScan] = useState('');
+  const [editScanBusy, setEditScanBusy] = useState(false);
+  const [editQuickBarcode, setEditQuickBarcode] = useState<string | null>(null);
+  const [editRemoveKey, setEditRemoveKey] = useState<string | null>(null);
+  const [editEmptyPrompt, setEditEmptyPrompt] = useState(false);
+  const [paidEditWarn, setPaidEditWarn] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
 
   // Nova entrega (carrinho local)
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -548,6 +566,10 @@ export default function DeliveryOrdersPanel() {
 
   function openEdit() {
     if (!selected) return;
+    if (selected.payment_status === 'pago' || Number(selected.amount_paid_cents) > 0) {
+      setPaidEditWarn(true);
+      return;
+    }
     setEditAddr({
       phone: selected.phone || '',
       zip_code: selected.zip_code || '',
@@ -561,20 +583,111 @@ export default function DeliveryOrdersPanel() {
       notes: selected.notes || '',
     });
     setEditItems(
-      (selected.items || []).map((it) => ({
+      (selected.items || []).map((it, idx) => ({
+        key: it.product_id ? `p-${it.product_id}` : `m-${it.id ?? idx}`,
         product_id: it.product_id ?? null,
         name: it.product_name,
+        barcode: null,
         quantity: it.quantity,
         unit_price_cents: it.unit_price_cents,
         is_misc: Boolean(it.is_misc),
       }))
     );
+    setEditScan('');
+    setEditQuickBarcode(null);
+    setEditRemoveKey(null);
+    setEditEmptyPrompt(false);
     setShowEdit(true);
+    setTimeout(() => editScanRef.current?.focus(), 40);
+  }
+
+  function addProductToEdit(product: Product, qty = 1) {
+    const addQty = Math.max(1, Math.floor(Number(qty) || 1));
+    setEditItems((prev) => {
+      const idx = prev.findIndex((l) => l.product_id === product.id && !l.is_misc);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], quantity: next[idx].quantity + addQty };
+        return next;
+      }
+      return [
+        ...prev,
+        {
+          key: `p-${product.id}`,
+          product_id: product.id,
+          name: product.name,
+          barcode: product.barcode,
+          unit_price_cents: Number(product.price_cents) || 0,
+          quantity: addQty,
+          is_misc: false,
+        },
+      ];
+    });
+    setEditEmptyPrompt(false);
+  }
+
+  async function handleEditScan(codeRaw?: string) {
+    const code = String(codeRaw ?? editScan).trim();
+    if (!code || editScanBusy) return;
+    setEditScanBusy(true);
+    setError(null);
+    try {
+      const product = await resolveProduct(code);
+      if (!product) {
+        setEditQuickBarcode(code);
+        setEditScan('');
+        return;
+      }
+      addProductToEdit(product, 1);
+      playSoftBeep();
+      setEditScan('');
+      setTimeout(() => editScanRef.current?.focus(), 30);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao buscar produto');
+      setEditScan('');
+      setTimeout(() => editScanRef.current?.focus(), 30);
+    } finally {
+      setEditScanBusy(false);
+    }
+  }
+
+  function setEditLineQty(key: string, quantity: number) {
+    const q = Math.max(1, Math.floor(Number(quantity) || 1));
+    setEditItems((prev) => prev.map((row) => (row.key === key ? { ...row, quantity: q } : row)));
+  }
+
+  function bumpEditQty(key: string, delta: number) {
+    setEditItems((prev) =>
+      prev.map((row) => {
+        if (row.key !== key) return row;
+        return { ...row, quantity: Math.max(1, row.quantity + delta) };
+      })
+    );
+  }
+
+  function confirmRemoveEditLine() {
+    if (!editRemoveKey) return;
+    setEditItems((prev) => prev.filter((row) => row.key !== editRemoveKey));
+    setEditRemoveKey(null);
+  }
+
+  function cancelEditChanges() {
+    setShowEdit(false);
+    setEditItems([]);
+    setEditScan('');
+    setEditQuickBarcode(null);
+    setEditRemoveKey(null);
+    setEditEmptyPrompt(false);
+    setNotice('Alterações descartadas. Pedido permanece como estava.');
   }
 
   async function saveEdit() {
     if (!selected) return;
-    if (!editItems.length || editItems.some((it) => it.quantity < 1)) {
+    if (!editItems.length) {
+      setEditEmptyPrompt(true);
+      return;
+    }
+    if (editItems.some((it) => it.quantity < 1)) {
       setError('Pedido precisa de itens com quantidade válida');
       return;
     }
@@ -582,6 +695,7 @@ export default function DeliveryOrdersPanel() {
       setError('ENDEREÇO INCOMPLETO PARA GERAR ROTA. Informe rua, número e cidade.');
       return;
     }
+    setEditSaving(true);
     try {
       const updated = await updateDeliveryOrderApi(selected.id, {
         phone: editAddr.phone.trim() || null,
@@ -605,12 +719,19 @@ export default function DeliveryOrdersPanel() {
       });
       setSelected(updated);
       setShowEdit(false);
+      setEditEmptyPrompt(false);
       setNotice('Pedido atualizado. Reserva reajustada. Continua aguardando pagamento.');
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao editar pedido');
+    } finally {
+      setEditSaving(false);
     }
   }
+
+  const editSubtotal = editItems.reduce((s, it) => s + it.unit_price_cents * it.quantity, 0);
+  const editTotal = Math.max(0, editSubtotal - (selected?.discount_cents || 0));
+
 
   const unpaid =
     selected &&
@@ -980,6 +1101,11 @@ export default function DeliveryOrdersPanel() {
                         </button>
                       )}
                   </>
+                )}
+                {paidConfirmed && (
+                  <button type="button" className="btn btn-ghost" onClick={() => setPaidEditWarn(true)}>
+                    EDITAR PEDIDO
+                  </button>
                 )}
                 {selected.status !== 'cancelado' && unpaid && (
                   <button
@@ -1423,52 +1549,235 @@ export default function DeliveryOrdersPanel() {
 
       {showEdit && selected && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
-          <div className="modal">
+          <div className="modal modal-wide" style={{ width: 'min(920px, 100%)' }} data-testid="editar-pedido-modal">
             <h2>EDITAR PEDIDO {selected.order_number}</h2>
-            <p className="muted-line">Somente pedidos não pagos. Reserva será reajustada.</p>
+            <p className="muted-line">
+              Somente pedidos não pagos. Reserva será reajustada. Não lança caixa nem baixa definitiva.
+            </p>
             <DeliveryAddressForm value={editAddr} onChange={setEditAddr} showCustomerHint />
-            <table className="data-table" style={{ marginTop: 12 }}>
+
+            <label style={{ display: 'block', marginTop: 12 }}>
+              Buscar produto ou ler código de barras...
+              <input
+                ref={editScanRef}
+                className="field-input"
+                data-testid="editar-pedido-scan"
+                value={editScan}
+                disabled={editScanBusy || editSaving}
+                placeholder="Passe o código de barras ou digite o produto..."
+                onChange={(e) => setEditScan(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void handleEditScan();
+                  }
+                }}
+              />
+            </label>
+
+            <table className="data-table" style={{ marginTop: 12 }} data-testid="editar-pedido-itens">
               <thead>
                 <tr>
                   <th>Produto</th>
+                  <th>Código</th>
+                  <th>Preço</th>
                   <th>Qtd</th>
-                  <th>Unit.</th>
+                  <th>Subtotal</th>
+                  <th>Observação</th>
+                  <th>Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {editItems.map((it, idx) => (
-                  <tr key={`${it.product_id ?? 'm'}-${idx}`}>
+                {editItems.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="muted-line">
+                      Nenhum produto no pedido.
+                    </td>
+                  </tr>
+                )}
+                {editItems.map((it) => (
+                  <tr key={it.key}>
                     <td>{it.name}</td>
+                    <td>{it.barcode || (it.product_id != null ? `#${it.product_id}` : '—')}</td>
+                    <td>{formatBRL(it.unit_price_cents)}</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          aria-label="Diminuir"
+                          onClick={() => bumpEditQty(it.key, -1)}
+                        >
+                          −
+                        </button>
+                        <input
+                          className="field-input"
+                          style={{ width: 64, textAlign: 'center' }}
+                          type="number"
+                          min={1}
+                          value={it.quantity}
+                          onChange={(e) => setEditLineQty(it.key, Number(e.target.value))}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          aria-label="Aumentar"
+                          onClick={() => bumpEditQty(it.key, 1)}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </td>
+                    <td>{formatBRL(it.unit_price_cents * it.quantity)}</td>
                     <td>
                       <input
                         className="field-input"
-                        style={{ width: 72 }}
-                        type="number"
-                        min={1}
-                        value={it.quantity}
+                        value={it.note || ''}
+                        placeholder="—"
                         onChange={(e) => {
-                          const q = Math.max(1, Number(e.target.value) || 1);
+                          const note = e.target.value;
                           setEditItems((prev) =>
-                            prev.map((row, i) => (i === idx ? { ...row, quantity: q } : row))
+                            prev.map((row) => (row.key === it.key ? { ...row, note } : row))
                           );
                         }}
                       />
                     </td>
-                    <td>{formatBRL(it.unit_price_cents)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        onClick={() => setEditRemoveKey(it.key)}
+                      >
+                        REMOVER
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+
+            <div className="entrega-cart-footer" style={{ marginTop: 12 }}>
+              <div>
+                Itens: <strong>{editItems.length}</strong>
+              </div>
+              <div>
+                Subtotal: <strong>{formatBRL(editSubtotal)}</strong>
+              </div>
+              <div>
+                Desconto: <strong>{formatBRL(selected.discount_cents || 0)}</strong>
+              </div>
+              <div>
+                TOTAL DO PEDIDO: <strong data-testid="editar-pedido-total">{formatBRL(editTotal)}</strong>
+              </div>
+            </div>
+
             <div className="modal-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => setShowEdit(false)}>
-                Voltar
+              <button type="button" className="btn btn-ghost" onClick={cancelEditChanges} disabled={editSaving}>
+                CANCELAR ALTERAÇÕES
               </button>
-              <button type="button" className="btn btn-primary" onClick={() => void saveEdit()}>
-                Salvar alterações
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void saveEdit()}
+                disabled={editSaving}
+              >
+                {editSaving ? 'Salvando…' : 'SALVAR ALTERAÇÕES'}
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {editRemoveKey && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal">
+            <h3>REMOVER ESTE PRODUTO DO PEDIDO?</h3>
+            <p className="muted-line">O produto permanece no cadastro. Apenas sai deste pedido.</p>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setEditRemoveKey(null)}>
+                CANCELAR
+              </button>
+              <button type="button" className="btn btn-danger" onClick={confirmRemoveEditLine}>
+                REMOVER
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editEmptyPrompt && selected && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal">
+            <h3>Este pedido ficou sem produtos.</h3>
+            <p className="muted-line">Não é possível salvar um pedido vazio. Escolha uma opção.</p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setEditEmptyPrompt(false);
+                  setTimeout(() => editScanRef.current?.focus(), 30);
+                }}
+              >
+                ADICIONAR PRODUTO
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => {
+                  setEditEmptyPrompt(false);
+                  setShowEdit(false);
+                  const el = document.getElementById('entrega-cancel-block');
+                  el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  setNotice('Use CANCELAR PEDIDO na tela do pedido se desejar cancelá-lo.');
+                }}
+              >
+                CANCELAR PEDIDO
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {paidEditWarn && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal">
+            <h3>ESTE PEDIDO JÁ POSSUI PAGAMENTO CONFIRMADO.</h3>
+            <p>
+              ALTERAR OS ITENS PODE GERAR DIFERENÇA FINANCEIRA.
+            </p>
+            <p className="muted-line">
+              A edição de itens permanece bloqueada para pedidos pagos — não há ajuste automático no caixa.
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-primary" onClick={() => setPaidEditWarn(false)}>
+                Entendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editQuickBarcode && (
+        <QuickProductModal
+          barcode={editQuickBarcode}
+          onCancel={() => {
+            setEditQuickBarcode(null);
+            setTimeout(() => editScanRef.current?.focus(), 30);
+          }}
+          onCreated={(product) => {
+            setEditQuickBarcode(null);
+            addProductToEdit(product, 1);
+            setNotice(`Produto "${product.name}" cadastrado e adicionado ao pedido.`);
+            setTimeout(() => editScanRef.current?.focus(), 30);
+          }}
+          onUseExisting={(product) => {
+            setEditQuickBarcode(null);
+            addProductToEdit(product, 1);
+            setNotice(`Produto existente "${product.name}" adicionado ao pedido.`);
+            setTimeout(() => editScanRef.current?.focus(), 30);
+          }}
+        />
       )}
     </>
   );

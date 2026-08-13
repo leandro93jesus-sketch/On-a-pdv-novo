@@ -143,11 +143,85 @@ export function listDeliveryOrders({ status, payment_status, limit = 100 } = {})
     .map(mapOrder);
 }
 
+/** Agrupa o mesmo product_id em uma linha (soma qtd; preserva preço da 1ª linha). */
+function mergeDeliveryItemPayloads(items) {
+  const merged = [];
+  const indexByProduct = new Map();
+  for (const raw of items || []) {
+    if (raw?.is_misc) {
+      merged.push(raw);
+      continue;
+    }
+    const productId = Number(raw?.product_id);
+    if (!Number.isInteger(productId) || productId <= 0) {
+      merged.push(raw);
+      continue;
+    }
+    const existingIdx = indexByProduct.get(productId);
+    if (existingIdx == null) {
+      indexByProduct.set(productId, merged.length);
+      merged.push({ ...raw, quantity: Number(raw.quantity) || 0 });
+      continue;
+    }
+    const prev = merged[existingIdx];
+    merged[existingIdx] = {
+      ...prev,
+      quantity: Number(prev.quantity || 0) + Number(raw.quantity || 0),
+      // Preserva preço/nome históricos da linha existente
+      unit_price_cents:
+        prev.unit_price_cents != null ? prev.unit_price_cents : raw.unit_price_cents,
+      name: prev.name || raw.name,
+    };
+  }
+  return merged;
+}
+
+function itemKey(it) {
+  if (it?.is_misc || !it?.product_id) {
+    return `misc:${String(it?.product_name || it?.name || 'diversos').toLowerCase()}`;
+  }
+  return `p:${it.product_id}`;
+}
+
+function formatCentsBr(cents) {
+  return `R$ ${(Number(cents || 0) / 100).toFixed(2).replace('.', ',')}`;
+}
+
+function buildItemsEditHistoryNote(prevItems, nextItems, prevTotal, nextTotal) {
+  const prevMap = new Map();
+  for (const it of prevItems || []) {
+    prevMap.set(itemKey(it), it);
+  }
+  const nextMap = new Map();
+  for (const it of nextItems || []) {
+    nextMap.set(itemKey(it), it);
+  }
+  const lines = ['Pedido editado (ainda aguardando pagamento)'];
+  const keys = new Set([...prevMap.keys(), ...nextMap.keys()]);
+  for (const key of keys) {
+    const before = prevMap.get(key);
+    const after = nextMap.get(key);
+    const name = after?.product_name || before?.product_name || 'Produto';
+    if (before && after) {
+      if (Number(before.quantity) !== Number(after.quantity)) {
+        lines.push(`${name}: ${before.quantity} → ${after.quantity}`);
+      }
+    } else if (!before && after) {
+      lines.push(`${name}: adicionada Qtd. ${after.quantity}`);
+    } else if (before && !after) {
+      lines.push(`${name}: removida`);
+    }
+  }
+  lines.push(`Total: ${formatCentsBr(prevTotal)} → ${formatCentsBr(nextTotal)}`);
+  return lines.join('\n');
+}
+
 function normalizeDeliveryItems(db, items, { extraAvailableByProduct = {} } = {}) {
-  if (!Array.isArray(items) || !items.length) {
+  const mergedItems = mergeDeliveryItemPayloads(items);
+  if (!Array.isArray(mergedItems) || !mergedItems.length) {
     throw new AppError('Pedido sem itens', { status: 400, code: 'ORDER_EMPTY' });
   }
-  return items.map((raw) => {
+  return mergedItems.map((raw) => {
     const qty = Number(raw.quantity);
     if (!Number.isInteger(qty) || qty <= 0) {
       throw new AppError('Quantidade inválida', { status: 400, code: 'INVALID_QTY' });
@@ -449,22 +523,26 @@ export function updateDeliveryOrder(orderId, payload = {}) {
       Number(orderId)
     );
 
+    const historyNote = hasItems
+      ? buildItemsEditHistoryNote(order.items || [], normalized, order.total_cents, total)
+      : 'Pedido editado (ainda aguardando pagamento)';
+
     db.prepare(
       `INSERT INTO delivery_order_history (order_id, from_status, to_status, note, user_name)
        VALUES (?, ?, ?, ?, ?)`
-    ).run(
-      Number(orderId),
-      order.status,
-      order.status,
-      'Pedido editado (ainda aguardando pagamento)',
-      getCurrentOperator()
-    );
+    ).run(Number(orderId), order.status, order.status, historyNote, getCurrentOperator());
 
     writeAudit({
       action: 'delivery_order.update',
       entityType: 'delivery_order',
       entityId: Number(orderId),
-      details: { total_cents: total, discount_cents: discount, items_replaced: hasItems },
+      details: {
+        total_cents: total,
+        total_before_cents: order.total_cents,
+        discount_cents: discount,
+        items_replaced: hasItems,
+        history_note: historyNote,
+      },
       userName: getCurrentOperator(),
     });
 

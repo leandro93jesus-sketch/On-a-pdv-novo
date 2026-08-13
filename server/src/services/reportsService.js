@@ -24,36 +24,194 @@ const REPORTS = {
   vendas_periodo: {
     title: 'Vendas por período',
     run(f) {
+      const db = getDb();
       const { from, to } = dateRange(f);
       const params = [];
-      const where = [`s.status = 'completed'`, ...betweenClause('s.created_at', from, to, params)];
+      const where = [...betweenClause('s.created_at', from, to, params)];
+
+      // Inclui concluídas e canceladas; filtro opcional de situação.
+      const statusFilter = f.status || f.situacao || null;
+      if (statusFilter === 'completed' || statusFilter === 'concluida' || statusFilter === 'Concluída') {
+        where.push(`s.status = 'completed'`);
+      } else if (
+        statusFilter === 'cancelled' ||
+        statusFilter === 'cancelada' ||
+        statusFilter === 'Cancelada'
+      ) {
+        where.push(`s.status = 'cancelled'`);
+      } else {
+        where.push(`s.status IN ('completed', 'cancelled')`);
+      }
+
       if (f.customer_id) {
         where.push('s.customer_id = ?');
         params.push(Number(f.customer_id));
       }
-      if (f.payment_method) {
-        where.push(
-          `EXISTS (SELECT 1 FROM sale_payments sp WHERE sp.sale_id = s.id AND sp.method = ?)`
-        );
-        params.push(f.payment_method);
+      if (f.customer) {
+        where.push(`LOWER(COALESCE(c.name, '')) LIKE ?`);
+        params.push(`%${String(f.customer).toLowerCase()}%`);
       }
-      const rows = getDb()
+      if (f.operator || f.operador) {
+        where.push(`LOWER(COALESCE(cs.operator_name, '')) LIKE ?`);
+        params.push(`%${String(f.operator || f.operador).toLowerCase()}%`);
+      }
+      if (f.sale_number || f.numero) {
+        where.push(`s.sale_number LIKE ?`);
+        params.push(`%${String(f.sale_number || f.numero)}%`);
+      }
+      if (f.payment_method) {
+        const pm = String(f.payment_method).toLowerCase();
+        if (pm === 'misto') {
+          where.push(
+            `(SELECT COUNT(*) FROM sale_payments sp WHERE sp.sale_id = s.id) > 1`
+          );
+        } else if (pm === 'cartao_credito') {
+          where.push(
+            `EXISTS (SELECT 1 FROM sale_payments sp WHERE sp.sale_id = s.id AND sp.method = 'cartao' AND sp.card_type = 'CREDIT')`
+          );
+        } else if (pm === 'cartao_debito') {
+          where.push(
+            `EXISTS (SELECT 1 FROM sale_payments sp WHERE sp.sale_id = s.id AND sp.method = 'cartao' AND sp.card_type = 'DEBIT')`
+          );
+        } else {
+          where.push(
+            `EXISTS (SELECT 1 FROM sale_payments sp WHERE sp.sale_id = s.id AND sp.method = ?)`
+          );
+          params.push(pm);
+        }
+      }
+
+      const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+      const rows = db
         .prepare(
-          `SELECT s.id, s.sale_number, s.created_at, s.total_cents, s.discount_cents,
+          `SELECT s.id,
+                  s.sale_number,
+                  s.created_at,
+                  date(s.created_at) AS sale_date,
+                  time(s.created_at) AS sale_time,
                   c.name AS customer_name,
-                  (SELECT GROUP_CONCAT(method) FROM sale_payments WHERE sale_id = s.id) AS payment_methods
+                  (SELECT COALESCE(SUM(si.quantity), 0) FROM sale_items si WHERE si.sale_id = s.id) AS items_count,
+                  s.total_cents,
+                  s.discount_cents,
+                  s.subtotal_cents,
+                  s.status,
+                  CASE s.status WHEN 'cancelled' THEN 'Cancelada' ELSE 'Concluída' END AS status_label,
+                  cs.operator_name AS operator_name,
+                  (SELECT GROUP_CONCAT(
+                     CASE
+                       WHEN sp.method = 'cartao' AND sp.card_type = 'CREDIT' THEN 'cartao_credito'
+                       WHEN sp.method = 'cartao' AND sp.card_type = 'DEBIT' THEN 'cartao_debito'
+                       ELSE sp.method
+                     END
+                   )
+                   FROM sale_payments sp WHERE sp.sale_id = s.id) AS payment_methods
            FROM sales s
            LEFT JOIN customers c ON c.id = s.customer_id
-           WHERE ${where.join(' AND ')}
-           ORDER BY s.created_at`
+           LEFT JOIN cash_sessions cs ON cs.id = s.cash_session_id
+           ${clause}
+           ORDER BY s.created_at, s.id`
         )
         .all(...params);
-      const totals = {
-        count: rows.length,
-        total_cents: rows.reduce((a, r) => a + r.total_cents, 0),
-        discount_cents: rows.reduce((a, r) => a + r.discount_cents, 0),
+
+      const completed = rows.filter((r) => r.status === 'completed');
+      const cancelled = rows.filter((r) => r.status === 'cancelled');
+      const grossCents = completed.reduce((a, r) => a + Number(r.total_cents || 0), 0);
+      const cancelledCents = cancelled.reduce((a, r) => a + Number(r.total_cents || 0), 0);
+
+      const payParams = [];
+      const payWhere = [`s.status = 'completed'`, ...betweenClause('s.created_at', from, to, payParams)];
+      const payRows = db
+        .prepare(
+          `SELECT sp.method, sp.card_type, sp.amount_cents, s.id AS sale_id
+           FROM sale_payments sp
+           JOIN sales s ON s.id = sp.sale_id
+           WHERE ${payWhere.join(' AND ')}`
+        )
+        .all(...payParams);
+
+      const byMethod = {
+        dinheiro: 0,
+        pix: 0,
+        cartao_credito: 0,
+        cartao_debito: 0,
+        cartao: 0,
+        crediario: 0,
+        misto: 0,
       };
-      return { columns: ['sale_number', 'created_at', 'customer_name', 'payment_methods', 'total_cents'], rows, totals };
+      const payBySale = new Map();
+      for (const p of payRows) {
+        if (!payBySale.has(p.sale_id)) payBySale.set(p.sale_id, []);
+        payBySale.get(p.sale_id).push(p);
+      }
+      for (const [, plist] of payBySale) {
+        if (plist.length > 1) {
+          byMethod.misto += plist.reduce((a, p) => a + Number(p.amount_cents || 0), 0);
+          continue;
+        }
+        const p = plist[0];
+        const amt = Number(p.amount_cents || 0);
+        if (p.method === 'cartao') {
+          if (p.card_type === 'CREDIT') byMethod.cartao_credito += amt;
+          else if (p.card_type === 'DEBIT') byMethod.cartao_debito += amt;
+          else byMethod.cartao += amt;
+        } else if (byMethod[p.method] != null) {
+          byMethod[p.method] += amt;
+        }
+      }
+
+      const retParams = [];
+      const retWhere = betweenClause('r.created_at', from, to, retParams);
+      const retRow = db
+        .prepare(
+          `SELECT COUNT(*) AS cnt, COALESCE(SUM(r.total_cents), 0) AS total_cents
+           FROM returns r
+           ${retWhere.length ? `WHERE ${retWhere.join(' AND ')}` : ''}`
+        )
+        .get(...retParams);
+
+      const returnsCount = Number(retRow?.cnt || 0);
+      const returnsCents = Number(retRow?.total_cents || 0);
+      const netCents = Math.max(0, grossCents - returnsCents);
+      const ticketAvg = completed.length ? Math.round(grossCents / completed.length) : 0;
+
+      const totals = {
+        sales_count: rows.length,
+        completed_count: completed.length,
+        cancelled_count: cancelled.length,
+        gross_cents: grossCents,
+        cancelled_cents: cancelledCents,
+        returns_count: returnsCount,
+        returns_cents: returnsCents,
+        net_cents: netCents,
+        ticket_avg_cents: ticketAvg,
+        dinheiro_cents: byMethod.dinheiro,
+        pix_cents: byMethod.pix,
+        cartao_credito_cents: byMethod.cartao_credito,
+        cartao_debito_cents: byMethod.cartao_debito,
+        cartao_cents: byMethod.cartao,
+        crediario_cents: byMethod.crediario,
+        misto_cents: byMethod.misto,
+        // Compatibilidade com totais anteriores
+        count: rows.length,
+        total_cents: grossCents,
+        discount_cents: completed.reduce((a, r) => a + Number(r.discount_cents || 0), 0),
+      };
+
+      return {
+        columns: [
+          'sale_number',
+          'sale_date',
+          'sale_time',
+          'customer_name',
+          'items_count',
+          'total_cents',
+          'payment_methods',
+          'operator_name',
+          'status_label',
+        ],
+        rows,
+        totals,
+      };
     },
   },
 
