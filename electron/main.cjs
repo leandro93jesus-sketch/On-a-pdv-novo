@@ -241,6 +241,109 @@ function closeSplash() {
   splashWindow = null;
 }
 
+const {
+  findSidecarBackups,
+  isSqliteFile,
+} = require('./sidecarBackup.cjs');
+
+/**
+ * Se não há banco atual: oferece backup encontrado ao lado do instalador/exe.
+ * NUNCA importa automaticamente.
+ */
+async function offerSidecarBackupIfPresent() {
+  const candidates = findSidecarBackups({
+    execPath: process.execPath,
+    appPath: app.getAppPath(),
+    resourcesPath: process.resourcesPath,
+    cwd: process.cwd(),
+  });
+  if (!candidates.length) return null;
+
+  const best = candidates[0];
+  const detailLines = [
+    `Arquivo: ${best.filename}`,
+    `Caminho: ${best.path}`,
+    `Tamanho: ${best.size_bytes} bytes`,
+    `Data: ${best.mtime}`,
+  ];
+  if (best.app_version) detailLines.push(`Versão no manifesto: ${best.app_version}`);
+  if (best.size_expected && best.size_expected !== best.size_bytes) {
+    detailLines.push(
+      `AVISO: tamanho do manifesto (${best.size_expected}) ≠ tamanho do arquivo (${best.size_bytes}).`
+    );
+  }
+  detailLines.push('');
+  detailLines.push('Nada será importado automaticamente.');
+  detailLines.push('Se este computador já tem vendas mais novas, NÃO importe um backup antigo.');
+
+  const { response } = await dialog.showMessageBox({
+    type: 'info',
+    title: 'BACKUP DO ONÇA PDV ENCONTRADO',
+    message: 'BACKUP DO ONÇA PDV ENCONTRADO',
+    detail: detailLines.join('\n'),
+    buttons: ['IMPORTAR ESTE BACKUP', 'ESCOLHER OUTRO', 'COMEÇAR SEM IMPORTAR'],
+    defaultId: 2,
+    cancelId: 2,
+    noLink: true,
+  });
+
+  if (response === 2) return null;
+
+  let selected = best.path;
+  if (response === 1) {
+    const picked = await dialog.showOpenDialog({
+      title: 'Escolher backup .db do ONÇA PDV',
+      properties: ['openFile'],
+      filters: [
+        { name: 'SQLite ONÇA PDV', extensions: ['db', 'sqlite'] },
+        { name: 'Todos', extensions: ['*'] },
+      ],
+    });
+    if (picked.canceled || !picked.filePaths?.[0]) return null;
+    selected = picked.filePaths[0];
+    if (!isSqliteFile(selected)) {
+      await dialog.showMessageBox({
+        type: 'error',
+        title: 'ONÇA PDV',
+        message: 'Arquivo inválido',
+        detail: 'O arquivo selecionado não é um SQLite válido.',
+        buttons: ['OK'],
+      });
+      return null;
+    }
+  }
+
+  const targetDir = path.join(app.getPath('userData'), 'ONCA-PDV');
+  const targetDb = path.join(targetDir, 'onca-pdv.db');
+  const { response: confirm } = await dialog.showMessageBox({
+    type: 'question',
+    title: 'Confirmar importação do backup',
+    message: 'Importar este backup como banco ativo?',
+    detail:
+      `Origem:\n${selected}\n\nDestino:\n${targetDb}\n\n` +
+      'Confirme somente se NÃO houver banco atual com vendas mais recentes.',
+    buttons: ['CONFIRMAR IMPORTAÇÃO', 'CANCELAR'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+  });
+  if (confirm !== 0) return null;
+
+  fs.mkdirSync(targetDir, { recursive: true });
+  if (fs.existsSync(targetDb)) {
+    const safety = path.join(
+      targetDir,
+      'backups',
+      `ONCA-PDV-PRE-RESTAURACAO-${Date.now()}.db`
+    );
+    fs.mkdirSync(path.dirname(safety), { recursive: true });
+    fs.copyFileSync(targetDb, safety);
+  }
+  fs.copyFileSync(selected, targetDb);
+  logApi(`sidecar backup importado com confirmação: ${selected} → ${targetDb}`);
+  return { dbPath: targetDb, dataDir: targetDir };
+}
+
 /** Candidatos a onca-pdv.db fora da pasta do instalador (AppData persistente). */
 function listProductionDbCandidates() {
   const userData = app.getPath('userData');
@@ -304,7 +407,14 @@ async function ensureProductionDatabaseReady() {
   const existing = findExistingProductionDbFile();
   if (existing) {
     logApi(`banco produção encontrado: ${existing}`);
+    // Há banco atual: NÃO importar backup sidecar automaticamente.
     return { dbPath: existing, dataDir: path.dirname(existing) };
+  }
+
+  // Sem banco atual: oferecer backup ao lado do instalador (confirmação obrigatória).
+  const sidecar = await offerSidecarBackupIfPresent();
+  if (sidecar?.dbPath) {
+    return sidecar;
   }
 
   // Instalação nova (sem marcadores) — API pode criar banco vazio.

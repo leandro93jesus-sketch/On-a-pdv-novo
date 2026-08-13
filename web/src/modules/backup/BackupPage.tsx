@@ -33,6 +33,26 @@ function countVal(
   return String(counts[key]);
 }
 
+function mapRestoreError(e: unknown): string {
+  if (!(e instanceof Error)) return 'Erro ao restaurar';
+  const code = (e as Error & { code?: string }).code || '';
+  const msg = e.message || '';
+  if (code === 'BACKUP_INVALID' || /BACKUP INVÁLIDO/i.test(msg)) return msg || 'BACKUP INVÁLIDO';
+  if (code === 'BACKUP_CORRUPT' || /BANCO CORROMPIDO/i.test(msg)) return msg || 'BANCO CORROMPIDO';
+  if (code === 'PRE_RESTORE_BACKUP_FAILED') return msg || 'FALHA AO CRIAR BACKUP DO BANCO ATUAL';
+  if (code === 'DB_CLOSE_FAILED') return msg || 'FALHA AO FECHAR CONEXÃO';
+  if (code === 'RESTORE_COPY_FAILED') return msg || 'FALHA AO COPIAR BANCO';
+  if (code === 'DB_PATH_MISMATCH') return msg || 'API ESTÁ ABRINDO OUTRO BANCO';
+  if (code === 'RESTORE_MIGRATION_FAILED') return msg || 'FALHA NA MIGRATION';
+  if (code === 'CURRENT_DB_NEWER_THAN_BACKUP') {
+    return (
+      msg ||
+      'ATENÇÃO: O BANCO ATUAL PODE CONTER VENDAS MAIS RECENTES.'
+    );
+  }
+  return msg || 'Erro ao restaurar';
+}
+
 export default function BackupPage() {
   const [tab, setTab] = useState<Tab>('backup');
   const [backups, setBackups] = useState<BackupRecord[]>([]);
@@ -41,18 +61,18 @@ export default function BackupPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [fileInputKey, setFileInputKey] = useState(0);
 
   const [restoreTarget, setRestoreTarget] = useState<BackupRecord | null>(null);
   const [restorePreview, setRestorePreview] = useState<Record<string, unknown> | null>(null);
   const [restoreConfirm, setRestoreConfirm] = useState(false);
+  const [allowOverwriteNewer, setAllowOverwriteNewer] = useState(false);
   const [restoreReport, setRestoreReport] = useState<Record<string, unknown> | null>(null);
 
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<ImportRun | null>(null);
   const [importConfirm, setImportConfirm] = useState(false);
   const [importReport, setImportReport] = useState<Record<string, unknown> | null>(null);
-
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
 
   async function loadBackups() {
     setBackups(await listBackupsApi());
@@ -95,94 +115,107 @@ export default function BackupPage() {
   async function openRestore(b: BackupRecord) {
     setBusy(true);
     setError(null);
-    setRestoreConfirm(false);
+    setRestoreConfirm(true);
+    setAllowOverwriteNewer(false);
     setRestoreReport(null);
     try {
       const preview = await previewRestoreApi(b.filepath);
       setRestoreTarget(b);
       setRestorePreview(preview);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erro na prévia de restauração');
+      setError(mapRestoreError(e));
     } finally {
       setBusy(false);
     }
   }
 
-  async function confirmRestore() {
-    if (!restoreTarget || !restoreConfirm) {
-      setError('Marque a confirmação para restaurar.');
+  async function confirmRestore(forceNewer = false) {
+    if (!restoreTarget) {
+      setError('Nenhum backup selecionado.');
+      return;
+    }
+    const needsForce = Boolean(restorePreview?.requires_allow_overwrite_newer_data);
+    if (needsForce && !forceNewer && !allowOverwriteNewer) {
+      setError('ATENÇÃO: O BANCO ATUAL PODE CONTER VENDAS MAIS RECENTES.');
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const result = await restoreBackupApi(restoreTarget.filepath, true);
+      const result = await restoreBackupApi(
+        restoreTarget.filepath,
+        true,
+        needsForce ? true : false
+      );
       if (!result.ok || !result.verified) {
         setError('Restauração não verificada. Os dados podem não ter sido carregados.');
         return;
       }
       setRestoreReport(result);
-      setNotice(
-        String(
-          result.message ||
-            'RESTAURAÇÃO CONCLUÍDA. O ONÇA PDV SERÁ RECARREGADO PARA CARREGAR OS DADOS.'
-        )
-      );
+      setNotice(String(result.message || 'BACKUP RESTAURADO'));
       setRestoreTarget(null);
       setRestorePreview(null);
       setRestoreConfirm(false);
+      setAllowOverwriteNewer(false);
       await loadBackups();
       await loadActiveDb();
       window.setTimeout(() => {
         window.location.reload();
-      }, 1200);
+      }, 1500);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erro ao restaurar');
+      setError(mapRestoreError(e));
     } finally {
       setBusy(false);
     }
   }
 
-  async function uploadDb() {
-    if (!uploadFile) {
-      setError('Selecione um arquivo .db ou .sqlite');
-      return;
-    }
-    const name = uploadFile.name.toLowerCase();
+  async function selectBackupFile(file: File | null) {
+    if (!file) return;
+    const name = file.name.toLowerCase();
     if (name.endsWith('.json')) {
       setError('Arquivo JSON detectado. Use a aba IMPORTAR BACKUP ANTIGO JSON.');
       return;
     }
+    if (!/\.(db|sqlite|sqlite3)$/i.test(name)) {
+      setError('BACKUP INVÁLIDO — use .db, .sqlite ou .sqlite3');
+      return;
+    }
     setBusy(true);
     setError(null);
+    setNotice(null);
     setRestoreReport(null);
     try {
-      const b64 = await fileToBase64(uploadFile);
-      const uploaded = await uploadBackupApi(uploadFile.name, b64);
-      setNotice(
-        `Arquivo validado e registrado: ${String(uploaded.filename || uploadFile.name)}. Revise a prévia.`
-      );
-      setUploadFile(null);
+      const b64 = await fileToBase64(file);
+      const uploaded = await uploadBackupApi(file.name, b64);
       await loadBackups();
       const filepath = String(uploaded.filepath || '');
-      if (filepath) {
-        const preview =
-          (uploaded.preview as Record<string, unknown> | undefined) ||
-          (await previewRestoreApi(filepath));
-        setRestoreTarget({
-          id: typeof uploaded.id === 'number' ? uploaded.id : null,
-          filename: String(uploaded.filename || uploadFile.name),
-          filepath,
-          size_bytes: Number(uploaded.size_bytes || uploadFile.size),
-          kind: 'uploaded',
-          exists: true,
-          valid: true,
-        });
-        setRestorePreview(preview);
-        setRestoreConfirm(false);
+      if (!filepath) {
+        setError('BACKUP INVÁLIDO — arquivo não foi registrado');
+        return;
       }
+      const preview =
+        (uploaded.preview as Record<string, unknown> | undefined) ||
+        (await previewRestoreApi(filepath));
+      if (String(preview.integrity_check || '') !== 'ok') {
+        setError('BANCO CORROMPIDO — integrity_check falhou');
+        return;
+      }
+      setRestoreTarget({
+        id: typeof uploaded.id === 'number' ? uploaded.id : null,
+        filename: String(uploaded.filename || file.name),
+        filepath,
+        size_bytes: Number(uploaded.size_bytes || file.size),
+        kind: 'uploaded',
+        exists: true,
+        valid: true,
+      });
+      setRestorePreview(preview);
+      setRestoreConfirm(true);
+      setAllowOverwriteNewer(false);
+      setNotice('BACKUP ENCONTRADO — revise a prévia antes de restaurar.');
+      setFileInputKey((k) => k + 1);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erro no upload');
+      setError(mapRestoreError(e));
     } finally {
       setBusy(false);
     }
@@ -311,12 +344,12 @@ export default function BackupPage() {
 
       {restoreReport && (
         <div className="side-card" style={{ marginBottom: 12 }}>
-          <h3>Resultado da restauração (verificado)</h3>
+          <h3>BACKUP RESTAURADO</h3>
           <div className="kv-list">
             <div>
-              <span>Destino</span>
+              <span>BANCO ATIVO</span>
               <strong style={{ wordBreak: 'break-all' }}>
-                {String(restoreReport.destination_db || '—')}
+                {String(restoreReport.active_db_after || restoreReport.destination_db || '—')}
               </strong>
             </div>
             <div>
@@ -329,23 +362,20 @@ export default function BackupPage() {
               </strong>
             </div>
             <div>
-              <span>Produtos antes → depois</span>
+              <span>Produtos</span>
               <strong>
-                {countVal(restoreReport.counts_before as Record<string, unknown>, 'products')} →{' '}
                 {countVal(restoreReport.counts_after as Record<string, unknown>, 'products')}
               </strong>
             </div>
             <div>
-              <span>Clientes antes → depois</span>
+              <span>Clientes</span>
               <strong>
-                {countVal(restoreReport.counts_before as Record<string, unknown>, 'customers')} →{' '}
                 {countVal(restoreReport.counts_after as Record<string, unknown>, 'customers')}
               </strong>
             </div>
             <div>
-              <span>Vendas antes → depois</span>
+              <span>Vendas</span>
               <strong>
-                {countVal(restoreReport.counts_before as Record<string, unknown>, 'sales')} →{' '}
                 {countVal(restoreReport.counts_after as Record<string, unknown>, 'sales')}
               </strong>
             </div>
@@ -356,8 +386,8 @@ export default function BackupPage() {
       {tab === 'backup' ? (
         <>
           <p className="muted-line" style={{ marginBottom: 12 }}>
-            Esta aba restaura apenas backups <strong>.db / .sqlite</strong> do ONÇA PDV. JSON do
-            sistema antigo fica na outra aba.
+            Selecione um backup <strong>.db / .sqlite / .sqlite3</strong>. O sistema valida e mostra
+            a prévia — a restauração só ocorre após confirmação.
           </p>
           <ModuleToolbar>
             <button
@@ -368,22 +398,20 @@ export default function BackupPage() {
             >
               Criar backup agora
             </button>
-            <label className="toolbar-field">
-              Enviar .db / .sqlite
+            <label className="btn btn-accent" style={{ cursor: busy ? 'wait' : 'pointer' }}>
+              SELECIONAR BACKUP
               <input
+                key={fileInputKey}
                 type="file"
-                accept=".db,.sqlite,application/x-sqlite3"
-                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                accept=".db,.sqlite,.sqlite3,application/x-sqlite3"
+                hidden
+                disabled={busy}
+                onChange={(e) => {
+                  const f = e.target.files?.[0] || null;
+                  void selectBackupFile(f);
+                }}
               />
             </label>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              disabled={busy || !uploadFile}
-              onClick={() => void uploadDb()}
-            >
-              Validar e pré-visualizar
-            </button>
           </ModuleToolbar>
 
           <div className="product-table-wrap">
@@ -440,23 +468,23 @@ export default function BackupPage() {
           {restoreTarget && restorePreview && (
             <div className="modal-backdrop">
               <div className="modal modal-wide">
-                <h3>Prévia — Restaurar backup SQLite</h3>
+                <h3>BACKUP ENCONTRADO</h3>
                 <div className="kv-list">
                   <div>
-                    <span>ARQUIVO</span>
+                    <span>Arquivo</span>
                     <strong>{String(fileMeta.filename || restoreTarget.filename)}</strong>
                   </div>
                   <div>
-                    <span>TIPO</span>
-                    <strong>DB</strong>
+                    <span>Data</span>
+                    <strong>{String(fileMeta.mtime || restoreTarget.created_at || '—')}</strong>
                   </div>
                   <div>
-                    <span>TAMANHO</span>
+                    <span>Tamanho</span>
                     <strong>{formatBytes(Number(fileMeta.size_bytes || restoreTarget.size_bytes))}</strong>
                   </div>
                   <div>
-                    <span>DATA/HORA</span>
-                    <strong>{String(fileMeta.mtime || restoreTarget.created_at || '—')}</strong>
+                    <span>Versão</span>
+                    <strong>{String(restorePreview.app_version || '—')}</strong>
                   </div>
                   <div>
                     <span>integrity_check</span>
@@ -467,47 +495,64 @@ export default function BackupPage() {
                     <strong>{String(restorePreview.foreign_key_check || '—')}</strong>
                   </div>
                   <div>
-                    <span>BANCO DE DESTINO</span>
+                    <span>BANCO ATIVO</span>
                     <strong style={{ wordBreak: 'break-all' }}>
                       {String(restorePreview.destination_db || activeDb?.db_path || '—')}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>BANCO SELECIONADO</span>
+                    <strong style={{ wordBreak: 'break-all' }}>
+                      {String(restoreTarget.filepath)}
                     </strong>
                   </div>
                 </div>
 
                 <div className="cash-grid" style={{ marginTop: 12 }}>
                   <div className="side-card">
-                    <h3>No backup</h3>
+                    <h3>Dados no backup</h3>
                     <p>Produtos: {countVal(previewCounts, 'products')}</p>
                     <p>Clientes: {countVal(previewCounts, 'customers')}</p>
                     <p>Vendas: {countVal(previewCounts, 'sales')}</p>
-                    <p>Estoque (mov.): {countVal(previewCounts, 'stock_movements')}</p>
-                    <p>Crediário: {countVal(previewCounts, 'credit_accounts')}</p>
-                    <p>Fornecedores: {countVal(previewCounts, 'suppliers')}</p>
+                    <p>Itens de venda: {countVal(previewCounts, 'sale_items')}</p>
+                    <p>Pagamentos: {countVal(previewCounts, 'sale_payments')}</p>
+                    <p>Movimentações de caixa: {countVal(previewCounts, 'cash_movements')}</p>
+                    <p>Movimentações de estoque: {countVal(previewCounts, 'stock_movements')}</p>
+                    <p>
+                      Entregas:{' '}
+                      {countVal(previewCounts, 'delivery_orders') !== '—'
+                        ? countVal(previewCounts, 'delivery_orders')
+                        : countVal(previewCounts, 'deliveries')}
+                    </p>
                   </div>
                   <div className="side-card">
-                    <h3>Banco atual (será substituído)</h3>
+                    <h3>Banco atual</h3>
                     <p>Produtos: {countVal(currentCounts, 'products')}</p>
                     <p>Clientes: {countVal(currentCounts, 'customers')}</p>
                     <p>Vendas: {countVal(currentCounts, 'sales')}</p>
-                    <p>Estoque (mov.): {countVal(currentCounts, 'stock_movements')}</p>
-                    <p>Crediário: {countVal(currentCounts, 'credit_accounts')}</p>
-                    <p>Fornecedores: {countVal(currentCounts, 'suppliers')}</p>
+                    <p>Itens de venda: {countVal(currentCounts, 'sale_items')}</p>
+                    <p>Pagamentos: {countVal(currentCounts, 'sale_payments')}</p>
+                    <p>Movimentações de caixa: {countVal(currentCounts, 'cash_movements')}</p>
+                    <p>Movimentações de estoque: {countVal(currentCounts, 'stock_movements')}</p>
+                    <p>
+                      Entregas:{' '}
+                      {countVal(currentCounts, 'delivery_orders') !== '—'
+                        ? countVal(currentCounts, 'delivery_orders')
+                        : countVal(currentCounts, 'deliveries')}
+                    </p>
                   </div>
                 </div>
 
                 <p className="muted-line" style={{ marginTop: 10 }}>
-                  {String(restorePreview.warning || '')} Será criado{' '}
-                  <strong>PRE-RESTAURACAO-*</strong> antes.
+                  Antes da restauração será criado{' '}
+                  <strong>ONCA-PDV-PRE-RESTAURACAO-*</strong>.
                 </p>
+                {restorePreview.current_has_newer_data ? (
+                  <p style={{ color: 'var(--danger, #b42318)', marginTop: 8 }}>
+                    ATENÇÃO: O BANCO ATUAL PODE CONTER VENDAS MAIS RECENTES.
+                  </p>
+                ) : null}
 
-                <label className="check-inline">
-                  <input
-                    type="checkbox"
-                    checked={restoreConfirm}
-                    onChange={(e) => setRestoreConfirm(e.target.checked)}
-                  />
-                  Confirmo restaurar este backup no banco atual em uso
-                </label>
                 <div className="modal-actions">
                   <button
                     type="button"
@@ -516,18 +561,33 @@ export default function BackupPage() {
                       setRestoreTarget(null);
                       setRestorePreview(null);
                       setRestoreConfirm(false);
+                      setAllowOverwriteNewer(false);
                     }}
                   >
                     CANCELAR
                   </button>
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    disabled={busy || !restoreConfirm}
-                    onClick={() => void confirmRestore()}
-                  >
-                    IMPORTAR / RESTAURAR
-                  </button>
+                  {restorePreview.requires_allow_overwrite_newer_data ? (
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      disabled={busy}
+                      onClick={() => {
+                        setAllowOverwriteNewer(true);
+                        void confirmRestore(true);
+                      }}
+                    >
+                      FAZER BACKUP E CONTINUAR
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      disabled={busy || !restoreConfirm}
+                      onClick={() => void confirmRestore(false)}
+                    >
+                      RESTAURAR ESTE BACKUP
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

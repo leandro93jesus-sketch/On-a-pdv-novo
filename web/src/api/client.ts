@@ -1486,11 +1486,19 @@ export function previewRestoreApi(filepath: string): Promise<Record<string, unkn
   }).then((r) => handle<Record<string, unknown>>(r));
 }
 
-export function restoreBackupApi(filepath: string, confirm: boolean): Promise<Record<string, unknown>> {
+export function restoreBackupApi(
+  filepath: string,
+  confirm: boolean,
+  allowOverwriteNewerData = false
+): Promise<Record<string, unknown>> {
   return apiFetch('/api/backups/restore', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filepath, confirm }),
+    body: JSON.stringify({
+      filepath,
+      confirm,
+      allow_overwrite_newer_data: allowOverwriteNewerData,
+    }),
   }).then((r) => handle<Record<string, unknown>>(r));
 }
 
