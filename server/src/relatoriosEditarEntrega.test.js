@@ -84,6 +84,7 @@ test('relatório vendas_periodo lista todas as vendas com colunas e canceladas',
 
   const cancel = await api('POST', `/api/sales/${sales[2].id}/cancel`, {
     reason: 'Teste cancelamento relatório',
+    admin_password: '230808',
   });
   assert.ok(cancel.status === 200 || cancel.status === 201, JSON.stringify(cancel.json));
 

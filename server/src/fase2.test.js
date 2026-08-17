@@ -288,11 +288,13 @@ test('venda após ajuste usa estoque atualizado', async () => {
   assert.equal(after.json.stock_qty, 1);
 
   const insufficient = await api('POST', '/api/sales', {
-    client_request_id: `f2-sale-fail-${Date.now()}`,
+    client_request_id: `f2-sale-neg-${Date.now()}`,
     payment_method: 'pix',
     items: [{ product_id: p.json.id, quantity: 5 }],
   });
-  assert.equal(insufficient.status, 409);
+  assert.equal(insufficient.status, 201, JSON.stringify(insufficient.json));
+  const afterNeg = await api('GET', `/api/products/${p.json.id}`);
+  assert.equal(afterNeg.json.stock_qty, -4);
 });
 
 test('integridade SQLite após operações fase 2', () => {

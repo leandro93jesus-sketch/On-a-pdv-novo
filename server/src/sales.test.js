@@ -164,35 +164,31 @@ test('finaliza venda, persiste e baixa estoque', async () => {
   assert.ok(sales.some((s) => s.id === sale.id));
 });
 
-test('bloqueia estoque negativo sem regra explícita', async () => {
+test('permite venda com estoque insuficiente (estoque fica negativo)', async () => {
   const id = insertProduct({ name: 'Arroz', price_cents: 2000, stock_qty: 1 });
 
-  const { res, json: body } = await postSale({
+  const { res } = await postSale({
     payment_method: 'dinheiro',
     items: [{ product_id: id, quantity: 3 }],
   });
-  assert.equal(res.status, 409);
-  assert.equal(body.code, 'STOCK_INSUFFICIENT');
+  assert.equal(res.status, 201);
 
   const product = db.prepare('SELECT stock_qty FROM products WHERE id = ?').get(id);
-  assert.equal(product.stock_qty, 1);
-  const salesCount = db.prepare('SELECT COUNT(*) AS c FROM sales').get().c;
-  assert.equal(salesCount, 0);
+  assert.equal(product.stock_qty, -2);
 });
 
 test('agrega estoque quando o mesmo produto aparece em várias linhas', async () => {
   const id = insertProduct({ name: 'Biscoito', price_cents: 200, stock_qty: 5 });
-  const { res, json } = await postSale({
+  const { res } = await postSale({
     payment_method: 'dinheiro',
     items: [
       { product_id: id, quantity: 3 },
       { product_id: id, quantity: 3 },
     ],
   });
-  assert.equal(res.status, 409);
-  assert.equal(json.code, 'STOCK_INSUFFICIENT');
-  assert.equal(db.prepare('SELECT stock_qty FROM products WHERE id = ?').get(id).stock_qty, 5);
-  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM sales').get().c, 0);
+  assert.equal(res.status, 201);
+  assert.equal(db.prepare('SELECT stock_qty FROM products WHERE id = ?').get(id).stock_qty, -1);
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM sales').get().c, 1);
 });
 
 test('permite estoque negativo quando allow_negative_stock = 1', async () => {
