@@ -16,6 +16,7 @@ import RelatoriosPage from './modules/relatorios/RelatoriosPage';
 import BackupPage from './modules/backup/BackupPage';
 import ConfiguracoesPage from './modules/configuracoes/ConfiguracoesPage';
 import HistoricoVendasPage from './modules/vendas/HistoricoVendasPage';
+import OrcamentosPage from './modules/orcamentos/OrcamentosPage';
 import LoginPage from './modules/auth/LoginPage';
 import ChangePasswordPage from './modules/auth/ChangePasswordPage';
 
@@ -42,6 +43,7 @@ export default function App() {
           <Route index element={<Navigate to="/vendas" replace />} />
           <Route path="/vendas" element={<VendasPage />} />
           <Route path="/historico-vendas" element={<HistoricoVendasPage />} />
+          <Route path="/orcamentos" element={<OrcamentosPage />} />
           <Route path="/caixa" element={<CaixaPage />} />
           <Route path="/produtos" element={<ProdutosPage />} />
           <Route path="/estoque" element={<EstoquePage />} />

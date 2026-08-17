@@ -7,6 +7,7 @@ import {
   fetchProducts,
   fetchSale,
   formatBRL,
+  markQuoteConvertedApi,
   type CashSession,
   type Customer,
   type Product,
@@ -44,6 +45,7 @@ import {
   type CartLine,
   type PaymentMethod,
 } from './types';
+import { QUOTE_TO_SALE_KEY } from '../orcamentos/quoteConversion';
 
 const PAYMENTS_ROW1: { id: PaymentMethod; label: string }[] = [
   { id: 'dinheiro', label: 'Dinheiro' },
@@ -257,6 +259,19 @@ export default function VendasPage() {
     }
     const persisted = loadPersistedDraft();
     if (hasOpenSaleContent(persisted)) {
+      // Conversão de orçamento: aplica direto sem modal de recuperação.
+      let fromQuote = false;
+      try {
+        fromQuote = Boolean(sessionStorage.getItem(QUOTE_TO_SALE_KEY));
+      } catch {
+        fromQuote = false;
+      }
+      if (fromQuote) {
+        applyDraft(persisted!);
+        setNotice('Itens do orçamento carregados. Finalize a venda para baixar estoque/caixa.');
+        setDraftReady(true);
+        return;
+      }
       setPendingRecovery(persisted);
       setShowRecovery(true);
       setDraftReady(true);
@@ -835,6 +850,21 @@ export default function VendasPage() {
       setReceipt(full);
       resetOpenSaleFields();
       setNotice(`Venda ${full.sale_number} concluída com sucesso.`);
+      try {
+        const raw = sessionStorage.getItem(QUOTE_TO_SALE_KEY);
+        if (raw) {
+          const meta = JSON.parse(raw) as { quote_id?: number; quote_number?: string };
+          if (meta.quote_id) {
+            await markQuoteConvertedApi(meta.quote_id, full.id);
+            setNotice(
+              `Venda ${full.sale_number} concluída. Orçamento ${meta.quote_number || meta.quote_id} marcado como convertido.`
+            );
+          }
+          sessionStorage.removeItem(QUOTE_TO_SALE_KEY);
+        }
+      } catch {
+        /* vínculo do orçamento é best-effort; venda já está salva */
+      }
       await loadCash();
       clearSearch();
     } catch (e) {

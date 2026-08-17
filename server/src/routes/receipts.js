@@ -2,14 +2,28 @@ import { Router } from 'express';
 import {
   ensureSaleReceiptPdfFile,
   ensureDeliveryOrderPdfFile,
+  ensureQuotePdfFile,
+  ensureCreditAccountPdfFile,
 } from '../services/pdfService.js';
 import {
   buildWhatsAppShare,
   buildDeliveryOrderDocumentWhatsAppShare,
+  buildQuoteWhatsAppShare,
 } from '../services/whatsappService.js';
 import { authOptional } from '../middleware/auth.js';
 
 const router = Router();
+
+function pdfMetaJson(saved, urls) {
+  return {
+    filename: saved.filename,
+    relative_path: saved.relativePath,
+    absolute_path: saved.absolutePath,
+    folder_path: saved.dir,
+    regenerated: saved.regenerated,
+    ...urls,
+  };
+}
 
 router.get('/sales/:id/pdf', authOptional, async (req, res, next) => {
   try {
@@ -132,6 +146,89 @@ router.post('/delivery-orders/:id/whatsapp', authOptional, async (req, res, next
         pending: saved.pending,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/quotes/:id/pdf', authOptional, async (req, res, next) => {
+  try {
+    const force = req.query.regen === '1' || req.query.force === '1';
+    const saved = await ensureQuotePdfFile(Number(req.params.id), { force });
+    const disposition = req.query.download === '1' ? 'attachment' : 'inline';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `${disposition}; filename="${saved.filename}"`);
+    res.send(saved.buffer);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/quotes/:id/pdf', authOptional, async (req, res, next) => {
+  try {
+    const force = Boolean(req.body?.force || req.body?.regen);
+    const saved = await ensureQuotePdfFile(Number(req.params.id), { force });
+    res.json(
+      pdfMetaJson(saved, {
+        quote_id: saved.quote_id,
+        quote_number: saved.quote_number,
+        download_url: `/api/receipts/quotes/${saved.quote_id}/pdf?download=1`,
+        view_url: `/api/receipts/quotes/${saved.quote_id}/pdf`,
+      })
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/quotes/:id/whatsapp', authOptional, async (req, res, next) => {
+  try {
+    const force = Boolean(req.body?.force || req.body?.regen);
+    const saved = await ensureQuotePdfFile(Number(req.params.id), { force });
+    const share = buildQuoteWhatsAppShare({
+      quoteId: Number(req.params.id),
+      phone: req.body?.phone,
+      message: req.body?.message,
+      pdfMeta: saved,
+    });
+    res.json({
+      ...share,
+      pdf: pdfMetaJson(saved, {
+        quote_id: saved.quote_id,
+        quote_number: saved.quote_number,
+        download_url: `/api/receipts/quotes/${saved.quote_id}/pdf?download=1`,
+        view_url: `/api/receipts/quotes/${saved.quote_id}/pdf`,
+      }),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/credit-accounts/:id/pdf', authOptional, async (req, res, next) => {
+  try {
+    const force = req.query.regen === '1' || req.query.force === '1';
+    const saved = await ensureCreditAccountPdfFile(Number(req.params.id), { force });
+    const disposition = req.query.download === '1' ? 'attachment' : 'inline';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `${disposition}; filename="${saved.filename}"`);
+    res.send(saved.buffer);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/credit-accounts/:id/pdf', authOptional, async (req, res, next) => {
+  try {
+    const force = Boolean(req.body?.force || req.body?.regen);
+    const saved = await ensureCreditAccountPdfFile(Number(req.params.id), { force });
+    res.json(
+      pdfMetaJson(saved, {
+        credit_account_id: saved.credit_account_id,
+        download_url: `/api/receipts/credit-accounts/${saved.credit_account_id}/pdf?download=1`,
+        view_url: `/api/receipts/credit-accounts/${saved.credit_account_id}/pdf`,
+      })
+    );
   } catch (err) {
     next(err);
   }

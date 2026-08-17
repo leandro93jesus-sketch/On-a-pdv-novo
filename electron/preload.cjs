@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld('oncaDesktop', {
   scanBluetooth: () => ipcRenderer.invoke('bluetooth:scan'),
   cancelBluetooth: () => ipcRenderer.invoke('bluetooth:cancel'),
   getLinuxPrintDiag: () => ipcRenderer.invoke('linux:print-diag'),
+  savePdf: (opts) => ipcRenderer.invoke('files:save-pdf', opts || {}),
 });

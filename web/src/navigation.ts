@@ -13,6 +13,12 @@ export const NAV_ITEMS: NavItem[] = [
     ready: true,
     description: 'Consulta, PDF, alteração e cancelamento de vendas',
   },
+  {
+    path: '/orcamentos',
+    label: 'Orçamentos',
+    ready: true,
+    description: 'Propostas comerciais, PDF e conversão em venda',
+  },
   { path: '/caixa', label: 'Caixa', ready: true, description: 'Abertura, sangria e fechamento' },
   { path: '/produtos', label: 'Produtos', ready: true, description: 'Cadastro e preços' },
   { path: '/estoque', label: 'Estoque', ready: true, description: 'Saldos e movimentações' },

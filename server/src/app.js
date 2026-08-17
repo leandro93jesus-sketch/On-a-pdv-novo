@@ -22,6 +22,7 @@ import reportsRouter from './routes/reports.js';
 import backupsRouter from './routes/backups.js';
 import importsRouter from './routes/imports.js';
 import receiptsRouter from './routes/receipts.js';
+import quotesRouter from './routes/quotes.js';
 import auditRouter from './routes/audit.js';
 import exportRouter from './routes/export.js';
 import supportRouter from './routes/support.js';
@@ -48,6 +49,7 @@ export function createApp() {
   app.use('/api/backups', backupsRouter);
   app.use('/api/imports', importsRouter);
   app.use('/api/receipts', receiptsRouter);
+  app.use('/api/quotes', quotesRouter);
   app.use('/api/audit', auditRouter);
   app.use('/api/export', exportRouter);
   app.use('/api/support', supportRouter);

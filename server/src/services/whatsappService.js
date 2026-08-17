@@ -1,6 +1,7 @@
 import { getSetting } from './settingsService.js';
 import { getSaleById } from './salesService.js';
 import { getDeliveryOrder } from './deliveryOrdersService.js';
+import { getQuoteById } from './quotesService.js';
 import { AppError } from '../utils/errors.js';
 
 function digitsOnly(phone) {
@@ -131,6 +132,33 @@ export function buildDeliveryOrderDocumentWhatsAppShare({
     url: built.url,
     pdf_attached: false,
     pending,
+    note: MANUAL_ATTACH_NOTE,
+    financial_impact: false,
+  };
+}
+
+export function buildQuoteWhatsAppShare({ quoteId, phone, message, pdfMeta } = {}) {
+  const quote = getQuoteById(quoteId);
+  if (!quote) throw new AppError('Orçamento não encontrado', { status: 404, code: 'NOT_FOUND' });
+
+  const number =
+    normalizeWhatsAppNumber(phone) || normalizeWhatsAppNumber(quote.customer_phone);
+
+  const defaultMsg =
+    'Olá! Segue o orçamento da Onça Produtos de Limpeza. Valores sujeitos à validade informada.';
+  const fileHint = pdfMeta?.filename ? `\nArquivo: ${pdfMeta.filename}` : '';
+  const text =
+    message?.trim() ||
+    `${defaultMsg}\n\nOrçamento: ${quote.quote_number}${fileHint}\n(Anexe o PDF nesta conversa.)`;
+
+  const built = buildWhatsAppUrl({ phone: number, message: text });
+  return {
+    quote_id: quote.id,
+    quote_number: quote.quote_number,
+    phone: built.phone,
+    message: built.message,
+    url: built.url,
+    pdf_attached: false,
     note: MANUAL_ATTACH_NOTE,
     financial_impact: false,
   };

@@ -83,6 +83,8 @@ export function getCompanyForReceipt() {
     store_address: getSetting('store_address', ''),
     store_phone: getSetting('store_phone', ''),
     store_whatsapp: getSetting('store_whatsapp', ''),
+    store_site: getSetting('store_site', 'www.oncalimpeza.com.br'),
+    store_instagram: getSetting('store_instagram', '@onca_limpeza'),
     receipt_message: getSetting('receipt_message', 'Obrigado pela preferência!'),
     logo,
   };

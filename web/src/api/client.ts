@@ -1720,6 +1720,174 @@ export function deliveryOrderWhatsappShareApi(
   }).then((r) => handle(r));
 }
 
+/* ---------- Orçamentos ---------- */
+
+export type QuoteItem = {
+  id?: number;
+  product_id: number | null;
+  sku?: string | null;
+  barcode?: string | null;
+  name: string;
+  quantity: number;
+  unit_price_cents: number;
+  line_total_cents?: number;
+  is_misc?: number | boolean;
+};
+
+export type Quote = {
+  id: number;
+  quote_number: string;
+  status: string;
+  status_label?: string;
+  customer_id: number | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  customer_document: string | null;
+  customer_address: string | null;
+  notes: string | null;
+  valid_until: string | null;
+  subtotal_cents: number;
+  discount_cents: number;
+  total_cents: number;
+  converted_sale_id?: number | null;
+  converted_at?: string | null;
+  created_at: string;
+  updated_at?: string;
+  items?: QuoteItem[];
+};
+
+export function fetchQuotesPaged(params?: {
+  status?: string;
+  quote_number?: string;
+  customer?: string;
+  phone?: string;
+  from?: string;
+  to?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ items: Quote[]; total: number; limit: number; offset: number }> {
+  const sp = new URLSearchParams();
+  if (params?.status) sp.set('status', params.status);
+  if (params?.quote_number) sp.set('quote_number', params.quote_number);
+  if (params?.customer) sp.set('customer', params.customer);
+  if (params?.phone) sp.set('phone', params.phone);
+  if (params?.from) sp.set('from', params.from);
+  if (params?.to) sp.set('to', params.to);
+  if (params?.q) sp.set('q', params.q);
+  if (params?.limit != null) sp.set('limit', String(params.limit));
+  if (params?.offset != null) sp.set('offset', String(params.offset));
+  const q = sp.toString();
+  return apiFetch(`/api/quotes${q ? `?${q}` : ''}`).then((r) => handle(r));
+}
+
+export function fetchQuote(id: number): Promise<Quote> {
+  return apiFetch(`/api/quotes/${id}`).then((r) => handle(r));
+}
+
+export function createQuoteApi(payload: Record<string, unknown>): Promise<Quote> {
+  return apiFetch('/api/quotes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle(r));
+}
+
+export function updateQuoteApi(id: number, payload: Record<string, unknown>): Promise<Quote> {
+  return apiFetch(`/api/quotes/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle(r));
+}
+
+export function cancelQuoteApi(id: number, reason?: string): Promise<Quote> {
+  return apiFetch(`/api/quotes/${id}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  }).then((r) => handle(r));
+}
+
+export function fetchQuoteConversionPayload(id: number): Promise<{
+  quote_id: number;
+  quote_number: string;
+  customer_id: number | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  discount_cents: number;
+  notes: string | null;
+  items: QuoteItem[];
+}> {
+  return apiFetch(`/api/quotes/${id}/conversion-payload`).then((r) => handle(r));
+}
+
+export function markQuoteConvertedApi(id: number, saleId: number): Promise<Quote> {
+  return apiFetch(`/api/quotes/${id}/mark-converted`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sale_id: saleId }),
+  }).then((r) => handle(r));
+}
+
+export function buildQuotePdfUrl(id: number, opts?: { download?: boolean; regen?: boolean }): string {
+  const sp = new URLSearchParams();
+  if (opts?.download) sp.set('download', '1');
+  if (opts?.regen) sp.set('regen', '1');
+  const q = sp.toString();
+  return `/api/receipts/quotes/${id}/pdf${q ? `?${q}` : ''}`;
+}
+
+export function generateQuotePdfApi(id: number, opts?: { force?: boolean }): Promise<ReceiptPdfMeta> {
+  return apiFetch(`/api/receipts/quotes/${id}/pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force: opts?.force === true }),
+  }).then((r) => handle(r));
+}
+
+export function quoteWhatsappShareApi(
+  id: number,
+  opts?: { phone?: string; message?: string; force?: boolean }
+): Promise<{
+  quote_id: number;
+  quote_number: string;
+  phone: string | null;
+  message: string;
+  url: string;
+  pdf_attached: boolean;
+  note?: string;
+  pdf?: ReceiptPdfMeta;
+}> {
+  return apiFetch(`/api/receipts/quotes/${id}/whatsapp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts || {}),
+  }).then((r) => handle(r));
+}
+
+export function buildCreditAccountPdfUrl(
+  id: number,
+  opts?: { download?: boolean; regen?: boolean }
+): string {
+  const sp = new URLSearchParams();
+  if (opts?.download) sp.set('download', '1');
+  if (opts?.regen) sp.set('regen', '1');
+  const q = sp.toString();
+  return `/api/receipts/credit-accounts/${id}/pdf${q ? `?${q}` : ''}`;
+}
+
+export function generateCreditAccountPdfApi(
+  id: number,
+  opts?: { force?: boolean }
+): Promise<ReceiptPdfMeta> {
+  return apiFetch(`/api/receipts/credit-accounts/${id}/pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force: opts?.force === true }),
+  }).then((r) => handle(r));
+}
+
 export function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

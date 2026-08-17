@@ -10,6 +10,7 @@ import {
 import BrandLogo from '../../components/BrandLogo';
 import ChoosePrinterModal, { type ChoosePrinterResult } from '../../components/ChoosePrinterModal';
 import { printDocument } from '../../lib/printDocument';
+import { savePdfToComputer } from '../../lib/savePdf';
 
 interface Props {
   sale: Sale;
@@ -106,6 +107,35 @@ export default function ReceiptModal({
       setWaNote(`Caminho copiado: ${text}`);
     } catch {
       setWaNote(`Caminho do PDF: ${text}`);
+    }
+  }
+
+  async function savePdfDisk() {
+    setWaNote(null);
+    try {
+      const meta = await ensurePdf(false);
+      const result = await savePdfToComputer({
+        suggestedName: meta.filename || `ONCA-VENDA-${sale.sale_number}.pdf`,
+        downloadUrl: meta.download_url || buildReceiptPdfUrl(sale.id, { download: true }),
+        absolutePath: meta.absolute_path,
+        title: 'Salvar comprovante em PDF',
+      });
+      if (result.canceled) {
+        setWaNote('Salvar PDF cancelado.');
+        return;
+      }
+      if (!result.ok) {
+        setWaNote(result.error || 'Falha ao salvar PDF');
+        return;
+      }
+      setPdfMeta(meta);
+      setWaNote(
+        result.filePath
+          ? `PDF salvo em: ${result.filePath} (venda não alterada).`
+          : 'PDF baixado. A venda não foi alterada.'
+      );
+    } catch (e) {
+      setWaNote(e instanceof Error ? e.message : 'Erro ao salvar PDF');
     }
   }
 
@@ -310,6 +340,9 @@ export default function ReceiptModal({
             onClick={() => void ensurePdf(false).then(() => openPdf())}
           >
             Visualizar PDF
+          </button>
+          <button type="button" className="btn btn-accent" onClick={() => void savePdfDisk()}>
+            Salvar PDF
           </button>
           <button
             type="button"

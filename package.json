@@ -1,6 +1,6 @@
 {
   "name": "onca-pdv",
-  "version": "1.2.14",
+  "version": "1.2.15",
   "private": true,
   "author": "ONÇA Produtos de Limpeza",
   "description": "ONÇA PDV — sistema profissional de ponto de venda local-first.",
@@ -66,10 +66,10 @@
   "build": {
     "appId": "br.com.oncaprodutos.pdv",
     "productName": "ONÇA PDV",
-    "buildVersion": "1.2.14",
+    "buildVersion": "1.2.15",
     "extraMetadata": {
-      "version": "1.2.14",
-      "ONCA_BUILD_ID": "2026.08.17-1.2.14-recompile"
+      "version": "1.2.15",
+      "ONCA_BUILD_ID": "2026.08.17-orcamentos-salvar-pdf"
     }
   }
 }

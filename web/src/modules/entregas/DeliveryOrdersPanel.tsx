@@ -21,6 +21,7 @@ import {
 } from '../../api/client';
 import { ModuleToolbar, StatusPill } from '../../components/ModuleChrome';
 import { playSoftBeep } from '../../lib/desktopAsync';
+import { savePdfToComputer } from '../../lib/savePdf';
 import DeliveryAddressForm, {
   emptyDeliveryAddress,
   type DeliveryAddressFormValue,
@@ -199,6 +200,33 @@ export default function DeliveryOrdersPanel() {
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao gerar PDF do pedido');
+    }
+  }
+
+  async function saveOrderPdfDisk(order: DeliveryOrder) {
+    try {
+      const meta = await generateDeliveryOrderPdfApi(order.id);
+      const result = await savePdfToComputer({
+        suggestedName: meta.filename || `ONCA-ENTREGA-${order.order_number}.pdf`,
+        downloadUrl: meta.download_url,
+        absolutePath: meta.absolute_path,
+        title: 'Salvar pedido/comprovante em PDF',
+      });
+      if (result.canceled) {
+        setNotice('Salvar PDF cancelado.');
+        return;
+      }
+      if (!result.ok) {
+        setError(result.error || 'Falha ao salvar PDF');
+        return;
+      }
+      setNotice(
+        result.filePath
+          ? `PDF salvo em: ${result.filePath} (pedido não alterado).`
+          : 'PDF baixado. Pedido não foi alterado.'
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao salvar PDF do pedido');
     }
   }
 
@@ -1200,6 +1228,13 @@ export default function DeliveryOrdersPanel() {
                   onClick={() => void openOrderPdf(selected.id)}
                 >
                   {paidConfirmed ? 'Visualizar comprovante PDF' : 'PDF pedido (pagamento pendente)'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-accent"
+                  onClick={() => void saveOrderPdfDisk(selected)}
+                >
+                  Salvar PDF
                 </button>
                 <button
                   type="button"
