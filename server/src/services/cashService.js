@@ -209,6 +209,41 @@ export function recordSaleOnCash(db, { sessionId, saleId, totalCents, payments }
   });
 }
 
+/**
+ * Ajuste de caixa pela DIFERENÇA de uma venda alterada (não relança o total).
+ * deltaCents > 0: aumenta totais; deltaCents < 0: reduz.
+ */
+export function recordSaleAmendOnCash(db, { sessionId, saleId, deltaCents, reason, userName }) {
+  const delta = Math.round(Number(deltaCents) || 0);
+  if (!delta) return;
+  const abs = Math.abs(delta);
+  if (delta > 0) {
+    db.prepare(
+      `UPDATE cash_sessions SET
+         sales_total_cents = sales_total_cents + ?,
+         sales_dinheiro_cents = sales_dinheiro_cents + ?
+       WHERE id = ?`
+    ).run(abs, abs, sessionId);
+  } else {
+    db.prepare(
+      `UPDATE cash_sessions SET
+         sales_total_cents = MAX(sales_total_cents - ?, 0),
+         sales_dinheiro_cents = MAX(sales_dinheiro_cents - ?, 0)
+       WHERE id = ?`
+    ).run(abs, abs, sessionId);
+  }
+  addCashMovementTx(db, {
+    sessionId,
+    movementType: 'ajuste_venda',
+    amountCents: abs,
+    paymentMethod: 'dinheiro',
+    reason: reason || `Ajuste venda #${saleId} (${delta > 0 ? '+' : '-'}${abs})`,
+    userName,
+    referenceType: 'sale',
+    referenceId: saleId,
+  });
+}
+
 /** Estorno de venda cancelada no caixa. */
 export function recordSaleCancelOnCash(db, { sessionId, saleId, totalCents, payments, reason, userName }) {
   let dinheiro = 0;

@@ -1,43 +1,102 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  amendSaleApi,
+  cancelSale,
+  fetchProducts,
   fetchSale,
-  fetchSales,
+  fetchSalesPaged,
   formatBRL,
   paymentLabel,
+  type Customer,
+  type Product,
   type Sale,
 } from '../../api/client';
-
-type Props = {
-  onClose: () => void;
-  onOpenSale: (sale: Sale) => void;
-};
+import ReceiptModal from './ReceiptModal';
+import AdminAuthModal from './AdminAuthModal';
+import CustomerPicker from './CustomerPicker';
 
 type Period = '' | 'today' | 'yesterday' | 'last7' | 'month' | 'custom';
 
-export default function SalesHistoryModal({ onClose, onOpenSale }: Props) {
+const PAGE_SIZE = 100;
+
+type EditLine = {
+  key: string;
+  product_id: number | null;
+  name: string;
+  barcode?: string | null;
+  quantity: number;
+  unit_price_cents: number;
+  is_misc: boolean;
+};
+
+function formatDateTimeParts(value?: string | null): { date: string; time: string } {
+  if (!value) return { date: '—', time: '—' };
+  const m = String(value).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (m) return { date: `${m[3]}/${m[2]}/${m[1]}`, time: `${m[4]}:${m[5]}` };
+  return { date: value, time: '—' };
+}
+
+function situationOf(s: Sale): string {
+  if (s.status === 'cancelled') return 'CANCELADA';
+  if (s.amended_at || s.situation_label === 'Alterada') return 'ALTERADA';
+  return s.situation_label || 'Concluída';
+}
+
+type Props = {
+  onClose?: () => void;
+  embedded?: boolean;
+};
+
+export default function SalesHistoryModal({ onClose, embedded }: Props) {
   const [sales, setSales] = useState<Sale[]>([]);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
   const [q, setQ] = useState('');
-  const [period, setPeriod] = useState<Period>('today');
+  const [period, setPeriod] = useState<Period>('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [payment, setPayment] = useState('');
+  const [status, setStatus] = useState('');
+  const [operator, setOperator] = useState('');
+  const [saleNumber, setSaleNumber] = useState('');
+  const [customerFilter, setCustomerFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [detail, setDetail] = useState<Sale | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [detail, setDetail] = useState<Sale | null>(null);
+  const [receipt, setReceipt] = useState<Sale | null>(null);
 
-  async function load() {
+  const [authMode, setAuthMode] = useState<null | 'amend' | 'cancel'>(null);
+  const [authSale, setAuthSale] = useState<Sale | null>(null);
+  const [editSale, setEditSale] = useState<Sale | null>(null);
+  const [editItems, setEditItems] = useState<EditLine[]>([]);
+  const [editDiscount, setEditDiscount] = useState('0,00');
+  const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
+  const [editScan, setEditScan] = useState('');
+  const [editAuthPassword, setEditAuthPassword] = useState('');
+  const [editReason, setEditReason] = useState('');
+  const [showSummary, setShowSummary] = useState(false);
+
+  async function load(nextOffset = 0) {
     setBusy(true);
     setError(null);
     try {
-      const list = await fetchSales({
-        limit: 100,
+      const page = await fetchSalesPaged({
+        limit: PAGE_SIZE,
+        offset: nextOffset,
         q: q.trim() || undefined,
         period: period && period !== 'custom' ? period : undefined,
         from: period === 'custom' && from ? from : undefined,
         to: period === 'custom' && to ? to : undefined,
         payment_method: payment || undefined,
+        status: status || undefined,
+        operator: operator.trim() || undefined,
+        sale_number: saleNumber.trim() || undefined,
+        customer: customerFilter.trim() || undefined,
       });
-      setSales(list);
+      setSales(page.items);
+      setTotal(page.total);
+      setOffset(page.offset);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar histórico');
     } finally {
@@ -46,199 +105,577 @@ export default function SalesHistoryModal({ onClose, onOpenSale }: Props) {
   }
 
   useEffect(() => {
-    const t = window.setTimeout(() => void load(), 200);
+    const t = window.setTimeout(() => void load(0), 200);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, period, from, to, payment]);
+  }, [q, period, from, to, payment, status, operator, saleNumber, customerFilter]);
+
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageIndex = Math.floor(offset / PAGE_SIZE) + 1;
+
+  const editSubtotal = useMemo(
+    () => editItems.reduce((s, it) => s + it.unit_price_cents * it.quantity, 0),
+    [editItems]
+  );
+  const editDiscountCents = useMemo(() => {
+    const n = Number(String(editDiscount).replace(/\./g, '').replace(',', '.'));
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return Math.round(n * 100);
+  }, [editDiscount]);
+  const editTotal = Math.max(0, editSubtotal - editDiscountCents);
 
   async function openDetail(id: number) {
     try {
-      const sale = await fetchSale(id);
-      setDetail(sale);
+      setDetail(await fetchSale(id));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao abrir venda');
     }
   }
 
-  return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Histórico de vendas">
-      <div className="modal modal-wide" style={{ width: 'min(980px, 100%)' }}>
-        <h3>Histórico de vendas</h3>
-        <p className="muted-line">
-          Somente consulta. Use Visualizar PDF / Imprimir / Enviar PDF no WhatsApp no comprovante.
-        </p>
-        <div className="form-grid" style={{ marginBottom: 12 }}>
-          <label className="span-2">
-            Busca (número, cliente, telefone, produto, valor…)
-            <input className="field-input" value={q} onChange={(e) => setQ(e.target.value)} />
-          </label>
-          <label>
-            Período
-            <select
-              className="field-input"
-              value={period}
-              onChange={(e) => setPeriod(e.target.value as Period)}
-            >
-              <option value="">Todos</option>
-              <option value="today">Hoje</option>
-              <option value="yesterday">Ontem</option>
-              <option value="last7">Últimos 7 dias</option>
-              <option value="month">Este mês</option>
-              <option value="custom">Período personalizado</option>
-            </select>
-          </label>
-          <label>
-            Pagamento
-            <select
-              className="field-input"
-              value={payment}
-              onChange={(e) => setPayment(e.target.value)}
-            >
-              <option value="">Todas</option>
-              <option value="dinheiro">Dinheiro</option>
-              <option value="pix">Pix</option>
-              <option value="cartao">Cartão</option>
-              <option value="crediario">Crediário</option>
-              <option value="misto">Misto</option>
-            </select>
-          </label>
-          {period === 'custom' && (
-            <>
-              <label>
-                De
-                <input
-                  className="field-input"
-                  type="date"
-                  value={from}
-                  onChange={(e) => setFrom(e.target.value)}
-                />
-              </label>
-              <label>
-                Até
-                <input
-                  className="field-input"
-                  type="date"
-                  value={to}
-                  onChange={(e) => setTo(e.target.value)}
-                />
-              </label>
-            </>
-          )}
-        </div>
-        {error && <div className="alert alert-error">{error}</div>}
-        <div className="product-table-wrap" style={{ maxHeight: 320, overflow: 'auto' }}>
-          <table className="product-table">
-            <thead>
-              <tr>
-                <th>Número</th>
-                <th>Data/hora</th>
-                <th>Cliente</th>
-                <th>Pagamento</th>
-                <th>Total</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {sales.map((s) => (
+  async function openReceipt(id: number) {
+    try {
+      setReceipt(await fetchSale(id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao abrir comprovante');
+    }
+  }
+
+  function startAmend(sale: Sale) {
+    if (sale.status === 'cancelled') {
+      setError('Venda cancelada não pode ser alterada.');
+      return;
+    }
+    setAuthSale(sale);
+    setAuthMode('amend');
+  }
+
+  function startCancel(sale: Sale) {
+    if (sale.status === 'cancelled') {
+      setError('Venda já está cancelada.');
+      return;
+    }
+    setAuthSale(sale);
+    setAuthMode('cancel');
+  }
+
+  async function onAuthorized({ password, reason }: { password: string; reason: string }) {
+    if (!authSale || !authMode) return;
+    if (authMode === 'cancel') {
+      const cancelled = await cancelSale(authSale.id, {
+        reason,
+        admin_password: password,
+        authorized_by: 'Administrador',
+      });
+      setAuthMode(null);
+      setAuthSale(null);
+      setNotice(`Venda ${cancelled.sale_number} cancelada. Histórico preservado.`);
+      setReceipt(cancelled);
+      await load(offset);
+      return;
+    }
+    // amend: abre editor com senha/motivo guardados
+    const full = await fetchSale(authSale.id);
+    setEditAuthPassword(password);
+    setEditReason(reason);
+    setEditSale(full);
+    setEditCustomer((full.customer as Customer | null) || null);
+    setEditDiscount(((full.discount_cents || 0) / 100).toFixed(2).replace('.', ','));
+    setEditItems(
+      (full.items || []).map((it, idx) => ({
+        key: it.product_id ? `p-${it.product_id}` : `m-${it.id ?? idx}`,
+        product_id: it.product_id,
+        name: it.name,
+        barcode: it.barcode,
+        quantity: it.quantity,
+        unit_price_cents: it.unit_price_cents,
+        is_misc: Boolean(it.is_misc),
+      }))
+    );
+    setAuthMode(null);
+    setAuthSale(null);
+    setShowSummary(false);
+  }
+
+  function addProductToEdit(product: Product) {
+    setEditItems((prev) => {
+      const idx = prev.findIndex((l) => l.product_id === product.id && !l.is_misc);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
+        return next;
+      }
+      return [
+        ...prev,
+        {
+          key: `p-${product.id}`,
+          product_id: product.id,
+          name: product.name,
+          barcode: product.barcode,
+          quantity: 1,
+          unit_price_cents: Number(product.price_cents) || 0,
+          is_misc: false,
+        },
+      ];
+    });
+  }
+
+  async function handleEditScan() {
+    const code = editScan.trim();
+    if (!code) return;
+    if (/^[0-9]{8,18}$/.test(code)) {
+      const found = await fetchProducts({ barcode: code });
+      const exact = found.find((p) => p.barcode === code && p.active !== 0);
+      if (exact) {
+        addProductToEdit(exact);
+        setEditScan('');
+        return;
+      }
+      setError('Produto não encontrado para este código.');
+      return;
+    }
+    const found = (await fetchProducts({ q: code })).filter((p) => p.active !== 0);
+    if (found.length === 1) {
+      addProductToEdit(found[0]);
+      setEditScan('');
+    } else if (found.length === 0) {
+      setError('Nenhum produto encontrado.');
+    } else {
+      setError('Vários produtos encontrados. Refine a busca ou use o código de barras.');
+    }
+  }
+
+  async function saveAmend() {
+    if (!editSale) return;
+    if (!editItems.length) {
+      setError('A venda precisa de itens.');
+      return;
+    }
+    if (!showSummary) {
+      setShowSummary(true);
+      return;
+    }
+    try {
+      const updated = await amendSaleApi(editSale.id, {
+        admin_password: editAuthPassword,
+        reason: editReason,
+        authorized_by: 'Administrador',
+        customer_id: editCustomer?.id ?? null,
+        discount_cents: editDiscountCents,
+        items: editItems.map((it) => ({
+          product_id: it.product_id,
+          name: it.name,
+          quantity: it.quantity,
+          unit_price_cents: it.unit_price_cents,
+          is_misc: it.is_misc,
+        })),
+      });
+      setEditSale(null);
+      setEditAuthPassword('');
+      setEditReason('');
+      setShowSummary(false);
+      setNotice(`Venda ${updated.sale_number} alterada. Estoque/caixa ajustados pela diferença.`);
+      setReceipt(updated);
+      await load(offset);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao alterar venda');
+    }
+  }
+
+  const body = (
+    <>
+      <h3>HISTÓRICO DE VENDAS</h3>
+      <p className="muted-line">
+        Todas as vendas acessíveis. PDF / impressão / WhatsApp não alteram estoque nem caixa.
+      </p>
+      <div className="form-grid" style={{ marginBottom: 12 }}>
+        <label className="span-2">
+          Busca
+          <input className="field-input" value={q} onChange={(e) => setQ(e.target.value)} />
+        </label>
+        <label>
+          Período
+          <select className="field-input" value={period} onChange={(e) => setPeriod(e.target.value as Period)}>
+            <option value="">Todas</option>
+            <option value="today">Hoje</option>
+            <option value="yesterday">Ontem</option>
+            <option value="last7">Últimos 7 dias</option>
+            <option value="month">Este mês</option>
+            <option value="custom">Período personalizado</option>
+          </select>
+        </label>
+        <label>
+          Pagamento
+          <select className="field-input" value={payment} onChange={(e) => setPayment(e.target.value)}>
+            <option value="">Todas</option>
+            <option value="dinheiro">Dinheiro</option>
+            <option value="pix">Pix</option>
+            <option value="cartao_credito">Cartão Crédito</option>
+            <option value="cartao_debito">Cartão Débito</option>
+            <option value="crediario">Crediário</option>
+            <option value="misto">Misto</option>
+          </select>
+        </label>
+        <label>
+          Situação
+          <select className="field-input" value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">Todas</option>
+            <option value="completed">Concluída</option>
+            <option value="alterada">Alterada</option>
+            <option value="cancelled">Cancelada</option>
+          </select>
+        </label>
+        <label>
+          Nº da venda
+          <input className="field-input" value={saleNumber} onChange={(e) => setSaleNumber(e.target.value)} />
+        </label>
+        <label>
+          Cliente
+          <input className="field-input" value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} />
+        </label>
+        <label>
+          Operador
+          <input className="field-input" value={operator} onChange={(e) => setOperator(e.target.value)} />
+        </label>
+        {period === 'custom' && (
+          <>
+            <label>
+              De
+              <input className="field-input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            </label>
+            <label>
+              Até
+              <input className="field-input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            </label>
+          </>
+        )}
+      </div>
+      {error && <div className="alert alert-error">{error}</div>}
+      {notice && <div className="alert alert-ok">{notice}</div>}
+      <p className="muted-line">
+        {busy ? 'Carregando…' : `${total} venda(s) · página ${pageIndex}/${pageCount}`}
+      </p>
+      <div className="product-table-wrap" style={{ maxHeight: 420, overflow: 'auto' }}>
+        <table className="product-table" data-testid="historico-vendas-tabela">
+          <thead>
+            <tr>
+              <th>Nº</th>
+              <th>Data</th>
+              <th>Hora</th>
+              <th>Cliente</th>
+              <th>Itens</th>
+              <th>Total</th>
+              <th>Pagamento</th>
+              <th>Operador</th>
+              <th>Situação</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sales.map((s) => {
+              const { date, time } = formatDateTimeParts(s.created_at);
+              return (
                 <tr key={s.id}>
                   <td>{s.sale_number}</td>
-                  <td>{s.created_at}</td>
+                  <td>{date}</td>
+                  <td>{time}</td>
                   <td>{s.customer_name || '—'}</td>
-                  <td>{paymentLabel(s.payment_method)}</td>
+                  <td>{s.items_count != null ? `${s.items_count} itens` : '—'}</td>
                   <td>{formatBRL(s.total_cents)}</td>
-                  <td>{s.status === 'cancelled' ? 'Cancelada' : 'Concluída'}</td>
+                  <td>{paymentLabel(s.payment_method)}</td>
+                  <td>{s.operator_name || '—'}</td>
+                  <td>
+                    <strong>{situationOf(s)}</strong>
+                  </td>
                   <td className="row-actions">
                     <button type="button" className="btn btn-ghost" onClick={() => void openDetail(s.id)}>
-                      Detalhes
+                      VER
+                    </button>
+                    <button type="button" className="btn btn-ghost" onClick={() => void openReceipt(s.id)}>
+                      PDF / IMPRIMIR
                     </button>
                     <button
                       type="button"
-                      className="btn btn-ghost"
-                      onClick={() =>
-                        void fetchSale(s.id).then((sale) => {
-                          onOpenSale(sale);
-                        })
-                      }
+                      className="btn btn-accent"
+                      disabled={s.status === 'cancelled'}
+                      onClick={() => startAmend(s)}
                     >
-                      Visualizar PDF
+                      ALTERAR
                     </button>
                     <button
                       type="button"
-                      className="btn btn-primary"
-                      onClick={() =>
-                        void fetchSale(s.id).then((sale) => {
-                          onOpenSale(sale);
-                        })
-                      }
+                      className="btn btn-danger"
+                      disabled={s.status === 'cancelled'}
+                      onClick={() => startCancel(s)}
                     >
-                      Imprimir / WhatsApp
+                      EXCLUIR
                     </button>
                   </td>
                 </tr>
-              ))}
-              {!busy && sales.length === 0 && (
-                <tr>
-                  <td colSpan={7}>Nenhuma venda encontrada.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              );
+            })}
+            {!busy && sales.length === 0 && (
+              <tr>
+                <td colSpan={10}>Nenhuma venda encontrada.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="modal-actions" style={{ justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={offset <= 0 || busy}
+            onClick={() => void load(Math.max(0, offset - PAGE_SIZE))}
+          >
+            Anterior
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={offset + PAGE_SIZE >= total || busy}
+            onClick={() => void load(offset + PAGE_SIZE)}
+          >
+            Próxima
+          </button>
         </div>
+        {onClose && (
+          <button type="button" className="btn btn-primary" onClick={onClose}>
+            Fechar
+          </button>
+        )}
+      </div>
+    </>
+  );
 
-        {detail && (
-          <div className="side-card" style={{ marginTop: 12 }}>
+  return (
+    <>
+      {embedded ? (
+        <section className="module-panel">{body}</section>
+      ) : (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Histórico de vendas">
+          <div className="modal modal-wide" style={{ width: 'min(1100px, 100%)' }}>
+            {body}
+          </div>
+        </div>
+      )}
+
+      {detail && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal modal-wide">
             <h3>Detalhes — {detail.sale_number}</h3>
-            <pre className="code-block" style={{ maxHeight: 220, overflow: 'auto' }}>
-              {JSON.stringify(
-                {
-                  numero: detail.sale_number,
-                  data: detail.created_at,
-                  cliente: detail.customer,
-                  status: detail.status,
-                  itens: detail.items,
-                  pagamentos: detail.payments,
-                  troco: detail.change_cents,
-                  recebido: detail.amount_received_cents,
-                  desconto: detail.discount_cents,
-                  total: detail.total_cents,
-                },
-                null,
-                2
-              )}
-            </pre>
+            <p>
+              {detail.created_at} · {detail.customer?.name || detail.customer_name || '—'} ·{' '}
+              {situationOf(detail)}
+            </p>
+            <table className="product-table">
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th>Código</th>
+                  <th>Qtd</th>
+                  <th>Unit.</th>
+                  <th>Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(detail.items || []).map((it) => (
+                  <tr key={it.id}>
+                    <td>{it.name}</td>
+                    <td>{it.barcode || '—'}</td>
+                    <td>{it.quantity}</td>
+                    <td>{formatBRL(it.unit_price_cents)}</td>
+                    <td>{formatBRL(it.line_total_cents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p>
+              Desconto {formatBRL(detail.discount_cents)} · Total {formatBRL(detail.total_cents)} ·{' '}
+              {paymentLabel(detail.payment_method)}
+            </p>
             <div className="modal-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setDetail(null)}>
-                Fechar detalhes
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => {
-                  onOpenSale(detail);
-                }}
-              >
-                Visualizar PDF
+                Fechar
               </button>
               <button
                 type="button"
                 className="btn btn-primary"
                 onClick={() => {
-                  onOpenSale(detail);
+                  setReceipt(detail);
+                  setDetail(null);
                 }}
               >
-                Imprimir / Enviar PDF no WhatsApp
+                PDF / IMPRIMIR / WHATSAPP
               </button>
             </div>
           </div>
-        )}
-
-        <div className="modal-actions">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>
-            Fechar
-          </button>
         </div>
-      </div>
-    </div>
+      )}
+
+      {receipt && (
+        <ReceiptModal
+          sale={receipt}
+          onClose={() => setReceipt(null)}
+          onCancelSale={(s) => {
+            setReceipt(null);
+            startCancel(s);
+          }}
+        />
+      )}
+
+      {authMode && authSale && (
+        <AdminAuthModal
+          title={
+            authMode === 'cancel'
+              ? `EXCLUIR / CANCELAR VENDA ${authSale.sale_number}`
+              : `ALTERAR VENDA ${authSale.sale_number}`
+          }
+          subtitle={
+            authMode === 'cancel'
+              ? 'A venda será cancelada (estorno) e permanecerá no histórico.'
+              : 'ESTE PEDIDO JÁ POSSUI PAGAMENTO CONFIRMADO. ALTERAR OS ITENS PODE GERAR DIFERENÇA FINANCEIRA.'
+          }
+          reasonLabel={authMode === 'cancel' ? 'MOTIVO DA EXCLUSÃO/CANCELAMENTO' : 'MOTIVO DA ALTERAÇÃO'}
+          confirmLabel="AUTORIZAR"
+          onCancel={() => {
+            setAuthMode(null);
+            setAuthSale(null);
+          }}
+          onAuthorized={onAuthorized}
+        />
+      )}
+
+      {editSale && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal modal-wide" style={{ width: 'min(960px, 100%)' }}>
+            <h3>MODO DE EDIÇÃO — {editSale.sale_number}</h3>
+            <CustomerPicker selected={editCustomer} onSelect={setEditCustomer} />
+            <label>
+              Buscar produto ou ler código de barras...
+              <input
+                className="field-input"
+                value={editScan}
+                onChange={(e) => setEditScan(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void handleEditScan();
+                  }
+                }}
+              />
+            </label>
+            <table className="product-table" style={{ marginTop: 12 }}>
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th>Código</th>
+                  <th>Qtd</th>
+                  <th>Unit.</th>
+                  <th>Subtotal</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {editItems.map((it) => (
+                  <tr key={it.key}>
+                    <td>{it.name}</td>
+                    <td>{it.barcode || (it.product_id != null ? `#${it.product_id}` : '—')}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() =>
+                            setEditItems((prev) =>
+                              prev.map((row) =>
+                                row.key === it.key
+                                  ? { ...row, quantity: Math.max(1, row.quantity - 1) }
+                                  : row
+                              )
+                            )
+                          }
+                        >
+                          −
+                        </button>
+                        <input
+                          className="field-input"
+                          style={{ width: 64 }}
+                          type="number"
+                          min={1}
+                          value={it.quantity}
+                          onChange={(e) => {
+                            const qn = Math.max(1, Number(e.target.value) || 1);
+                            setEditItems((prev) =>
+                              prev.map((row) => (row.key === it.key ? { ...row, quantity: qn } : row))
+                            );
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() =>
+                            setEditItems((prev) =>
+                              prev.map((row) =>
+                                row.key === it.key ? { ...row, quantity: row.quantity + 1 } : row
+                              )
+                            )
+                          }
+                        >
+                          +
+                        </button>
+                      </div>
+                    </td>
+                    <td>{formatBRL(it.unit_price_cents)}</td>
+                    <td>{formatBRL(it.unit_price_cents * it.quantity)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        onClick={() => setEditItems((prev) => prev.filter((row) => row.key !== it.key))}
+                      >
+                        REMOVER
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <label>
+              Desconto (R$)
+              <input className="field-input" value={editDiscount} onChange={(e) => setEditDiscount(e.target.value)} />
+            </label>
+            <p>
+              Subtotal {formatBRL(editSubtotal)} · Total {formatBRL(editTotal)}
+            </p>
+            {showSummary && (
+              <div className="alert alert-ok">
+                <strong>RESUMO DA ALTERAÇÃO</strong>
+                <div>TOTAL ANTERIOR: {formatBRL(editSale.total_cents)}</div>
+                <div>NOVO TOTAL: {formatBRL(editTotal)}</div>
+                <div>DIFERENÇA: {formatBRL(editTotal - editSale.total_cents)}</div>
+              </div>
+            )}
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setEditSale(null);
+                  setEditAuthPassword('');
+                  setShowSummary(false);
+                }}
+              >
+                CANCELAR ALTERAÇÕES
+              </button>
+              <button type="button" className="btn btn-primary" onClick={() => void saveAmend()}>
+                {showSummary ? 'CONFIRMAR E SALVAR' : 'REVISAR E SALVAR'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

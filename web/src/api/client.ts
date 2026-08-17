@@ -62,6 +62,13 @@ export interface Sale {
   cancelled_at: string | null;
   cancelled_by?: string | null;
   cancel_reason?: string | null;
+  amended_at?: string | null;
+  amended_by?: string | null;
+  amend_reason?: string | null;
+  amend_authorized_by?: string | null;
+  situation_label?: string | null;
+  operator_name?: string | null;
+  items_count?: number;
   payment_method?: string | null;
   amount_received_cents?: number;
   change_cents?: number;
@@ -441,27 +448,67 @@ export function deleteProduct(id: number): Promise<{ deleted?: boolean; inactiva
 export function fetchSales(
   limitOrParams: number | {
     limit?: number;
+    offset?: number;
     q?: string;
     from?: string;
     to?: string;
     period?: string;
     payment_method?: string;
     status?: string;
+    operator?: string;
+    sale_number?: string;
+    customer?: string;
   } = 50
 ): Promise<Sale[]> {
+  return fetchSalesPaged(limitOrParams).then((r) => r.items);
+}
+
+export function fetchSalesPaged(
+  limitOrParams: number | {
+    limit?: number;
+    offset?: number;
+    q?: string;
+    from?: string;
+    to?: string;
+    period?: string;
+    payment_method?: string;
+    status?: string;
+    operator?: string;
+    sale_number?: string;
+    customer?: string;
+  } = 50
+): Promise<{ items: Sale[]; total: number; limit: number; offset: number }> {
   const params =
     typeof limitOrParams === 'number'
-      ? { limit: limitOrParams }
+      ? { limit: limitOrParams, offset: 0, paged: '1' }
       : {
           limit: limitOrParams.limit ?? 50,
+          offset: limitOrParams.offset ?? 0,
           q: limitOrParams.q,
           from: limitOrParams.from,
           to: limitOrParams.to,
           period: limitOrParams.period,
           payment_method: limitOrParams.payment_method,
           status: limitOrParams.status,
+          operator: limitOrParams.operator,
+          sale_number: limitOrParams.sale_number,
+          customer: limitOrParams.customer,
+          paged: '1',
         };
-  return apiFetch(`/api/sales${qs(params)}`).then((r) => handle<Sale[]>(r));
+  return apiFetch(`/api/sales${qs(params)}`).then(async (r) => {
+    const data = await handle<
+      Sale[] | { items: Sale[]; total: number; limit: number; offset: number }
+    >(r);
+    if (Array.isArray(data)) {
+      return {
+        items: data,
+        total: Number(r.headers.get('X-Total-Count') || data.length),
+        limit: typeof limitOrParams === 'number' ? limitOrParams : limitOrParams.limit ?? 50,
+        offset: typeof limitOrParams === 'number' ? 0 : limitOrParams.offset ?? 0,
+      };
+    }
+    return data;
+  });
 }
 
 export function fetchSale(id: number): Promise<Sale> {
@@ -478,13 +525,29 @@ export function createSale(payload: CreateSalePayload): Promise<Sale> {
 
 export function cancelSale(
   id: number,
-  payload: { reason: string; user_name?: string }
+  payload: { reason: string; admin_password: string; user_name?: string; authorized_by?: string }
 ): Promise<Sale> {
   return fetch(`/api/sales/${id}/cancel`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   }).then((r) => handle<Sale>(r));
+}
+
+export function amendSaleApi(id: number, payload: Record<string, unknown>): Promise<Sale> {
+  return apiFetch(`/api/sales/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<Sale>(r));
+}
+
+export function verifyAdminPinApi(password: string): Promise<{ ok: boolean }> {
+  return apiFetch('/api/auth/verify-admin-pin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  }).then((r) => handle<{ ok: boolean }>(r));
 }
 
 export function fetchCustomers(params?: { q?: string; include_inactive?: boolean }): Promise<Customer[]> {

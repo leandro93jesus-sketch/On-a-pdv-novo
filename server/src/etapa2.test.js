@@ -283,6 +283,7 @@ test('13 e 14. cancelamento pós-venda e estorno de estoque', async () => {
   const { res, json } = await api('POST', `/api/sales/${sale.json.id}/cancel`, {
     reason: 'Cliente desistiu',
     user_name: 'Operador E2',
+    admin_password: '230808',
   });
   assert.equal(res.status, 200, JSON.stringify(json));
   assert.equal(json.status, 'cancelled');
