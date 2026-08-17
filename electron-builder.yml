@@ -35,10 +35,10 @@ win:
         - x64
   icon: electron/assets/icon.ico
   requestedExecutionLevel: asInvoker
-  signAndEditExecutable: false
+  # Wine disponível: grava ProductVersion/FileVersion 1.2.14 no PE do EXE
+  signAndEditExecutable: true
   signDlls: false
   forceCodeSigning: false
-  # Embutidos no VERSIONINFO do EXE (obrigatório ≠ versão anterior 1.2.13)
   legalTrademarks: ONÇA Produtos de Limpeza
 
 nsis:
