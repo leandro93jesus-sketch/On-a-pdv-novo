@@ -1,6 +1,8 @@
 appId: br.com.oncaprodutos.pdv
 productName: ONÇA PDV
 copyright: ONÇA Produtos de Limpeza
+# productVersion / fileVersion do Windows = package.json version (1.2.14)
+buildVersion: '1.2.14'
 artifactName: ONCA-PDV-Setup-${version}.${ext}
 directories:
   output: release/dist
@@ -36,6 +38,9 @@ win:
   signAndEditExecutable: false
   signDlls: false
   forceCodeSigning: false
+  # Embutidos no VERSIONINFO do EXE (obrigatório ≠ versão anterior 1.2.13)
+  legalTrademarks: ONÇA Produtos de Limpeza
+
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
