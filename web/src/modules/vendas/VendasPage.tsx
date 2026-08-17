@@ -7,6 +7,7 @@ import {
   fetchProducts,
   fetchSale,
   formatBRL,
+  markQuoteConvertedApi,
   type CashSession,
   type Customer,
   type Product,
@@ -26,6 +27,7 @@ import QuickProductModal from './QuickProductModal';
 import ReceiptModal from './ReceiptModal';
 import SaleRecoveryModal from './SaleRecoveryModal';
 import SalesHistoryModal from './SalesHistoryModal';
+import AdminAuthModal from './AdminAuthModal';
 import {
   clearDraft,
   getMemoryDraft,
@@ -43,6 +45,7 @@ import {
   type CartLine,
   type PaymentMethod,
 } from './types';
+import { QUOTE_TO_SALE_KEY } from '../orcamentos/quoteConversion';
 
 const PAYMENTS_ROW1: { id: PaymentMethod; label: string }[] = [
   { id: 'dinheiro', label: 'Dinheiro' },
@@ -121,8 +124,18 @@ export default function VendasPage() {
   const searchTimer = useRef<number | null>(null);
   const submittingRef = useRef(false);
   const requestIdRef = useRef<string | null>(null);
-  const lastBarcodeRef = useRef<{ code: string; at: number } | null>(null);
+  const scanLockRef = useRef(false);
+  const [stockWarn, setStockWarn] = useState<{
+    product: Product;
+    available: number;
+    requested: number;
+  } | null>(null);
+  const [receiptCancelSale, setReceiptCancelSale] = useState<Sale | null>(null);
   const isDeliveryMode = saleMode === 'entrega';
+
+  function looksLikeBarcode(term: string): boolean {
+    return /^[0-9]{8,18}$/.test(term.trim());
+  }
 
   function applyDraft(draft: SaleDraft) {
     setSaleMode(draft.saleMode || 'normal');
@@ -246,6 +259,19 @@ export default function VendasPage() {
     }
     const persisted = loadPersistedDraft();
     if (hasOpenSaleContent(persisted)) {
+      // Conversão de orçamento: aplica direto sem modal de recuperação.
+      let fromQuote = false;
+      try {
+        fromQuote = Boolean(sessionStorage.getItem(QUOTE_TO_SALE_KEY));
+      } catch {
+        fromQuote = false;
+      }
+      if (fromQuote) {
+        applyDraft(persisted!);
+        setNotice('Itens do orçamento carregados. Finalize a venda para baixar estoque/caixa.');
+        setDraftReady(true);
+        return;
+      }
       setPendingRecovery(persisted);
       setShowRecovery(true);
       setDraftReady(true);
@@ -285,6 +311,12 @@ export default function VendasPage() {
     if (searchTimer.current) window.clearTimeout(searchTimer.current);
     const term = query.trim();
     if (!term) {
+      setSuggestions([]);
+      setSearching(false);
+      return;
+    }
+    // Durante leitura de código de barras NÃO popular sugestões por LIKE (evita produto errado).
+    if (looksLikeBarcode(term)) {
       setSuggestions([]);
       setSearching(false);
       return;
@@ -423,33 +455,55 @@ export default function VendasPage() {
     focusSearch();
   }
 
-  function addProduct(product: Product) {
+  function addProduct(product: Product, opts?: { force?: boolean; qty?: number }) {
     setError(null);
     setNotice(null);
     setReceipt(null);
-
-    if (product.stock_qty <= 0 && !product.allow_negative_stock) {
-      setError(`Sem estoque para "${product.name}".`);
-      return;
-    }
+    const addQty = Math.max(1, Math.floor(Number(opts?.qty) || 1));
 
     setCart((prev) => {
       const existing = prev.find((l) => l.productId === product.id);
+      const nextQty = (existing?.quantity || 0) + addQty;
+      const available = existing?.stockQty ?? product.stock_qty;
+      const allowNeg =
+        Boolean(existing?.allowNegative) || Boolean(product.allow_negative_stock) || true;
+
+      if (!opts?.force && available != null && nextQty > available) {
+        // Aviso, mas permite continuar (estoque zero/negativo permitido)
+        setStockWarn({
+          product,
+          available: Number(available),
+          requested: nextQty,
+        });
+        return prev;
+      }
+
       if (existing) {
-        const nextQty = existing.quantity + 1;
-        if (
-          existing.stockQty != null &&
-          nextQty > existing.stockQty &&
-          !existing.allowNegative
-        ) {
-          setError(`Estoque insuficiente para "${product.name}". Disponível: ${existing.stockQty}`);
-          return prev;
-        }
         return prev.map((l) =>
-          l.productId === product.id ? { ...l, quantity: nextQty } : l
+          l.productId === product.id ? { ...l, quantity: nextQty, allowNegative: allowNeg } : l
         );
       }
-      return [...prev, productToLine(product, 1)];
+      const line = productToLine(product, addQty);
+      return [...prev, { ...line, allowNegative: allowNeg }];
+    });
+    clearSearch();
+  }
+
+  function confirmStockWarnContinue() {
+    if (!stockWarn) return;
+    const { product, requested } = stockWarn;
+    setStockWarn(null);
+    setCart((prev) => {
+      const existing = prev.find((l) => l.productId === product.id);
+      if (existing) {
+        return prev.map((l) =>
+          l.productId === product.id
+            ? { ...l, quantity: requested, allowNegative: true }
+            : l
+        );
+      }
+      const line = productToLine(product, requested);
+      return [...prev, { ...line, allowNegative: true }];
     });
     clearSearch();
   }
@@ -462,21 +516,13 @@ export default function VendasPage() {
           if (line.key !== key) return line;
           const nextQty = line.quantity + delta;
           if (nextQty <= 0) return { ...line, quantity: 0 };
-          if (
-            !line.isMisc &&
-            line.stockQty != null &&
-            nextQty > line.stockQty &&
-            !line.allowNegative
-          ) {
-            setError(`Estoque insuficiente para "${line.name}". Disponível: ${line.stockQty}`);
-            return line;
-          }
+          // Permite ultrapassar estoque (aviso não bloqueante só no scan)
           setQtyDrafts((d) => {
             const next = { ...d };
             delete next[key];
             return next;
           });
-          return { ...line, quantity: nextQty };
+          return { ...line, quantity: nextQty, allowNegative: true };
         })
         .filter((l) => l.quantity > 0)
     );
@@ -499,16 +545,7 @@ export default function VendasPage() {
     setCart((prev) =>
       prev.map((line) => {
         if (line.key !== key) return line;
-        if (
-          !line.isMisc &&
-          line.stockQty != null &&
-          n > line.stockQty &&
-          !line.allowNegative
-        ) {
-          setError(`Estoque insuficiente para "${line.name}". Disponível: ${line.stockQty}`);
-          return line;
-        }
-        return { ...line, quantity: n };
+        return { ...line, quantity: n, allowNegative: true };
       })
     );
     setQtyDrafts((d) => {
@@ -543,31 +580,34 @@ export default function VendasPage() {
   async function handleBarcodeOrSearch() {
     const term = query.trim();
     if (!term) return;
+    if (scanLockRef.current) return;
 
-    const looksLikeBarcode = /^[0-9]{8,14}$/.test(term);
-    try {
-      if (looksLikeBarcode) {
-        const now = Date.now();
-        const last = lastBarcodeRef.current;
-        if (last && last.code === term && now - last.at < 450) {
-          clearSearch();
+    if (looksLikeBarcode(term)) {
+      scanLockRef.current = true;
+      setSuggestions([]);
+      try {
+        const found = await fetchProducts({ barcode: term });
+        const active = found.filter((p) => p.active !== 0);
+        // Correspondência EXATA apenas — nunca cair em outro produto por proximidade.
+        const exact = active.find((p) => String(p.barcode || '').trim() === term);
+        if (exact) {
+          addProduct(exact);
           return;
         }
-        lastBarcodeRef.current = { code: term, at: now };
-        const found = await searchProducts(undefined, term);
-        if (found.length === 1) {
-          addProduct(found[0]);
-          return;
-        }
-        if (found.length === 0) {
-          setError(null);
-          setQuickBarcode(term);
-          return;
-        }
-        setSuggestions(found.slice(0, SUGGESTION_LIMIT));
-        return;
+        setError(null);
+        setQuickBarcode(term);
+        setQuery('');
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Erro na busca');
+      } finally {
+        // Liberar imediatamente: leituras legítimas em sequência (1→2→3…) devem passar.
+        // O lock só evita Enter+submit/handlers duplicados no mesmo ciclo async.
+        scanLockRef.current = false;
       }
+      return;
+    }
 
+    try {
       const found = await searchProducts(term);
       if (found.length === 1) {
         addProduct(found[0]);
@@ -810,6 +850,21 @@ export default function VendasPage() {
       setReceipt(full);
       resetOpenSaleFields();
       setNotice(`Venda ${full.sale_number} concluída com sucesso.`);
+      try {
+        const raw = sessionStorage.getItem(QUOTE_TO_SALE_KEY);
+        if (raw) {
+          const meta = JSON.parse(raw) as { quote_id?: number; quote_number?: string };
+          if (meta.quote_id) {
+            await markQuoteConvertedApi(meta.quote_id, full.id);
+            setNotice(
+              `Venda ${full.sale_number} concluída. Orçamento ${meta.quote_number || meta.quote_id} marcado como convertido.`
+            );
+          }
+          sessionStorage.removeItem(QUOTE_TO_SALE_KEY);
+        }
+      } catch {
+        /* vínculo do orçamento é best-effort; venda já está salva */
+      }
       await loadCash();
       clearSearch();
     } catch (e) {
@@ -828,20 +883,8 @@ export default function VendasPage() {
   }
 
   async function handleCancelSale(sale: Sale) {
-    const reason = window.prompt('Motivo do cancelamento (obrigatório):');
-    if (reason == null) return;
-    if (!reason.trim()) {
-      setError('Informe o motivo do cancelamento.');
-      return;
-    }
-    try {
-      const cancelled = await cancelCompletedSale(sale.id, { reason: reason.trim() });
-      setReceipt(cancelled);
-      setNotice(`Venda ${cancelled.sale_number} cancelada. Estoque estornado.`);
-      await loadCash();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erro ao cancelar venda');
-    }
+    setReceipt(null);
+    setReceiptCancelSale(sale);
   }
 
   return (
@@ -933,6 +976,12 @@ export default function VendasPage() {
                 }
                 if (e.key === 'Enter') {
                   e.preventDefault();
+                  e.stopPropagation();
+                  // Código de barras: NUNCA usar sugestão parcial — só path exato.
+                  if (looksLikeBarcode(query)) {
+                    void handleBarcodeOrSearch();
+                    return;
+                  }
                   if (suggestions.length === 1) {
                     addProduct(suggestions[0]);
                     return;
@@ -1456,10 +1505,46 @@ export default function VendasPage() {
             setShowHistory(false);
             focusSearch();
           }}
-          onOpenSale={(sale) => {
-            setShowHistory(false);
-            setReceiptFromHistory(true);
-            setReceipt(sale);
+        />
+      )}
+
+      {stockWarn && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal">
+            <h3>ATENÇÃO</h3>
+            <p>
+              <strong>ESTOQUE INSUFICIENTE</strong>
+            </p>
+            <p>Disponível: {stockWarn.available}</p>
+            <p>Quantidade: {stockWarn.requested}</p>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setStockWarn(null)}>
+                CANCELAR
+              </button>
+              <button type="button" className="btn btn-primary" onClick={confirmStockWarnContinue}>
+                CONTINUAR VENDA
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {receiptCancelSale && (
+        <AdminAuthModal
+          title={`EXCLUIR / CANCELAR VENDA ${receiptCancelSale.sale_number}`}
+          subtitle="A venda será cancelada (estorno) e permanecerá no histórico."
+          reasonLabel="MOTIVO DA EXCLUSÃO/CANCELAMENTO"
+          onCancel={() => setReceiptCancelSale(null)}
+          onAuthorized={async ({ password, reason }) => {
+            const cancelled = await cancelCompletedSale(receiptCancelSale.id, {
+              reason,
+              admin_password: password,
+              authorized_by: 'Administrador',
+            });
+            setReceiptCancelSale(null);
+            setReceipt(cancelled);
+            setNotice(`Venda ${cancelled.sale_number} cancelada. Estoque estornado.`);
+            await loadCash();
           }}
         />
       )}

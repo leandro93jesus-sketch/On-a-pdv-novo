@@ -10,6 +10,7 @@ import {
   ensureBootstrapAdmin,
 } from '../services/authService.js';
 import { extractBearer, requireAuth, requireAdmin } from '../middleware/auth.js';
+import { verifyAdminOperationPin } from '../services/adminAuthService.js';
 
 const router = Router();
 
@@ -35,6 +36,16 @@ router.post('/logout', (req, res, next) => {
 
 router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user });
+});
+
+/** Valida PIN de operação administrativa (não devolve a senha). */
+router.post('/verify-admin-pin', requireAuth, (req, res, next) => {
+  try {
+    const result = verifyAdminOperationPin(req.body?.password ?? req.body?.pin);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.post('/change-password', requireAuth, (req, res, next) => {

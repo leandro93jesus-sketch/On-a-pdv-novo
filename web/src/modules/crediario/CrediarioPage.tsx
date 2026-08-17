@@ -4,11 +4,13 @@ import {
   fetchCreditAccounts,
   fetchCreditSummary,
   formatBRL,
+  generateCreditAccountPdfApi,
   parseBRLToCents,
   payCredit,
   type CreditAccount,
 } from '../../api/client';
 import { ModuleToolbar, StatusPill } from '../../components/ModuleChrome';
+import { savePdfToComputer } from '../../lib/savePdf';
 
 function tone(status: string): 'ok' | 'warn' | 'danger' | 'muted' | 'info' {
   if (status === 'quitado') return 'ok';
@@ -86,6 +88,34 @@ export default function CrediarioPage() {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro no pagamento');
+    }
+  }
+
+  async function saveCreditPdf() {
+    if (!selected) return;
+    try {
+      const meta = await generateCreditAccountPdfApi(selected.id, { force: true });
+      const result = await savePdfToComputer({
+        suggestedName: meta.filename || `ONCA-CREDIARIO-${String(selected.id).padStart(6, '0')}.pdf`,
+        downloadUrl: meta.download_url,
+        absolutePath: meta.absolute_path,
+        title: 'Salvar comprovante de crediário em PDF',
+      });
+      if (result.canceled) {
+        setNotice('Salvar PDF cancelado.');
+        return;
+      }
+      if (!result.ok) {
+        setError(result.error || 'Falha ao salvar PDF');
+        return;
+      }
+      setNotice(
+        result.filePath
+          ? `PDF salvo em: ${result.filePath}`
+          : 'PDF de crediário baixado.'
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao gerar PDF do crediário');
     }
   }
 
@@ -178,6 +208,11 @@ export default function CrediarioPage() {
                 Total {formatBRL(selected.total_cents)} · Entrada {formatBRL(selected.entry_cents)} ·
                 Saldo {formatBRL(selected.balance_cents)}
               </p>
+              <div style={{ marginBottom: 12 }}>
+                <button type="button" className="btn btn-accent" onClick={() => void saveCreditPdf()}>
+                  Salvar PDF
+                </button>
+              </div>
               <table className="history-table">
                 <thead>
                   <tr>

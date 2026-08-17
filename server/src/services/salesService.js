@@ -4,6 +4,7 @@ import { assertNonNegativeCents } from '../utils/money.js';
 import { applyStockMovement } from './stockService.js';
 import { getCustomerById } from './customersService.js';
 import {
+  recordSaleAmendOnCash,
   recordSaleCancelOnCash,
   recordSaleOnCash,
   requireOpenCashSession,
@@ -12,6 +13,7 @@ import { createCreditAccountFromSale } from './creditService.js';
 import { writeAudit } from './auditService.js';
 import { getCurrentOperator } from './settingsService.js';
 import { beginOperation, commitOperation, failOperation } from './recoveryService.js';
+import { verifyAdminOperationPin } from './adminAuthService.js';
 
 const PAYMENT_METHODS = new Set(['dinheiro', 'pix', 'cartao', 'crediario']);
 const CARD_TYPES = new Set(['CREDIT', 'DEBIT']);
@@ -65,6 +67,16 @@ function mapSale(row) {
     cancelled_at: row.cancelled_at,
     cancelled_by: row.cancelled_by ?? null,
     cancel_reason: row.cancel_reason ?? null,
+    amended_at: row.amended_at ?? null,
+    amended_by: row.amended_by ?? null,
+    amend_reason: row.amend_reason ?? null,
+    amend_authorized_by: row.amend_authorized_by ?? null,
+    situation_label:
+      row.status === 'cancelled'
+        ? 'Cancelada'
+        : row.amended_at
+          ? 'Alterada'
+          : 'Concluída',
   };
 }
 
@@ -165,15 +177,20 @@ function findSaleByClientRequestId(clientRequestId) {
 
 export function listSales({
   limit = 50,
+  offset = 0,
   q = null,
   from = null,
   to = null,
   period = null,
   payment_method = null,
   status = null,
+  operator = null,
+  sale_number = null,
+  customer = null,
 } = {}) {
   const db = getDb();
-  const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+  const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 2000);
+  const safeOffset = Math.max(0, Number(offset) || 0);
   const where = [];
   const params = {};
 
@@ -190,8 +207,27 @@ export function listSales({
     params.to = String(toDate).slice(0, 10);
   }
   if (status && String(status).trim()) {
-    where.push(`s.status = @status`);
-    params.status = String(status).trim();
+    const st = String(status).trim().toLowerCase();
+    if (st === 'alterada' || st === 'amended') {
+      where.push(`s.status = 'completed' AND s.amended_at IS NOT NULL`);
+    } else if (st === 'concluida' || st === 'completed') {
+      where.push(`s.status = 'completed' AND s.amended_at IS NULL`);
+    } else {
+      where.push(`s.status = @status`);
+      params.status = st === 'cancelada' ? 'cancelled' : st;
+    }
+  }
+  if (sale_number && String(sale_number).trim()) {
+    where.push(`s.sale_number LIKE @sale_number`);
+    params.sale_number = `%${String(sale_number).trim()}%`;
+  }
+  if (customer && String(customer).trim()) {
+    where.push(`LOWER(IFNULL(c.name,'')) LIKE @customer`);
+    params.customer = `%${String(customer).trim().toLowerCase()}%`;
+  }
+  if (operator && String(operator).trim()) {
+    where.push(`LOWER(IFNULL(cs.operator_name,'')) LIKE @operator`);
+    params.operator = `%${String(operator).trim().toLowerCase()}%`;
   }
   if (q && String(q).trim()) {
     const term = `%${String(q).trim()}%`;
@@ -212,6 +248,14 @@ export function listSales({
     const pm = String(payment_method).trim().toLowerCase();
     if (pm === 'misto') {
       where.push(`(SELECT COUNT(*) FROM sale_payments sp WHERE sp.sale_id = s.id) > 1`);
+    } else if (pm === 'cartao_credito') {
+      where.push(
+        `EXISTS (SELECT 1 FROM sale_payments sp WHERE sp.sale_id = s.id AND sp.method='cartao' AND sp.card_type='CREDIT')`
+      );
+    } else if (pm === 'cartao_debito') {
+      where.push(
+        `EXISTS (SELECT 1 FROM sale_payments sp WHERE sp.sale_id = s.id AND sp.method='cartao' AND sp.card_type='DEBIT')`
+      );
     } else {
       where.push(`EXISTS (
         SELECT 1 FROM sale_payments sp
@@ -221,24 +265,40 @@ export function listSales({
     }
   }
 
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const totalRow = db
+    .prepare(
+      `SELECT COUNT(*) AS cnt
+       FROM sales s
+       LEFT JOIN customers c ON c.id = s.customer_id
+       LEFT JOIN cash_sessions cs ON cs.id = s.cash_session_id
+       ${whereSql}`
+    )
+    .get(params);
+  const total = Number(totalRow?.cnt || 0);
+
   params.limit = safeLimit;
+  params.offset = safeOffset;
   const rows = db
     .prepare(
       `SELECT s.*,
          (SELECT COUNT(*) FROM sale_payments spc WHERE spc.sale_id = s.id) AS payments_count,
          (SELECT method FROM sale_payments sp WHERE sp.sale_id = s.id ORDER BY sp.id LIMIT 1) AS first_payment_method,
          (SELECT card_type FROM sale_payments sp WHERE sp.sale_id = s.id ORDER BY sp.id LIMIT 1) AS first_card_type,
+         (SELECT COALESCE(SUM(si.quantity),0) FROM sale_items si WHERE si.sale_id = s.id) AS items_count,
          c.name AS customer_name,
-         c.phone AS customer_phone
+         c.phone AS customer_phone,
+         cs.operator_name AS operator_name
        FROM sales s
        LEFT JOIN customers c ON c.id = s.customer_id
-       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+       LEFT JOIN cash_sessions cs ON cs.id = s.cash_session_id
+       ${whereSql}
        ORDER BY s.id DESC
-       LIMIT @limit`
+       LIMIT @limit OFFSET @offset`
     )
     .all(params);
 
-  return rows.map((r) => ({
+  const items = rows.map((r) => ({
     ...mapSale(r),
     payment_method:
       Number(r.payments_count) > 1
@@ -248,7 +308,11 @@ export function listSales({
           ]),
     customer_name: r.customer_name ?? null,
     customer_phone: r.customer_phone ?? null,
+    operator_name: r.operator_name ?? null,
+    items_count: Number(r.items_count || 0),
   }));
+
+  return { items, total, limit: safeLimit, offset: safeOffset };
 }
 
 export function createSale(payload = {}) {
@@ -560,6 +624,7 @@ export function createSale(payload = {}) {
             referenceType: 'sale',
             referenceId: id,
             note: `Venda ${sale_number}`,
+            allowNegative: true,
           },
           { db, skipAudit: true }
         );
@@ -635,7 +700,9 @@ export function cancelSale(id, payload = {}) {
       code: 'CANCEL_REASON_REQUIRED',
     });
   }
+  verifyAdminOperationPin(payload.admin_password ?? payload.admin_pin);
   const userName = String(payload.user_name || getCurrentOperator()).trim() || getCurrentOperator();
+  const authorizedBy = String(payload.authorized_by || 'Administrador').trim() || 'Administrador';
 
   return db.transaction(() => {
     const sale = db.prepare('SELECT * FROM sales WHERE id = ?').get(Number(id));
@@ -643,7 +710,8 @@ export function cancelSale(id, payload = {}) {
       throw new AppError('Venda não encontrada', { status: 404, code: 'SALE_NOT_FOUND' });
     }
     if (sale.status === 'cancelled') {
-      throw new AppError('Venda já está cancelada', { status: 409, code: 'SALE_ALREADY_CANCELLED' });
+      // Idempotente: retorna a venda já cancelada sem re-estornar estoque/caixa
+      return getSaleById(id);
     }
 
     const items = db
@@ -701,13 +769,272 @@ export function cancelSale(id, payload = {}) {
          cancelled_by = ?,
          cancel_reason = ?
        WHERE id = ?`
-    ).run(userName, reason, Number(id));
+    ).run(`${userName} (auth: ${authorizedBy})`, reason, Number(id));
 
     writeAudit({
       action: 'sale.cancel',
       entityType: 'sale',
       entityId: Number(id),
-      details: { reason, userName, sale_number: sale.sale_number },
+      details: {
+        reason,
+        userName,
+        authorized: true,
+        sale_number: sale.sale_number,
+        note: 'Administrador autorizou cancelamento',
+      },
+      userName,
+    });
+
+    return getSaleById(id);
+  })();
+}
+
+/**
+ * Altera venda concluída com autorização administrativa.
+ * Corrige estoque e caixa somente pela DIFERENÇA.
+ */
+export function amendSale(id, payload = {}) {
+  const db = getDb();
+  const reason = typeof payload.reason === 'string' ? payload.reason.trim() : '';
+  if (!reason) {
+    throw new AppError('Motivo da alteração é obrigatório', {
+      status: 400,
+      code: 'AMEND_REASON_REQUIRED',
+    });
+  }
+  verifyAdminOperationPin(payload.admin_password ?? payload.admin_pin);
+  const userName = String(payload.user_name || getCurrentOperator()).trim() || getCurrentOperator();
+  const authorizedBy = String(payload.authorized_by || 'Administrador').trim() || 'Administrador';
+
+  const itemsInput = payload.items;
+  if (!Array.isArray(itemsInput) || itemsInput.length === 0) {
+    throw new AppError('A venda precisa ter ao menos um item', {
+      status: 400,
+      code: 'EMPTY_CART',
+    });
+  }
+
+  const saleDiscount = assertNonNegativeCents(payload.discount_cents ?? 0, 'discount_cents');
+
+  let customerId = null;
+  if (payload.customer_id != null && payload.customer_id !== '') {
+    const customer = getCustomerById(Number(payload.customer_id));
+    if (!customer.active) {
+      throw new AppError('Cliente inativo', { status: 400, code: 'CUSTOMER_INACTIVE' });
+    }
+    customerId = customer.id;
+  } else if (payload.customer_id === null) {
+    customerId = null;
+  }
+
+  const getProduct = db.prepare(
+    `SELECT id, name, barcode, price_cents, stock_qty, allow_negative_stock, active
+     FROM products WHERE id = ?`
+  );
+
+  const resolvedItems = [];
+  for (const [index, raw] of itemsInput.entries()) {
+    const isMisc = Boolean(raw.is_misc) || raw.product_id == null;
+    const quantity = Number(raw.quantity);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new AppError(`Quantidade inválida no item ${index + 1}`, {
+        status: 400,
+        code: 'INVALID_QUANTITY',
+      });
+    }
+    const itemDiscount = assertNonNegativeCents(raw.discount_cents ?? 0, 'item.discount_cents');
+    if (isMisc) {
+      const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : 'Item Diversos';
+      const unitPrice = assertNonNegativeCents(raw.unit_price_cents, 'unit_price_cents');
+      const lineTotal = unitPrice * quantity - itemDiscount;
+      if (lineTotal < 0) {
+        throw new AppError('Subtotal do item inválido', { status: 400, code: 'INVALID_LINE' });
+      }
+      resolvedItems.push({
+        product_id: null,
+        name,
+        barcode: null,
+        unit_price_cents: unitPrice,
+        quantity,
+        discount_cents: itemDiscount,
+        line_total_cents: lineTotal,
+        is_misc: 1,
+      });
+      continue;
+    }
+    const product = getProduct.get(Number(raw.product_id));
+    if (!product || !product.active) {
+      throw new AppError(`Produto inválido no item ${index + 1}`, {
+        status: 400,
+        code: 'INVALID_PRODUCT',
+      });
+    }
+    const unitPrice =
+      raw.unit_price_cents != null
+        ? assertNonNegativeCents(raw.unit_price_cents, 'unit_price_cents')
+        : Number(product.price_cents);
+    const lineTotal = unitPrice * quantity - itemDiscount;
+    if (lineTotal < 0) {
+      throw new AppError('Subtotal do item inválido', { status: 400, code: 'INVALID_LINE' });
+    }
+    resolvedItems.push({
+      product_id: product.id,
+      name: String(raw.name || product.name),
+      barcode: product.barcode,
+      unit_price_cents: unitPrice,
+      quantity,
+      discount_cents: itemDiscount,
+      line_total_cents: lineTotal,
+      is_misc: 0,
+    });
+  }
+
+  const subtotal = resolvedItems.reduce((s, i) => s + i.unit_price_cents * i.quantity, 0);
+  if (saleDiscount > subtotal) {
+    throw new AppError('Desconto maior que o subtotal', { status: 400, code: 'DISCOUNT_OVER' });
+  }
+  const total = subtotal - saleDiscount;
+
+  return db.transaction(() => {
+    const sale = db.prepare('SELECT * FROM sales WHERE id = ?').get(Number(id));
+    if (!sale) {
+      throw new AppError('Venda não encontrada', { status: 404, code: 'SALE_NOT_FOUND' });
+    }
+    if (sale.status === 'cancelled') {
+      throw new AppError('Venda cancelada não pode ser alterada', {
+        status: 409,
+        code: 'SALE_CANCELLED',
+      });
+    }
+
+    const prevItems = db
+      .prepare(
+        `SELECT product_id, quantity, is_misc, name, unit_price_cents, line_total_cents
+         FROM sale_items WHERE sale_id = ?`
+      )
+      .all(Number(id));
+
+    const prevQty = new Map();
+    for (const it of prevItems) {
+      if (it.is_misc || !it.product_id) continue;
+      prevQty.set(it.product_id, (prevQty.get(it.product_id) || 0) + Number(it.quantity));
+    }
+    const nextQty = new Map();
+    for (const it of resolvedItems) {
+      if (it.is_misc || !it.product_id) continue;
+      nextQty.set(it.product_id, (nextQty.get(it.product_id) || 0) + Number(it.quantity));
+    }
+
+    const allIds = new Set([...prevQty.keys(), ...nextQty.keys()]);
+    for (const productId of allIds) {
+      const before = prevQty.get(productId) || 0;
+      const after = nextQty.get(productId) || 0;
+      const diff = after - before;
+      if (diff > 0) {
+        applyStockMovement(
+          {
+            productId,
+            movementType: 'sale',
+            quantity: diff,
+            reason: `Alteração venda ${sale.sale_number}`,
+            userName,
+            referenceType: 'sale',
+            referenceId: Number(id),
+            note: reason,
+            allowNegative: true,
+          },
+          { db, skipAudit: true }
+        );
+      } else if (diff < 0) {
+        applyStockMovement(
+          {
+            productId,
+            movementType: 'sale_cancel',
+            quantity: -diff,
+            reason: `Alteração venda ${sale.sale_number}`,
+            userName,
+            referenceType: 'sale',
+            referenceId: Number(id),
+            note: reason,
+            allowNegative: true,
+          },
+          { db, skipAudit: true }
+        );
+      }
+    }
+
+    const totalBefore = Number(sale.total_cents);
+    const delta = total - totalBefore;
+    if (sale.cash_session_id && delta !== 0) {
+      recordSaleAmendOnCash(db, {
+        sessionId: sale.cash_session_id,
+        saleId: Number(id),
+        deltaCents: delta,
+        reason: `Alteração ${sale.sale_number}: ${reason}`,
+        userName,
+      });
+    }
+
+    db.prepare(`DELETE FROM sale_items WHERE sale_id = ?`).run(Number(id));
+    const insertItem = db.prepare(
+      `INSERT INTO sale_items (
+         sale_id, product_id, name, barcode, unit_price_cents, quantity,
+         discount_cents, line_total_cents, is_misc
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const item of resolvedItems) {
+      insertItem.run(
+        Number(id),
+        item.product_id,
+        item.name,
+        item.barcode,
+        item.unit_price_cents,
+        item.quantity,
+        item.discount_cents,
+        item.line_total_cents,
+        item.is_misc
+      );
+    }
+
+    const nextCustomerId =
+      payload.customer_id !== undefined ? customerId : sale.customer_id ?? null;
+
+    db.prepare(
+      `UPDATE sales SET
+         customer_id = ?,
+         subtotal_cents = ?,
+         discount_cents = ?,
+         total_cents = ?,
+         amended_at = datetime('now'),
+         amended_by = ?,
+         amend_reason = ?,
+         amend_authorized_by = ?
+       WHERE id = ?`
+    ).run(
+      nextCustomerId,
+      subtotal,
+      saleDiscount,
+      total,
+      userName,
+      reason,
+      authorizedBy,
+      Number(id)
+    );
+
+    writeAudit({
+      action: 'sale.amend',
+      entityType: 'sale',
+      entityId: Number(id),
+      details: {
+        sale_number: sale.sale_number,
+        reason,
+        total_before_cents: totalBefore,
+        total_after_cents: total,
+        delta_cents: delta,
+        items_before: prevItems,
+        items_after: resolvedItems,
+        note: 'Administrador autorizou alteração',
+      },
       userName,
     });
 

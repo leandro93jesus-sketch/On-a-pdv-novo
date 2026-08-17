@@ -40,6 +40,15 @@ export interface OncaDesktopApi {
   }>;
   cancelBluetooth?: () => Promise<{ ok: boolean; cancelled?: boolean }>;
   getLinuxPrintDiag?: () => Promise<Record<string, unknown>>;
+  savePdf?: (opts: {
+    defaultPath?: string;
+    suggestedName?: string;
+    title?: string;
+    absolutePath?: string;
+    url?: string;
+    base64?: string;
+    filters?: { name: string; extensions: string[] }[];
+  }) => Promise<{ ok: boolean; canceled?: boolean; filePath?: string; error?: string }>;
 }
 
 declare global {

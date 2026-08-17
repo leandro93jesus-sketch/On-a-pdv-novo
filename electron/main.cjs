@@ -864,9 +864,11 @@ function buildMenu() {
 }
 
 const { registerPrinterIpc: registerPrinterIpcHandlers } = require('./printerIpc.cjs');
+const { registerFilesIpc } = require('./filesIpc.cjs');
 
 function registerPrinterIpc() {
   registerPrinterIpcHandlers(ipcMain, () => mainWindow);
+  registerFilesIpc(ipcMain, () => mainWindow);
 }
 
 function openDiagnostics() {

@@ -7,6 +7,18 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { path: '/vendas', label: 'Vendas', ready: true, description: 'PDV e finalização de vendas' },
+  {
+    path: '/historico-vendas',
+    label: 'Histórico de Vendas',
+    ready: true,
+    description: 'Consulta, PDF, alteração e cancelamento de vendas',
+  },
+  {
+    path: '/orcamentos',
+    label: 'Orçamentos',
+    ready: true,
+    description: 'Propostas comerciais, PDF e conversão em venda',
+  },
   { path: '/caixa', label: 'Caixa', ready: true, description: 'Abertura, sangria e fechamento' },
   { path: '/produtos', label: 'Produtos', ready: true, description: 'Cadastro e preços' },
   { path: '/estoque', label: 'Estoque', ready: true, description: 'Saldos e movimentações' },

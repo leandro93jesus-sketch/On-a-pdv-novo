@@ -62,6 +62,13 @@ export interface Sale {
   cancelled_at: string | null;
   cancelled_by?: string | null;
   cancel_reason?: string | null;
+  amended_at?: string | null;
+  amended_by?: string | null;
+  amend_reason?: string | null;
+  amend_authorized_by?: string | null;
+  situation_label?: string | null;
+  operator_name?: string | null;
+  items_count?: number;
   payment_method?: string | null;
   amount_received_cents?: number;
   change_cents?: number;
@@ -441,27 +448,67 @@ export function deleteProduct(id: number): Promise<{ deleted?: boolean; inactiva
 export function fetchSales(
   limitOrParams: number | {
     limit?: number;
+    offset?: number;
     q?: string;
     from?: string;
     to?: string;
     period?: string;
     payment_method?: string;
     status?: string;
+    operator?: string;
+    sale_number?: string;
+    customer?: string;
   } = 50
 ): Promise<Sale[]> {
+  return fetchSalesPaged(limitOrParams).then((r) => r.items);
+}
+
+export function fetchSalesPaged(
+  limitOrParams: number | {
+    limit?: number;
+    offset?: number;
+    q?: string;
+    from?: string;
+    to?: string;
+    period?: string;
+    payment_method?: string;
+    status?: string;
+    operator?: string;
+    sale_number?: string;
+    customer?: string;
+  } = 50
+): Promise<{ items: Sale[]; total: number; limit: number; offset: number }> {
   const params =
     typeof limitOrParams === 'number'
-      ? { limit: limitOrParams }
+      ? { limit: limitOrParams, offset: 0, paged: '1' }
       : {
           limit: limitOrParams.limit ?? 50,
+          offset: limitOrParams.offset ?? 0,
           q: limitOrParams.q,
           from: limitOrParams.from,
           to: limitOrParams.to,
           period: limitOrParams.period,
           payment_method: limitOrParams.payment_method,
           status: limitOrParams.status,
+          operator: limitOrParams.operator,
+          sale_number: limitOrParams.sale_number,
+          customer: limitOrParams.customer,
+          paged: '1',
         };
-  return apiFetch(`/api/sales${qs(params)}`).then((r) => handle<Sale[]>(r));
+  return apiFetch(`/api/sales${qs(params)}`).then(async (r) => {
+    const data = await handle<
+      Sale[] | { items: Sale[]; total: number; limit: number; offset: number }
+    >(r);
+    if (Array.isArray(data)) {
+      return {
+        items: data,
+        total: Number(r.headers.get('X-Total-Count') || data.length),
+        limit: typeof limitOrParams === 'number' ? limitOrParams : limitOrParams.limit ?? 50,
+        offset: typeof limitOrParams === 'number' ? 0 : limitOrParams.offset ?? 0,
+      };
+    }
+    return data;
+  });
 }
 
 export function fetchSale(id: number): Promise<Sale> {
@@ -478,13 +525,29 @@ export function createSale(payload: CreateSalePayload): Promise<Sale> {
 
 export function cancelSale(
   id: number,
-  payload: { reason: string; user_name?: string }
+  payload: { reason: string; admin_password: string; user_name?: string; authorized_by?: string }
 ): Promise<Sale> {
   return fetch(`/api/sales/${id}/cancel`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   }).then((r) => handle<Sale>(r));
+}
+
+export function amendSaleApi(id: number, payload: Record<string, unknown>): Promise<Sale> {
+  return apiFetch(`/api/sales/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle<Sale>(r));
+}
+
+export function verifyAdminPinApi(password: string): Promise<{ ok: boolean }> {
+  return apiFetch('/api/auth/verify-admin-pin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  }).then((r) => handle<{ ok: boolean }>(r));
 }
 
 export function fetchCustomers(params?: { q?: string; include_inactive?: boolean }): Promise<Customer[]> {
@@ -1654,6 +1717,174 @@ export function deliveryOrderWhatsappShareApi(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(opts || {}),
+  }).then((r) => handle(r));
+}
+
+/* ---------- Orçamentos ---------- */
+
+export type QuoteItem = {
+  id?: number;
+  product_id: number | null;
+  sku?: string | null;
+  barcode?: string | null;
+  name: string;
+  quantity: number;
+  unit_price_cents: number;
+  line_total_cents?: number;
+  is_misc?: number | boolean;
+};
+
+export type Quote = {
+  id: number;
+  quote_number: string;
+  status: string;
+  status_label?: string;
+  customer_id: number | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  customer_document: string | null;
+  customer_address: string | null;
+  notes: string | null;
+  valid_until: string | null;
+  subtotal_cents: number;
+  discount_cents: number;
+  total_cents: number;
+  converted_sale_id?: number | null;
+  converted_at?: string | null;
+  created_at: string;
+  updated_at?: string;
+  items?: QuoteItem[];
+};
+
+export function fetchQuotesPaged(params?: {
+  status?: string;
+  quote_number?: string;
+  customer?: string;
+  phone?: string;
+  from?: string;
+  to?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ items: Quote[]; total: number; limit: number; offset: number }> {
+  const sp = new URLSearchParams();
+  if (params?.status) sp.set('status', params.status);
+  if (params?.quote_number) sp.set('quote_number', params.quote_number);
+  if (params?.customer) sp.set('customer', params.customer);
+  if (params?.phone) sp.set('phone', params.phone);
+  if (params?.from) sp.set('from', params.from);
+  if (params?.to) sp.set('to', params.to);
+  if (params?.q) sp.set('q', params.q);
+  if (params?.limit != null) sp.set('limit', String(params.limit));
+  if (params?.offset != null) sp.set('offset', String(params.offset));
+  const q = sp.toString();
+  return apiFetch(`/api/quotes${q ? `?${q}` : ''}`).then((r) => handle(r));
+}
+
+export function fetchQuote(id: number): Promise<Quote> {
+  return apiFetch(`/api/quotes/${id}`).then((r) => handle(r));
+}
+
+export function createQuoteApi(payload: Record<string, unknown>): Promise<Quote> {
+  return apiFetch('/api/quotes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle(r));
+}
+
+export function updateQuoteApi(id: number, payload: Record<string, unknown>): Promise<Quote> {
+  return apiFetch(`/api/quotes/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then((r) => handle(r));
+}
+
+export function cancelQuoteApi(id: number, reason?: string): Promise<Quote> {
+  return apiFetch(`/api/quotes/${id}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  }).then((r) => handle(r));
+}
+
+export function fetchQuoteConversionPayload(id: number): Promise<{
+  quote_id: number;
+  quote_number: string;
+  customer_id: number | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  discount_cents: number;
+  notes: string | null;
+  items: QuoteItem[];
+}> {
+  return apiFetch(`/api/quotes/${id}/conversion-payload`).then((r) => handle(r));
+}
+
+export function markQuoteConvertedApi(id: number, saleId: number): Promise<Quote> {
+  return apiFetch(`/api/quotes/${id}/mark-converted`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sale_id: saleId }),
+  }).then((r) => handle(r));
+}
+
+export function buildQuotePdfUrl(id: number, opts?: { download?: boolean; regen?: boolean }): string {
+  const sp = new URLSearchParams();
+  if (opts?.download) sp.set('download', '1');
+  if (opts?.regen) sp.set('regen', '1');
+  const q = sp.toString();
+  return `/api/receipts/quotes/${id}/pdf${q ? `?${q}` : ''}`;
+}
+
+export function generateQuotePdfApi(id: number, opts?: { force?: boolean }): Promise<ReceiptPdfMeta> {
+  return apiFetch(`/api/receipts/quotes/${id}/pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force: opts?.force === true }),
+  }).then((r) => handle(r));
+}
+
+export function quoteWhatsappShareApi(
+  id: number,
+  opts?: { phone?: string; message?: string; force?: boolean }
+): Promise<{
+  quote_id: number;
+  quote_number: string;
+  phone: string | null;
+  message: string;
+  url: string;
+  pdf_attached: boolean;
+  note?: string;
+  pdf?: ReceiptPdfMeta;
+}> {
+  return apiFetch(`/api/receipts/quotes/${id}/whatsapp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts || {}),
+  }).then((r) => handle(r));
+}
+
+export function buildCreditAccountPdfUrl(
+  id: number,
+  opts?: { download?: boolean; regen?: boolean }
+): string {
+  const sp = new URLSearchParams();
+  if (opts?.download) sp.set('download', '1');
+  if (opts?.regen) sp.set('regen', '1');
+  const q = sp.toString();
+  return `/api/receipts/credit-accounts/${id}/pdf${q ? `?${q}` : ''}`;
+}
+
+export function generateCreditAccountPdfApi(
+  id: number,
+  opts?: { force?: boolean }
+): Promise<ReceiptPdfMeta> {
+  return apiFetch(`/api/receipts/credit-accounts/${id}/pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force: opts?.force === true }),
   }).then((r) => handle(r));
 }
 

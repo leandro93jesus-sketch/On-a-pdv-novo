@@ -82,6 +82,25 @@ export default function ProdutosPage() {
     setShowForm(true);
   }
 
+  function openClone(p: Product) {
+    setEditing(null);
+    setForm({
+      name: p.name,
+      sku: '',
+      barcode: '',
+      category: p.category || 'Geral',
+      unit: p.unit || 'UN',
+      price: (p.price_cents / 100).toFixed(2).replace('.', ','),
+      cost: (p.cost_cents / 100).toFixed(2).replace('.', ','),
+      stock_qty: '0',
+      min_stock_qty: String(p.min_stock_qty ?? 0),
+      notes: p.notes || '',
+      active: true,
+    });
+    setShowForm(true);
+    setNotice('CLONAR PRODUTO: informe um novo código. Estoque e histórico não são copiados.');
+  }
+
   function openEdit(p: Product) {
     setEditing(p);
     setForm({
@@ -298,6 +317,9 @@ export default function ProdutosPage() {
                 <td className="row-actions">
                   <button type="button" className="btn btn-ghost" onClick={() => openEdit(p)}>
                     Editar
+                  </button>
+                  <button type="button" className="btn btn-accent" onClick={() => openClone(p)}>
+                    Clonar
                   </button>
                   <button type="button" className="btn btn-danger" onClick={() => void remove(p)}>
                     Excluir
