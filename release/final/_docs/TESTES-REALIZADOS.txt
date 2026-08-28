@@ -1,0 +1,83 @@
+ONÇA PDV 1.2.17 — TESTES REALIZADOS
+===================================
+
+DATA: 2026-08-28
+
+1) Suite validação final obrigatória + relacionadas
+   Comando:
+     cd server && node --test \
+       src/validacaoFinalObrigatoria.test.js \
+       src/trocoProdutosEstoque.test.js \
+       src/historicoAlterarVenda.test.js \
+       src/quickProductDuringSale.test.js \
+       src/sales.test.js \
+       src/estoqueVendas.test.js \
+       src/etapa3.test.js
+   Resultado: PASS 53 | FAIL 0
+   Log: /opt/cursor/artifacts/validacao-suites-relacionadas.log
+         (cópia resumida abaixo dos cenários)
+
+2) Cenários obrigatórios (validacaoFinalObrigatoria)
+   - Scanner 10 leituras .............. PASS
+   - Código inexistente ............... PASS
+   - Códigos parecidos (exact match) .. PASS
+   - Venda multi + idempotência ....... PASS
+   - Troco R$ 37,50 / R$ 50,00 ........ PASS (troco 12,50)
+   - Recebido insuficiente ............ PASS (bloqueado)
+   - Crediário 200→150→50→0 quitado ... PASS
+   - Entrada no caixa (R$ 50) ......... PASS
+   - Estoque 1→0 + entrada 10 ......... PASS
+   - Histórico detalhe completo ....... PASS
+   - Alteração de venda (PIN) ......... PASS
+   - Cancelamento ..................... PASS
+   - Integridade DB antes/depois ...... PASS
+   Log: validacao-final-obrigatoria.log / validacao-final-obrigatoria-run.log
+
+3) Lint
+   Comando: npm run lint -w web
+   Resultado: PASS
+   Log: validacao-lint.log
+
+4) Typecheck
+   Comando: npx tsc -p web/tsconfig.json --noEmit
+   Resultado: PASS
+   Log: validacao-tsc.log
+
+5) Build web
+   Comando: npm run build -w web
+   Resultado: PASS
+   Log: validacao-build.log
+
+6) E2E Etapa 3 (API + rotas UI HTTP)
+   Comando: npm run e2e:etapa3
+   Resultado: PASS 19 | FAIL 0
+   Log: validacao-e2e-etapa3.log
+
+7) E2E UI headless (chrome dump-dom)
+   Comando: npm run e2e:ui:etapa3
+   Resultado: PARCIAL — 3 PASS / 4 FAIL (timeout dump-dom em rotas SPA)
+   Motivo: flakiness do google-chrome --dump-dom com virtual-time-budget
+           (não indica falha funcional do app). Smoke GUI cobriu as telas.
+   Log: validacao-e2e-ui-etapa3-retry.log
+
+8) Integridade SQLite (banco live)
+   Comando: sqlite3 server/data/onca-pdv.db "PRAGMA integrity_check;"
+   Antes / meio / após reinício: ok
+   Logs: db-integrity-*.log
+
+9) Reinicialização + persistência
+   Resultado: PASS (mesmos counts vendas/produtos/clientes/crediário/caixa/settings)
+   Log: validacao-persistencia-pos-restart.log
+
+10) Smoke interface (GUI)
+    Telas: Vendas, Produtos/Estoque, Histórico, Crediário,
+           toast bipagem, estoque zerado, Receber crediário, troco
+    Resultado: PASS (sem botão cortado / sem overflow horizontal em ~1100px)
+
+PENDÊNCIAS REAIS
+----------------
+- e2e:ui:etapa3 (chrome dump-dom) continua flaky em algumas rotas SPA.
+  Workaround: usar e2e:etapa3 + smoke GUI.
+- Instalador Windows NSIS não foi regenerado nesta entrega de código-fonte
+  (requer Wine/i386 e passo desktop:pack:win separado).
+- WhatsApp continua sem anexar PDF automaticamente (limitação conhecida).

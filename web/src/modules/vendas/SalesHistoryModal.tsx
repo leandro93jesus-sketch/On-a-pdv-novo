@@ -132,14 +132,6 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
     }
   }
 
-  async function openReceipt(id: number) {
-    try {
-      setReceipt(await fetchSale(id));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erro ao abrir comprovante');
-    }
-  }
-
   function startAmend(sale: Sale) {
     if (sale.status === 'cancelled') {
       setError('Venda cancelada não pode ser alterada.');
