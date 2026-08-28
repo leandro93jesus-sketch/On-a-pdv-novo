@@ -228,6 +228,8 @@ export interface CreditAccount {
   total_cents: number;
   entry_cents: number;
   balance_cents: number;
+  paid_cents?: number;
+  next_due_date?: string | null;
   installment_count: number;
   status: string;
   installments?: Array<{

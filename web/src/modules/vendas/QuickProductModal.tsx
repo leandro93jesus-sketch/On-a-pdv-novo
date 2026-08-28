@@ -4,9 +4,7 @@ import { createProduct, fetchProducts, type Product } from '../../api/client';
 type Props = {
   barcode: string;
   onCancel: () => void;
-  /** Cadastra e adiciona 1 unidade ao carrinho. */
   onCreated: (product: Product) => void;
-  /** Cadastra sem adicionar à venda (só grava o produto). */
   onCreatedOnly?: (product: Product) => void;
   onUseExisting: (product: Product) => void;
 };
@@ -28,7 +26,7 @@ function parseOptionalInt(input: string): number | null {
 }
 
 /**
- * Cadastro rápido durante a venda quando o código de barras não existe.
+ * Cadastro rápido enxuto: só o essencial; extras atrás de "Mais informações".
  */
 export default function QuickProductModal({
   barcode,
@@ -39,10 +37,11 @@ export default function QuickProductModal({
 }: Props) {
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
-  const [cost, setCost] = useState('');
   const [stock, setStock] = useState('');
+  const [cost, setCost] = useState('');
   const [minStock, setMinStock] = useState('');
   const [category, setCategory] = useState('');
+  const [more, setMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [existing, setExisting] = useState<Product | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -50,8 +49,7 @@ export default function QuickProductModal({
 
   async function resolveExisting(): Promise<Product | null> {
     const byBarcode = await fetchProducts({ barcode });
-    if (byBarcode[0]) return byBarcode[0];
-    return null;
+    return byBarcode[0] || null;
   }
 
   async function submit(e: FormEvent) {
@@ -68,18 +66,17 @@ export default function QuickProductModal({
       setError('Preço de venda é obrigatório.');
       return;
     }
-    const costCents = cost.trim() ? parseBRL(cost) : 0;
+    const costCents = more && cost.trim() ? parseBRL(cost) : 0;
     if (costCents == null) {
       setError('Preço de custo inválido.');
       return;
     }
-
     const stockQty = parseOptionalInt(stock);
     if (stockQty !== null && Number.isNaN(stockQty)) {
       setError('Estoque inicial inválido.');
       return;
     }
-    const minStockQty = parseOptionalInt(minStock);
+    const minStockQty = more ? parseOptionalInt(minStock) : 0;
     if (minStockQty !== null && Number.isNaN(minStockQty)) {
       setError('Estoque mínimo inválido.');
       return;
@@ -90,7 +87,7 @@ export default function QuickProductModal({
       const already = await resolveExisting();
       if (already) {
         setExisting(already);
-        setError('ESTE PRODUTO JÁ ESTÁ CADASTRADO.');
+        setError('Este produto já está cadastrado.');
         return;
       }
 
@@ -101,7 +98,7 @@ export default function QuickProductModal({
         cost_cents: costCents ?? 0,
         stock_qty: stockQty ?? 0,
         min_stock_qty: minStockQty ?? 0,
-        category: category.trim() || undefined,
+        category: more && category.trim() ? category.trim() : undefined,
         confirm_similar_name: true,
       });
       if (mode === 'only' && onCreatedOnly) onCreatedOnly(product);
@@ -113,13 +110,13 @@ export default function QuickProductModal({
           const found = await resolveExisting();
           if (found) {
             setExisting(found);
-            setError('ESTE PRODUTO JÁ ESTÁ CADASTRADO.');
+            setError('Este produto já está cadastrado.');
             return;
           }
         } catch {
-          /* fall through */
+          /* ignore */
         }
-        setError('ESTE PRODUTO JÁ ESTÁ CADASTRADO.');
+        setError('Este produto já está cadastrado.');
         return;
       }
       setError(e2.message || 'Erro ao cadastrar produto');
@@ -129,44 +126,22 @@ export default function QuickProductModal({
   }
 
   return (
-    <div
-      className="modal-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Produto não cadastrado"
-    >
-      <form className="modal modal-wide" onSubmit={(e) => void submit(e)}>
-        <h3>PRODUTO NÃO CADASTRADO</h3>
-        <p>Código lido pelo leitor. Cadastre para continuar o atendimento.</p>
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Produto não cadastrado">
+      <form className="modal" onSubmit={(e) => void submit(e)}>
+        <h3>Produto não cadastrado</h3>
+        <p className="muted-line">Preencha o essencial e continue a venda.</p>
         <div className="modal-fields">
           <label>
             Código de barras
             <input value={barcode} readOnly />
           </label>
           <label>
-            Nome do produto *
+            Nome *
             <input
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Nome do produto"
-            />
-          </label>
-          <label>
-            Categoria
-            <input
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="Opcional"
-            />
-          </label>
-          <label>
-            Preço de custo (R$)
-            <input
-              value={cost}
-              onChange={(e) => setCost(e.target.value)}
-              inputMode="decimal"
-              placeholder="0,00"
             />
           </label>
           <label>
@@ -179,7 +154,7 @@ export default function QuickProductModal({
             />
           </label>
           <label>
-            Quantidade inicial em estoque
+            Estoque inicial
             <input
               value={stock}
               onChange={(e) => setStock(e.target.value)}
@@ -187,28 +162,52 @@ export default function QuickProductModal({
               placeholder="0"
             />
           </label>
-          <label>
-            Estoque mínimo
-            <input
-              value={minStock}
-              onChange={(e) => setMinStock(e.target.value)}
-              inputMode="numeric"
-              placeholder="0"
-            />
-          </label>
         </div>
+
+        <button
+          type="button"
+          className="btn btn-ghost"
+          style={{ marginTop: 8 }}
+          onClick={() => setMore((v) => !v)}
+        >
+          {more ? 'Ocultar informações' : 'Mais informações'}
+        </button>
+
+        {more && (
+          <div className="modal-fields" style={{ marginTop: 8 }}>
+            <label>
+              Categoria
+              <input value={category} onChange={(e) => setCategory(e.target.value)} />
+            </label>
+            <label>
+              Preço de custo (R$)
+              <input
+                value={cost}
+                onChange={(e) => setCost(e.target.value)}
+                inputMode="decimal"
+                placeholder="0,00"
+              />
+            </label>
+            <label>
+              Estoque mínimo
+              <input
+                value={minStock}
+                onChange={(e) => setMinStock(e.target.value)}
+                inputMode="numeric"
+                placeholder="0"
+              />
+            </label>
+          </div>
+        )}
+
         {error && <div className="alert alert-error">{error}</div>}
         <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
           <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={submitting}>
             Cancelar
           </button>
           {existing ? (
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => onUseExisting(existing)}
-            >
-              Usar produto existente
+            <button type="button" className="btn btn-primary" onClick={() => onUseExisting(existing)}>
+              Usar existente
             </button>
           ) : (
             <>
@@ -219,7 +218,7 @@ export default function QuickProductModal({
                   disabled={submitting}
                   onClick={() => setMode('only')}
                 >
-                  {submitting && mode === 'only' ? 'Cadastrando…' : 'Cadastrar'}
+                  Cadastrar
                 </button>
               ) : null}
               <button
@@ -228,9 +227,7 @@ export default function QuickProductModal({
                 disabled={submitting}
                 onClick={() => setMode('add')}
               >
-                {submitting && mode === 'add'
-                  ? 'Cadastrando…'
-                  : 'Cadastrar e adicionar à venda'}
+                {submitting ? 'Salvando…' : 'Cadastrar e adicionar'}
               </button>
             </>
           )}

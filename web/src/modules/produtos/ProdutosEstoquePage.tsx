@@ -44,15 +44,19 @@ export default function ProdutosEstoquePage() {
   const [adjustProduct, setAdjustProduct] = useState<Product | null>(null);
   const [adjustMode, setAdjustMode] = useState<AdjustMode>('entry');
   const [showAdjust, setShowAdjust] = useState(false);
+  const [showMovements, setShowMovements] = useState(false);
 
   async function load() {
     try {
-      const [list, movs] = await Promise.all([
-        fetchProducts({ q: q.trim() || undefined, include_inactive: includeInactive }),
-        fetchStockMovements({ limit: 40 }),
-      ]);
+      const list = await fetchProducts({
+        q: q.trim() || undefined,
+        include_inactive: includeInactive,
+      });
       setItems(list);
-      setMovements(movs);
+      if (showMovements) {
+        const movs = await fetchStockMovements({ limit: 40 });
+        setMovements(movs);
+      }
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar produtos/estoque');
@@ -63,7 +67,7 @@ export default function ProdutosEstoquePage() {
     const t = window.setTimeout(() => void load(), 200);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, includeInactive]);
+  }, [q, includeInactive, showMovements]);
 
   function openCreate() {
     setEditing(null);
@@ -192,21 +196,17 @@ export default function ProdutosEstoquePage() {
       {notice && <div className="alert alert-ok">{notice}</div>}
 
       <p className="muted-line">
-        Produtos e estoque na mesma tela. Use + Entrada / − Saída para ajustar quantidades com
-        motivo e auditoria.
+        Lista enxuta para o balcão. Custo, mínimo e movimentações ficam no editar / mais detalhes.
       </p>
 
       <div className="table-wrap">
         <table className="product-table">
           <thead>
             <tr>
-              <th>Código de barras</th>
-              <th>Nome</th>
-              <th>Categoria</th>
-              <th>Custo</th>
-              <th>Venda</th>
+              <th>Código</th>
+              <th>Produto</th>
+              <th>Preço</th>
               <th>Estoque</th>
-              <th>Mín.</th>
               <th>Status</th>
               <th>Ações</th>
             </tr>
@@ -219,87 +219,92 @@ export default function ProdutosEstoquePage() {
                   <td>{p.barcode || '—'}</td>
                   <td>
                     <strong>{p.name}</strong>
-                    {p.sku ? <div className="muted-line">SKU {p.sku}</div> : null}
                   </td>
-                  <td>{p.category || '—'}</td>
-                  <td>{formatBRL(p.cost_cents)}</td>
                   <td>{formatBRL(p.price_cents)}</td>
                   <td>
                     <strong>{p.stock_qty}</strong>
                   </td>
-                  <td>{p.min_stock_qty ?? 0}</td>
                   <td>
                     <StatusPill tone={st.tone}>{st.label}</StatusPill>
                   </td>
-                  <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <td className="row-actions">
                     <button type="button" className="btn btn-ghost" onClick={() => openEdit(p)}>
                       Editar
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn-accent"
-                      onClick={() => openAdjust(p, 'entry')}
-                    >
-                      + Entrada
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      onClick={() => openAdjust(p, 'exit')}
-                    >
-                      − Saída/Ajuste
-                    </button>
+                    {canAdjust ? (
+                      <button
+                        type="button"
+                        className="btn btn-accent"
+                        onClick={() => openAdjust(p, 'entry')}
+                      >
+                        Ajustar
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               );
             })}
             {items.length === 0 && (
               <tr>
-                <td colSpan={9}>Nenhum produto encontrado.</td>
+                <td colSpan={6}>Nenhum produto encontrado.</td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
 
-      <h3 style={{ marginTop: 24 }}>Últimas movimentações</h3>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Data/hora</th>
-              <th>Produto</th>
-              <th>Tipo</th>
-              <th>Antes</th>
-              <th>Depois</th>
-              <th>Diferença</th>
-              <th>Motivo</th>
-              <th>Usuário</th>
-            </tr>
-          </thead>
-          <tbody>
-            {movements.map((m) => (
-              <tr key={m.id}>
-                <td>{m.created_at}</td>
-                <td>{m.product_name || m.product_id}</td>
-                <td>{m.movement_type}</td>
-                <td>{m.stock_before ?? '—'}</td>
-                <td>{m.stock_after ?? '—'}</td>
-                <td>
-                  {m.quantity_delta > 0 ? `+${m.quantity_delta}` : String(m.quantity_delta)}
-                </td>
-                <td>{m.reason || m.note || '—'}</td>
-                <td>{m.user_name || '—'}</td>
-              </tr>
-            ))}
-            {movements.length === 0 && (
-              <tr>
-                <td colSpan={8}>Sem movimentações recentes.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div style={{ marginTop: 16 }}>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => setShowMovements((v) => !v)}
+        >
+          {showMovements ? 'Ocultar movimentações' : 'Mais detalhes — movimentações'}
+        </button>
       </div>
+
+      {showMovements ? (
+        <>
+          <h3 style={{ marginTop: 12 }}>Últimas movimentações</h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data/hora</th>
+                  <th>Produto</th>
+                  <th>Tipo</th>
+                  <th>Antes</th>
+                  <th>Depois</th>
+                  <th>Diferença</th>
+                  <th>Motivo</th>
+                  <th>Usuário</th>
+                </tr>
+              </thead>
+              <tbody>
+                {movements.map((m) => (
+                  <tr key={m.id}>
+                    <td>{m.created_at}</td>
+                    <td>{m.product_name || m.product_id}</td>
+                    <td>{m.movement_type}</td>
+                    <td>{m.stock_before ?? '—'}</td>
+                    <td>{m.stock_after ?? '—'}</td>
+                    <td>
+                      {m.quantity_delta > 0 ? `+${m.quantity_delta}` : String(m.quantity_delta)}
+                    </td>
+                    <td>{m.reason || m.note || '—'}</td>
+                    <td>{m.user_name || '—'}</td>
+                  </tr>
+                ))}
+                {movements.length === 0 && (
+                  <tr>
+                    <td colSpan={8}>Sem movimentações recentes.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : null}
 
       {showForm && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">

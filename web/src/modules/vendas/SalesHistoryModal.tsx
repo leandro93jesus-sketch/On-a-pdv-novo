@@ -359,14 +359,11 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
           <thead>
             <tr>
               <th>Nº</th>
-              <th>Data</th>
-              <th>Hora</th>
               <th>Cliente</th>
-              <th>Itens</th>
-              <th>Total</th>
+              <th>Data</th>
               <th>Pagamento</th>
-              <th>Operador</th>
-              <th>Situação</th>
+              <th>Total</th>
+              <th>Status</th>
               <th>Ações</th>
             </tr>
           </thead>
@@ -376,38 +373,19 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
               return (
                 <tr key={s.id}>
                   <td>{s.sale_number}</td>
-                  <td>{date}</td>
-                  <td>{time}</td>
                   <td>{s.customer_name || '—'}</td>
-                  <td>{s.items_count != null ? `${s.items_count} itens` : '—'}</td>
-                  <td>{formatBRL(s.total_cents)}</td>
+                  <td>
+                    {date}
+                    {time ? ` ${time}` : ''}
+                  </td>
                   <td>{paymentLabel(s.payment_method)}</td>
-                  <td>{s.operator_name || '—'}</td>
+                  <td>{formatBRL(s.total_cents)}</td>
                   <td>
                     <strong>{situationOf(s)}</strong>
                   </td>
                   <td className="row-actions">
-                    <button type="button" className="btn btn-ghost" onClick={() => void openDetail(s.id)}>
-                      ABRIR VENDA
-                    </button>
-                    <button type="button" className="btn btn-ghost" onClick={() => void openReceipt(s.id)}>
-                      PDF / IMPRIMIR
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-accent"
-                      disabled={s.status === 'cancelled'}
-                      onClick={() => startAmend(s)}
-                    >
-                      ALTERAR
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-danger"
-                      disabled={s.status === 'cancelled'}
-                      onClick={() => startCancel(s)}
-                    >
-                      EXCLUIR
+                    <button type="button" className="btn btn-primary" onClick={() => void openDetail(s.id)}>
+                      Abrir
                     </button>
                   </td>
                 </tr>
@@ -415,7 +393,7 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
             })}
             {!busy && sales.length === 0 && (
               <tr>
-                <td colSpan={10}>Nenhuma venda encontrada.</td>
+                <td colSpan={7}>Nenhuma venda encontrada.</td>
               </tr>
             )}
           </tbody>

@@ -112,7 +112,14 @@ export function listCreditAccounts({ status, customerId, limit = 100 } = {}) {
   params.push(safeLimit);
   return db
     .prepare(
-      `SELECT a.*, c.name AS customer_name, s.sale_number
+      `SELECT a.*, c.name AS customer_name, s.sale_number,
+              (a.total_cents - a.balance_cents) AS paid_cents,
+              (
+                SELECT MIN(i.due_date)
+                FROM credit_installments i
+                WHERE i.credit_account_id = a.id
+                  AND i.status IN ('aberto','parcialmente_pago','vencido')
+              ) AS next_due_date
        FROM credit_accounts a
        JOIN customers c ON c.id = a.customer_id
        JOIN sales s ON s.id = a.sale_id
