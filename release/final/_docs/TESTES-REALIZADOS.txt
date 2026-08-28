@@ -81,3 +81,14 @@ PENDÊNCIAS REAIS
 - Instalador Windows NSIS não foi regenerado nesta entrega de código-fonte
   (requer Wine/i386 e passo desktop:pack:win separado).
 - WhatsApp continua sem anexar PDF automaticamente (limitação conhecida).
+
+11) Validação do ZIP após extração (pasta limpa)
+    Pasta: /tmp/onca-final-validate/ONCA-PDV-FINAL
+    - npm install ........................ PASS
+    - npm run build -w web ............... PASS
+    - node --test validacaoFinalObrigatoria PASS (10/10)
+    - start API PORT=3011 ................ PASS (health 1.2.17)
+    - login admin ........................ PASS
+    - vite preview :5183 ................. PASS (HTTP 200)
+    - PRAGMA integrity_check ............. ok
+    Logs: final-extract-*.log
