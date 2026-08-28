@@ -67,10 +67,14 @@ export async function savePdfToComputer(opts: {
 }
 
 function sanitizeFilename(name: string): string {
-  const cleaned = String(name || 'ONCA-DOCUMENTO.pdf')
-    .replace(/[<>:"/\\|?*]/g, '-')
-    .replace(/[\u0000-\u001f]/g, '-')
-    .replace(/\s+/g, '-')
+  const cleaned = Array.from(String(name || 'ONCA-DOCUMENTO.pdf'))
+    .map((ch) => {
+      const code = ch.charCodeAt(0);
+      if (code < 32 || '<>:"/\\|?*'.includes(ch)) return '-';
+      if (/\s/.test(ch)) return '-';
+      return ch;
+    })
+    .join('')
     .replace(/-+/g, '-')
     .slice(0, 120);
   return cleaned.toLowerCase().endsWith('.pdf') ? cleaned : `${cleaned}.pdf`;
