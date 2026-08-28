@@ -156,10 +156,12 @@ async function main() {
     }
   }
 
-  // data dir placeholder (sem banco)
-  mkdirSync(join(staging, 'server', 'data'), { recursive: true });
+  // data dir placeholder (sem banco / sem runtime)
+  const dataDir = join(staging, 'server', 'data');
+  if (existsSync(dataDir)) rmSync(dataDir, { recursive: true, force: true });
+  mkdirSync(dataDir, { recursive: true });
   writeFileSync(
-    join(staging, 'server', 'data', 'README.txt'),
+    join(dataDir, 'README.txt'),
     'Pasta de dados local. O banco onca-pdv.db é criado automaticamente nas migrations ao iniciar o servidor.\nNão versionar .db de produção nesta pasta.\n',
     'utf8'
   );
