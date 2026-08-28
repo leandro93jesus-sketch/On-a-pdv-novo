@@ -235,13 +235,17 @@ export default function ReceiptModal({
                 <span>{formatBRL(p.amount_cents)}</span>
               </div>
             ))}
-            {(sale.amount_received_cents ?? 0) > 0 && (
+            {(sale.amount_received_cents != null &&
+              (sale.amount_received_cents > 0 ||
+                (sale.payments || []).some((p) => p.method === 'dinheiro'))) && (
               <div className="summary-row">
                 <span>Valor recebido</span>
                 <span>{formatBRL(sale.amount_received_cents || 0)}</span>
               </div>
             )}
-            {(sale.change_cents ?? 0) > 0 && (
+            {(sale.change_cents != null &&
+              (sale.change_cents > 0 ||
+                (sale.payments || []).some((p) => p.method === 'dinheiro'))) && (
               <div className="summary-row">
                 <span>Troco</span>
                 <span>{formatBRL(sale.change_cents || 0)}</span>

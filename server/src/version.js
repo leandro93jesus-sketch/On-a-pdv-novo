@@ -1,3 +1,3 @@
 export const APP_NAME = 'ONÇA PDV';
-export const APP_VERSION = '1.2.15';
-export const APP_BUILD = '2026.08.17-orcamentos-salvar-pdf';
+export const APP_VERSION = '1.2.16';
+export const APP_BUILD = '2026.08.28-produtos-estoque-troco';

@@ -388,7 +388,7 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
                   </td>
                   <td className="row-actions">
                     <button type="button" className="btn btn-ghost" onClick={() => void openDetail(s.id)}>
-                      VER
+                      ABRIR VENDA
                     </button>
                     <button type="button" className="btn btn-ghost" onClick={() => void openReceipt(s.id)}>
                       PDF / IMPRIMIR
@@ -463,39 +463,125 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
 
       {detail && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
-          <div className="modal modal-wide">
-            <h3>Detalhes — {detail.sale_number}</h3>
-            <p>
-              {detail.created_at} · {detail.customer?.name || detail.customer_name || '—'} ·{' '}
-              {situationOf(detail)}
-            </p>
+          <div className="modal modal-wide" style={{ width: 'min(900px, 100%)' }}>
+            <h3>Abrir venda — {detail.sale_number}</h3>
+            <div className="form-grid" style={{ marginBottom: 12 }}>
+              <div>
+                <strong>Número</strong>
+                <div>{detail.sale_number}</div>
+              </div>
+              <div>
+                <strong>Data / Hora</strong>
+                <div>{detail.created_at}</div>
+              </div>
+              <div>
+                <strong>Cliente</strong>
+                <div>{detail.customer?.name || detail.customer_name || '—'}</div>
+              </div>
+              <div>
+                <strong>Telefone</strong>
+                <div>
+                  {detail.customer?.whatsapp || detail.customer?.phone || '—'}
+                </div>
+              </div>
+              <div>
+                <strong>Status</strong>
+                <div>{situationOf(detail)}</div>
+              </div>
+              <div>
+                <strong>Operador</strong>
+                <div>
+                  {detail.operator_name ||
+                    detail.amend_authorized_by ||
+                    detail.amended_by ||
+                    detail.cancelled_by ||
+                    '—'}
+                </div>
+              </div>
+            </div>
+
+            <h4>Produtos</h4>
             <table className="product-table">
               <thead>
                 <tr>
-                  <th>Produto</th>
                   <th>Código</th>
+                  <th>Produto</th>
                   <th>Qtd</th>
                   <th>Unit.</th>
+                  <th>Desconto</th>
                   <th>Subtotal</th>
                 </tr>
               </thead>
               <tbody>
                 {(detail.items || []).map((it) => (
                   <tr key={it.id}>
-                    <td>{it.name}</td>
                     <td>{it.barcode || '—'}</td>
+                    <td>
+                      {it.name}
+                      {it.is_misc ? ' (Diversos)' : ''}
+                    </td>
                     <td>{it.quantity}</td>
                     <td>{formatBRL(it.unit_price_cents)}</td>
+                    <td>{formatBRL(it.discount_cents || 0)}</td>
                     <td>{formatBRL(it.line_total_cents)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <p>
-              Desconto {formatBRL(detail.discount_cents)} · Total {formatBRL(detail.total_cents)} ·{' '}
-              {paymentLabel(detail.payment_method)}
-            </p>
-            <div className="modal-actions">
+
+            <h4 style={{ marginTop: 12 }}>Pagamento</h4>
+            <div className="form-grid" style={{ marginBottom: 8 }}>
+              <div className="span-2">
+                <strong>Formas</strong>
+                <div>
+                  {(detail.payments || [])
+                    .map((p) => `${paymentLabel(p.method, p.card_type)} (${formatBRL(p.amount_cents)})`)
+                    .join(' + ') || paymentLabel(detail.payment_method) || '—'}
+                </div>
+              </div>
+              <div>
+                <strong>Subtotal</strong>
+                <div>{formatBRL(detail.subtotal_cents)}</div>
+              </div>
+              <div>
+                <strong>Descontos</strong>
+                <div>{formatBRL(detail.discount_cents)}</div>
+              </div>
+              <div>
+                <strong>Total final</strong>
+                <div>{formatBRL(detail.total_cents)}</div>
+              </div>
+              <div>
+                <strong>Valor recebido</strong>
+                <div>{formatBRL(detail.amount_received_cents || 0)}</div>
+              </div>
+              <div>
+                <strong>Troco</strong>
+                <div>{formatBRL(detail.change_cents || 0)}</div>
+              </div>
+            </div>
+
+            {detail.notes ? (
+              <p>
+                <strong>Observações:</strong> {detail.notes}
+              </p>
+            ) : null}
+            {detail.cancelled_at ? (
+              <p className="alert alert-error">
+                Cancelada em {detail.cancelled_at}
+                {detail.cancel_reason ? ` — ${detail.cancel_reason}` : ''}
+                {detail.cancelled_by ? ` · ${detail.cancelled_by}` : ''}
+              </p>
+            ) : null}
+            {detail.amended_at ? (
+              <p className="alert alert-ok">
+                Alterada em {detail.amended_at}
+                {detail.amend_reason ? ` — ${detail.amend_reason}` : ''}
+                {detail.amended_by ? ` · ${detail.amended_by}` : ''}
+              </p>
+            ) : null}
+
+            <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
               <button type="button" className="btn btn-ghost" onClick={() => setDetail(null)}>
                 Fechar
               </button>
@@ -507,8 +593,32 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
                   setDetail(null);
                 }}
               >
-                PDF / IMPRIMIR / WHATSAPP
+                Imprimir / PDF / WhatsApp
               </button>
+              {detail.status !== 'cancelled' && (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-accent"
+                    onClick={() => {
+                      setDetail(null);
+                      startAmend(detail);
+                    }}
+                  >
+                    Alterar venda
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => {
+                      setDetail(null);
+                      startCancel(detail);
+                    }}
+                  >
+                    Excluir / Cancelar
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

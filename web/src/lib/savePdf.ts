@@ -68,7 +68,8 @@ export async function savePdfToComputer(opts: {
 
 function sanitizeFilename(name: string): string {
   const cleaned = String(name || 'ONCA-DOCUMENTO.pdf')
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
+    .replace(/[<>:"/\\|?*]/g, '-')
+    .replace(/[\u0000-\u001f]/g, '-')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
     .slice(0, 120);

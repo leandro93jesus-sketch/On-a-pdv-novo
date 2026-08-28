@@ -746,17 +746,19 @@ export default function VendasPage() {
     let amountReceivedCents: number | undefined;
     if (mode === 'dinheiro') {
       const raw = cashReceivedInput.trim();
-      if (raw) {
-        const n = Number(raw.replace(/\./g, '').replace(',', '.'));
-        if (!Number.isFinite(n) || n < 0) {
-          setError('Valor recebido inválido.');
-          return;
-        }
-        amountReceivedCents = Math.round(n * 100);
-        if (amountReceivedCents < total) {
-          setError('Valor recebido menor que o total.');
-          return;
-        }
+      if (!raw) {
+        setError('Informe o valor recebido em dinheiro para calcular o troco.');
+        return;
+      }
+      const n = Number(raw.replace(/\./g, '').replace(',', '.'));
+      if (!Number.isFinite(n) || n < 0) {
+        setError('Valor recebido inválido.');
+        return;
+      }
+      amountReceivedCents = Math.round(n * 100);
+      if (amountReceivedCents < total) {
+        setError('Valor recebido menor que o total. Informe o valor correto ou use pagamento misto.');
+        return;
       }
     }
 
@@ -1260,33 +1262,54 @@ export default function VendasPage() {
 
               {payment === 'dinheiro' ? (
                 <div className="credit-fields" style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-                  <label>
-                    Valor recebido (R$)
-                    <input
-                      value={cashReceivedInput}
-                      onChange={(e) => setCashReceivedInput(e.target.value)}
-                      inputMode="decimal"
-                      placeholder={(total / 100).toFixed(2).replace('.', ',')}
-                    />
-                  </label>
-                  {cashReceivedInput.trim() &&
-                  Number.isFinite(
-                    Number(cashReceivedInput.replace(/\./g, '').replace(',', '.'))
-                  ) ? (
-                    <div className="muted-line">
-                      Troco:{' '}
-                      <strong>
-                        {formatBRL(
-                          Math.max(
-                            0,
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr 1fr',
+                      gap: 8,
+                      alignItems: 'end',
+                    }}
+                  >
+                    <div>
+                      <div className="muted-line">Total da venda</div>
+                      <strong style={{ fontSize: '1.15rem' }}>{formatBRL(total)}</strong>
+                    </div>
+                    <label>
+                      Valor recebido (R$)
+                      <input
+                        value={cashReceivedInput}
+                        onChange={(e) => setCashReceivedInput(e.target.value)}
+                        inputMode="decimal"
+                        placeholder={(total / 100).toFixed(2).replace('.', ',')}
+                        autoComplete="off"
+                      />
+                    </label>
+                    <div>
+                      <div className="muted-line">Troco</div>
+                      <strong
+                        style={{
+                          fontSize: '1.25rem',
+                          color:
+                            cashReceivedInput.trim() &&
                             Math.round(
                               Number(cashReceivedInput.replace(/\./g, '').replace(',', '.')) * 100
-                            ) - total
-                          )
-                        )}
+                            ) < total
+                              ? '#b42318'
+                              : '#0f3d2e',
+                        }}
+                      >
+                        {(() => {
+                          const raw = cashReceivedInput.trim();
+                          if (!raw) return '—';
+                          const n = Number(raw.replace(/\./g, '').replace(',', '.'));
+                          if (!Number.isFinite(n)) return '—';
+                          const received = Math.round(n * 100);
+                          if (received < total) return formatBRL(0) + ' (insuficiente)';
+                          return formatBRL(received - total);
+                        })()}
                       </strong>
                     </div>
-                  ) : null}
+                  </div>
                 </div>
               ) : null}
 
@@ -1418,13 +1441,20 @@ export default function VendasPage() {
           }}
           onCreated={(product) => {
             setQuickBarcode(null);
-            addProduct(product);
+            addProduct(product, { force: true });
             setNotice(`Produto "${product.name}" cadastrado e adicionado à venda.`);
+            clearSearch();
+          }}
+          onCreatedOnly={(product) => {
+            setQuickBarcode(null);
+            setNotice(`Produto "${product.name}" cadastrado. Estoque inicial: ${product.stock_qty}.`);
+            clearSearch();
           }}
           onUseExisting={(product) => {
             setQuickBarcode(null);
             addProduct(product);
             setNotice(`Produto existente "${product.name}" adicionado à venda.`);
+            clearSearch();
           }}
         />
       )}

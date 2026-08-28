@@ -22,6 +22,8 @@ type Props = {
   product?: Product | null;
   /** Pré-seleciona um product_id na lista. */
   initialProductId?: number | null;
+  /** Modo inicial: entry | exit | set_balance */
+  initialMode?: AdjustMode;
   onClose: () => void;
   onDone: (result: {
     product_id: number;
@@ -35,6 +37,7 @@ type Props = {
 export default function StockAdjustModal({
   product: lockedProduct = null,
   initialProductId = null,
+  initialMode = 'entry',
   onClose,
   onDone,
   onError,
@@ -43,7 +46,7 @@ export default function StockAdjustModal({
   const [productId, setProductId] = useState(
     lockedProduct ? String(lockedProduct.id) : initialProductId ? String(initialProductId) : ''
   );
-  const [mode, setMode] = useState<AdjustMode>('entry');
+  const [mode, setMode] = useState<AdjustMode>(initialMode);
   const [quantity, setQuantity] = useState('1');
   const [newQty, setNewQty] = useState('');
   const [reasonChoice, setReasonChoice] = useState<string>(STOCK_REASON_OPTIONS[0]);
