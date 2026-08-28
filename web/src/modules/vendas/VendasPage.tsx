@@ -469,7 +469,7 @@ export default function VendasPage() {
   function showScanToast(name: string, qty: number) {
     setScanToast({ name, qty });
     if (scanToastTimer.current) window.clearTimeout(scanToastTimer.current);
-    scanToastTimer.current = window.setTimeout(() => setScanToast(null), 1800);
+    scanToastTimer.current = window.setTimeout(() => setScanToast(null), 2500);
   }
 
   function addProduct(product: Product, opts?: { force?: boolean; qty?: number }) {
