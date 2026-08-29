@@ -20,6 +20,14 @@ function tone(status: string): 'ok' | 'warn' | 'danger' | 'muted' | 'info' {
   return 'warn';
 }
 
+function paidCents(a: CreditAccount): number {
+  if (typeof a.paid_cents === 'number') return a.paid_cents;
+  return Math.max(0, a.total_cents - a.balance_cents);
+}
+
+/**
+ * Crediário enxuto: lista só o essencial; Receber = modal curto; Abrir = detalhes.
+ */
 export default function CrediarioPage() {
   const [summary, setSummary] = useState({
     total_open_cents: 0,
@@ -29,9 +37,11 @@ export default function CrediarioPage() {
   });
   const [accounts, setAccounts] = useState<CreditAccount[]>([]);
   const [selected, setSelected] = useState<CreditAccount | null>(null);
+  const [payTarget, setPayTarget] = useState<CreditAccount | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
   const [payInput, setPayInput] = useState('');
   const [payMethod, setPayMethod] = useState('dinheiro');
+  const [payBusy, setPayBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -58,27 +68,39 @@ export default function CrediarioPage() {
     try {
       const full = await fetchCreditAccount(id);
       setSelected(full);
+      setPayTarget(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao abrir conta');
     }
   }
 
+  async function openReceive(id: number) {
+    try {
+      const full = await fetchCreditAccount(id);
+      setPayTarget(full);
+      setPayInput('');
+      setPayMethod('dinheiro');
+      setSelected(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao abrir recebimento');
+    }
+  }
+
   async function pay(full = false) {
-    if (!selected) return;
-    const cents = full
-      ? selected.balance_cents
-      : parseBRLToCents(payInput);
+    if (!payTarget) return;
+    const cents = full ? payTarget.balance_cents : parseBRLToCents(payInput);
     if (cents == null || cents <= 0) {
       setError('Informe um valor válido');
       return;
     }
+    setPayBusy(true);
     try {
       const updated = await payCredit({
-        credit_account_id: selected.id,
+        credit_account_id: payTarget.id,
         amount_cents: cents,
         method: payMethod,
       });
-      setSelected(updated);
+      setPayTarget(null);
       setPayInput('');
       setNotice(
         updated.status === 'quitado'
@@ -88,6 +110,8 @@ export default function CrediarioPage() {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro no pagamento');
+    } finally {
+      setPayBusy(false);
     }
   }
 
@@ -110,14 +134,23 @@ export default function CrediarioPage() {
         return;
       }
       setNotice(
-        result.filePath
-          ? `PDF salvo em: ${result.filePath}`
-          : 'PDF de crediário baixado.'
+        result.filePath ? `PDF salvo em: ${result.filePath}` : 'PDF de crediário baixado.'
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao gerar PDF do crediário');
     }
   }
+
+  const receiveRemaining =
+    payTarget && payInput.trim()
+      ? (() => {
+          const cents = parseBRLToCents(payInput);
+          if (cents == null) return null;
+          return Math.max(0, payTarget.balance_cents - cents);
+        })()
+      : payTarget
+        ? payTarget.balance_cents
+        : null;
 
   return (
     <section className="module-panel">
@@ -161,136 +194,205 @@ export default function CrediarioPage() {
         </div>
       </div>
 
-      <div className="split-panels">
-        <div className="product-table-wrap">
-          <table className="product-table">
-            <thead>
-              <tr>
-                <th>Cliente</th>
-                <th>Venda</th>
-                <th>Total</th>
-                <th>Saldo</th>
-                <th>Parcelas</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {accounts.map((a) => (
-                <tr key={a.id} onClick={() => void openAccount(a.id)} style={{ cursor: 'pointer' }}>
-                  <td>{a.customer_name || a.customer_id}</td>
-                  <td>{a.sale_number || a.sale_id}</td>
-                  <td>{formatBRL(a.total_cents)}</td>
-                  <td>{formatBRL(a.balance_cents)}</td>
-                  <td>{a.installment_count}</td>
-                  <td>
-                    <StatusPill tone={tone(a.status)}>{a.status}</StatusPill>
-                  </td>
-                </tr>
-              ))}
-              {accounts.length === 0 && (
-                <tr>
-                  <td colSpan={6}>Nenhuma conta de crediário.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="side-card">
-          {!selected ? (
-            <p className="cart-empty">Selecione uma conta para ver parcelas e pagar.</p>
-          ) : (
-            <>
-              <h3>
-                {selected.customer_name} · {selected.sale_number}
-              </h3>
-              <p>
-                Total {formatBRL(selected.total_cents)} · Entrada {formatBRL(selected.entry_cents)} ·
-                Saldo {formatBRL(selected.balance_cents)}
-              </p>
-              <div style={{ marginBottom: 12 }}>
-                <button type="button" className="btn btn-accent" onClick={() => void saveCreditPdf()}>
-                  Salvar PDF
-                </button>
-              </div>
-              <table className="history-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Vencimento</th>
-                    <th>Valor</th>
-                    <th>Pago</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(selected.installments || []).map((i) => (
-                    <tr key={i.id}>
-                      <td>{i.installment_number}</td>
-                      <td>{i.due_date}</td>
-                      <td>{formatBRL(i.amount_cents)}</td>
-                      <td>{formatBRL(i.paid_cents)}</td>
-                      <td>{i.status}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              <h4 style={{ marginTop: '0.75rem' }}>Pagamentos</h4>
-              <ul>
-                {(selected.payments || []).map((p) => (
-                  <li key={p.id}>
-                    {p.paid_at} · {formatBRL(p.amount_cents)} · {p.method}
-                    {p.is_reversal ? ' (estorno)' : ''}
-                  </li>
-                ))}
-                {(selected.payments || []).length === 0 ? <li>Sem pagamentos.</li> : null}
-              </ul>
-
-              {selected.balance_cents > 0 && selected.status !== 'cancelado' ? (
-                <div className="form-grid" style={{ marginTop: '0.75rem' }}>
-                  <label>
-                    Valor
-                    <input
-                      className="field-input"
-                      value={payInput}
-                      onChange={(e) => setPayInput(e.target.value)}
-                      placeholder="0,00"
-                    />
-                  </label>
-                  <label>
-                    Forma
-                    <select
-                      className="field-input"
-                      value={payMethod}
-                      onChange={(e) => setPayMethod(e.target.value)}
+      <div className="product-table-wrap">
+        <table className="product-table">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Total da dívida</th>
+              <th>Pago</th>
+              <th>Saldo</th>
+              <th>Vencimento</th>
+              <th>Status</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {accounts.map((a) => (
+              <tr key={a.id}>
+                <td>{a.customer_name || a.customer_id}</td>
+                <td>{formatBRL(a.total_cents)}</td>
+                <td>{formatBRL(paidCents(a))}</td>
+                <td>{formatBRL(a.balance_cents)}</td>
+                <td>{a.next_due_date || '—'}</td>
+                <td>
+                  <StatusPill tone={tone(a.status)}>{a.status}</StatusPill>
+                </td>
+                <td className="row-actions">
+                  {a.balance_cents > 0 && a.status !== 'cancelado' ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => void openReceive(a.id)}
                     >
-                      <option value="dinheiro">Dinheiro</option>
-                      <option value="pix">Pix</option>
-                      <option value="cartao">Cartão</option>
-                    </select>
-                  </label>
-                  <div className="modal-actions span-2">
-                    <button type="button" className="btn btn-ghost" onClick={() => void pay(false)}>
-                      Pagamento parcial
+                      Receber
                     </button>
-                    <button type="button" className="btn btn-primary" onClick={() => void pay(true)}>
-                      Quitar
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              {selected.status === 'quitado' ? (
-                <div className="alert alert-ok" style={{ marginTop: '0.75rem' }}>
-                  Recibo: conta {selected.id} quitada — venda {selected.sale_number} — total{' '}
-                  {formatBRL(selected.total_cents)}.
-                </div>
-              ) : null}
-            </>
-          )}
-        </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => void openAccount(a.id)}
+                  >
+                    Abrir
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {accounts.length === 0 && (
+              <tr>
+                <td colSpan={7}>Nenhuma conta de crediário.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
+
+      {payTarget ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Receber crediário">
+          <div className="modal">
+            <h3>Receber</h3>
+            <p className="muted-line">{payTarget.customer_name}</p>
+            <div className="modal-fields">
+              <div>
+                <strong>Saldo atual</strong>
+                <div>{formatBRL(payTarget.balance_cents)}</div>
+              </div>
+              <label>
+                Valor recebido agora
+                <input
+                  className="field-input"
+                  value={payInput}
+                  onChange={(e) => setPayInput(e.target.value)}
+                  placeholder="0,00"
+                  inputMode="decimal"
+                  autoFocus
+                  disabled={payBusy}
+                />
+              </label>
+              <label>
+                Forma de pagamento
+                <select
+                  className="field-input"
+                  value={payMethod}
+                  onChange={(e) => setPayMethod(e.target.value)}
+                  disabled={payBusy}
+                >
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="pix">Pix</option>
+                  <option value="cartao">Cartão</option>
+                </select>
+              </label>
+              <div>
+                <strong>Saldo restante</strong>
+                <div>{receiveRemaining == null ? '—' : formatBRL(receiveRemaining)}</div>
+              </div>
+            </div>
+            <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={payBusy}
+                onClick={() => setPayTarget(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={payBusy}
+                onClick={() => void pay(false)}
+              >
+                Confirmar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={payBusy}
+                onClick={() => void pay(true)}
+              >
+                Quitar saldo
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {selected ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Detalhe crediário">
+          <div className="modal modal-wide">
+            <h3>
+              {selected.customer_name} · {selected.sale_number}
+            </h3>
+            <p>
+              Total {formatBRL(selected.total_cents)} · Entrada {formatBRL(selected.entry_cents)} ·
+              Saldo {formatBRL(selected.balance_cents)}
+            </p>
+            <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" className="btn btn-accent" onClick={() => void saveCreditPdf()}>
+                Salvar PDF
+              </button>
+              {selected.balance_cents > 0 && selected.status !== 'cancelado' ? (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setPayTarget(selected);
+                    setSelected(null);
+                    setPayInput('');
+                  }}
+                >
+                  Receber
+                </button>
+              ) : null}
+            </div>
+            <table className="history-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Vencimento</th>
+                  <th>Valor</th>
+                  <th>Pago</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(selected.installments || []).map((i) => (
+                  <tr key={i.id}>
+                    <td>{i.installment_number}</td>
+                    <td>{i.due_date}</td>
+                    <td>{formatBRL(i.amount_cents)}</td>
+                    <td>{formatBRL(i.paid_cents)}</td>
+                    <td>{i.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <h4 style={{ marginTop: '0.75rem' }}>Pagamentos</h4>
+            <ul>
+              {(selected.payments || []).map((p) => (
+                <li key={p.id}>
+                  {p.paid_at} · {formatBRL(p.amount_cents)} · {p.method}
+                  {p.is_reversal ? ' (estorno)' : ''}
+                </li>
+              ))}
+              {(selected.payments || []).length === 0 ? <li>Sem pagamentos.</li> : null}
+            </ul>
+
+            {selected.status === 'quitado' ? (
+              <div className="alert alert-ok" style={{ marginTop: '0.75rem' }}>
+                Conta quitada — venda {selected.sale_number} — total {formatBRL(selected.total_cents)}.
+              </div>
+            ) : null}
+
+            <div className="modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setSelected(null)}>
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

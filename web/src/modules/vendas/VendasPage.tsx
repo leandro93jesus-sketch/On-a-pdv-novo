@@ -3,6 +3,7 @@ import {
   cancelSale as cancelCompletedSale,
   createDeliveryOrderApi,
   createSale,
+  createStockMovement,
   fetchOpenCash,
   fetchProducts,
   fetchSale,
@@ -130,6 +131,10 @@ export default function VendasPage() {
     available: number;
     requested: number;
   } | null>(null);
+  const [scanToast, setScanToast] = useState<{ name: string; qty: number } | null>(null);
+  const [quickStockQty, setQuickStockQty] = useState('');
+  const [quickStockBusy, setQuickStockBusy] = useState(false);
+  const scanToastTimer = useRef<number | null>(null);
   const [receiptCancelSale, setReceiptCancelSale] = useState<Sale | null>(null);
   const isDeliveryMode = saleMode === 'entrega';
 
@@ -247,6 +252,12 @@ export default function VendasPage() {
         searchRef.current?.focus();
       }
     })();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (scanToastTimer.current) window.clearTimeout(scanToastTimer.current);
+    };
   }, []);
 
   // Carrinho persistente: memória (troca de menu) + localStorage (fechamento inesperado).
@@ -455,6 +466,12 @@ export default function VendasPage() {
     focusSearch();
   }
 
+  function showScanToast(name: string, qty: number) {
+    setScanToast({ name, qty });
+    if (scanToastTimer.current) window.clearTimeout(scanToastTimer.current);
+    scanToastTimer.current = window.setTimeout(() => setScanToast(null), 2500);
+  }
+
   function addProduct(product: Product, opts?: { force?: boolean; qty?: number }) {
     setError(null);
     setNotice(null);
@@ -469,20 +486,22 @@ export default function VendasPage() {
         Boolean(existing?.allowNegative) || Boolean(product.allow_negative_stock) || true;
 
       if (!opts?.force && available != null && nextQty > available) {
-        // Aviso, mas permite continuar (estoque zero/negativo permitido)
         setStockWarn({
           product,
           available: Number(available),
           requested: nextQty,
         });
+        setQuickStockQty(String(Math.max(nextQty - Number(available), 1)));
         return prev;
       }
 
       if (existing) {
+        showScanToast(product.name, nextQty);
         return prev.map((l) =>
           l.productId === product.id ? { ...l, quantity: nextQty, allowNegative: allowNeg } : l
         );
       }
+      showScanToast(product.name, addQty);
       const line = productToLine(product, addQty);
       return [...prev, { ...line, allowNegative: allowNeg }];
     });
@@ -493,19 +512,65 @@ export default function VendasPage() {
     if (!stockWarn) return;
     const { product, requested } = stockWarn;
     setStockWarn(null);
+    setQuickStockQty('');
     setCart((prev) => {
       const existing = prev.find((l) => l.productId === product.id);
       if (existing) {
+        showScanToast(product.name, requested);
         return prev.map((l) =>
           l.productId === product.id
             ? { ...l, quantity: requested, allowNegative: true }
             : l
         );
       }
+      showScanToast(product.name, requested);
       const line = productToLine(product, requested);
       return [...prev, { ...line, allowNegative: true }];
     });
     clearSearch();
+  }
+
+  async function quickAdjustStockFromWarn() {
+    if (!stockWarn) return;
+    const qty = Number(String(quickStockQty).replace(',', '.'));
+    if (!Number.isFinite(qty) || qty <= 0 || !Number.isInteger(qty)) {
+      setError('Informe a quantidade recebida (número inteiro).');
+      return;
+    }
+    setQuickStockBusy(true);
+    try {
+      const { product, requested } = stockWarn;
+      const result = await createStockMovement({
+        product_id: product.id,
+        movement_type: 'entry',
+        quantity: qty,
+        reason: 'Entrada manual',
+      });
+      const newStock = Number(result.stock_after);
+      setStockWarn(null);
+      setQuickStockQty('');
+      setCart((prev) => {
+        const existing = prev.find((l) => l.productId === product.id);
+        const allowNeg = true;
+        if (existing) {
+          showScanToast(product.name, requested);
+          return prev.map((l) =>
+            l.productId === product.id
+              ? { ...l, quantity: requested, stockQty: newStock, allowNegative: allowNeg }
+              : l
+          );
+        }
+        showScanToast(product.name, requested);
+        const line = productToLine({ ...product, stock_qty: newStock }, requested);
+        return [...prev, { ...line, allowNegative: allowNeg }];
+      });
+      clearSearch();
+      setNotice(`Estoque de "${product.name}" atualizado para ${newStock}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao ajustar estoque');
+    } finally {
+      setQuickStockBusy(false);
+    }
   }
 
   function changeQty(key: string, delta: number) {
@@ -746,17 +811,19 @@ export default function VendasPage() {
     let amountReceivedCents: number | undefined;
     if (mode === 'dinheiro') {
       const raw = cashReceivedInput.trim();
-      if (raw) {
-        const n = Number(raw.replace(/\./g, '').replace(',', '.'));
-        if (!Number.isFinite(n) || n < 0) {
-          setError('Valor recebido inválido.');
-          return;
-        }
-        amountReceivedCents = Math.round(n * 100);
-        if (amountReceivedCents < total) {
-          setError('Valor recebido menor que o total.');
-          return;
-        }
+      if (!raw) {
+        setError('Informe o valor recebido em dinheiro para calcular o troco.');
+        return;
+      }
+      const n = Number(raw.replace(/\./g, '').replace(',', '.'));
+      if (!Number.isFinite(n) || n < 0) {
+        setError('Valor recebido inválido.');
+        return;
+      }
+      amountReceivedCents = Math.round(n * 100);
+      if (amountReceivedCents < total) {
+        setError('Valor recebido menor que o total. Informe o valor correto ou use pagamento misto.');
+        return;
       }
     }
 
@@ -1260,33 +1327,54 @@ export default function VendasPage() {
 
               {payment === 'dinheiro' ? (
                 <div className="credit-fields" style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-                  <label>
-                    Valor recebido (R$)
-                    <input
-                      value={cashReceivedInput}
-                      onChange={(e) => setCashReceivedInput(e.target.value)}
-                      inputMode="decimal"
-                      placeholder={(total / 100).toFixed(2).replace('.', ',')}
-                    />
-                  </label>
-                  {cashReceivedInput.trim() &&
-                  Number.isFinite(
-                    Number(cashReceivedInput.replace(/\./g, '').replace(',', '.'))
-                  ) ? (
-                    <div className="muted-line">
-                      Troco:{' '}
-                      <strong>
-                        {formatBRL(
-                          Math.max(
-                            0,
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr 1fr',
+                      gap: 8,
+                      alignItems: 'end',
+                    }}
+                  >
+                    <div>
+                      <div className="muted-line">Total da venda</div>
+                      <strong style={{ fontSize: '1.15rem' }}>{formatBRL(total)}</strong>
+                    </div>
+                    <label>
+                      Valor recebido (R$)
+                      <input
+                        value={cashReceivedInput}
+                        onChange={(e) => setCashReceivedInput(e.target.value)}
+                        inputMode="decimal"
+                        placeholder={(total / 100).toFixed(2).replace('.', ',')}
+                        autoComplete="off"
+                      />
+                    </label>
+                    <div>
+                      <div className="muted-line">Troco</div>
+                      <strong
+                        style={{
+                          fontSize: '1.25rem',
+                          color:
+                            cashReceivedInput.trim() &&
                             Math.round(
                               Number(cashReceivedInput.replace(/\./g, '').replace(',', '.')) * 100
-                            ) - total
-                          )
-                        )}
+                            ) < total
+                              ? '#b42318'
+                              : '#0f3d2e',
+                        }}
+                      >
+                        {(() => {
+                          const raw = cashReceivedInput.trim();
+                          if (!raw) return '—';
+                          const n = Number(raw.replace(/\./g, '').replace(',', '.'));
+                          if (!Number.isFinite(n)) return '—';
+                          const received = Math.round(n * 100);
+                          if (received < total) return formatBRL(0) + ' (insuficiente)';
+                          return formatBRL(received - total);
+                        })()}
                       </strong>
                     </div>
-                  ) : null}
+                  </div>
                 </div>
               ) : null}
 
@@ -1418,13 +1506,20 @@ export default function VendasPage() {
           }}
           onCreated={(product) => {
             setQuickBarcode(null);
-            addProduct(product);
+            addProduct(product, { force: true });
             setNotice(`Produto "${product.name}" cadastrado e adicionado à venda.`);
+            clearSearch();
+          }}
+          onCreatedOnly={(product) => {
+            setQuickBarcode(null);
+            setNotice(`Produto "${product.name}" cadastrado. Estoque inicial: ${product.stock_qty}.`);
+            clearSearch();
           }}
           onUseExisting={(product) => {
             setQuickBarcode(null);
             addProduct(product);
             setNotice(`Produto existente "${product.name}" adicionado à venda.`);
+            clearSearch();
           }}
         />
       )}
@@ -1508,26 +1603,78 @@ export default function VendasPage() {
         />
       )}
 
-      {stockWarn && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true">
-          <div className="modal">
-            <h3>ATENÇÃO</h3>
-            <p>
-              <strong>ESTOQUE INSUFICIENTE</strong>
-            </p>
-            <p>Disponível: {stockWarn.available}</p>
-            <p>Quantidade: {stockWarn.requested}</p>
-            <div className="modal-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => setStockWarn(null)}>
-                CANCELAR
+      {scanToast ? (
+        <div className="scan-toast" role="status" aria-live="polite">
+          <strong>✓ {scanToast.name}</strong>
+          <span>Qtd. no carrinho: {scanToast.qty}</span>
+        </div>
+      ) : null}
+
+      {stockWarn ? (
+        <div
+          className="compact-alert"
+          role="alertdialog"
+          aria-labelledby="stock-warn-title"
+        >
+          <div className="compact-alert-body">
+            <strong id="stock-warn-title">
+              {stockWarn.available <= 0 ? 'Estoque zerado' : 'Estoque insuficiente'}
+            </strong>
+            <span>Produto: {stockWarn.product.name}</span>
+            <span className="muted-line">
+              Atual: {stockWarn.available} · Pedido: {stockWarn.requested}
+            </span>
+            <label className="compact-alert-qty">
+              Quantidade recebida
+              <input
+                className="field-input"
+                type="number"
+                min={1}
+                step={1}
+                value={quickStockQty}
+                onChange={(e) => setQuickStockQty(e.target.value)}
+                disabled={quickStockBusy}
+              />
+            </label>
+            {Number(String(quickStockQty).replace(',', '.')) > 0 ? (
+              <span className="muted-line">
+                Novo estoque:{' '}
+                {stockWarn.available + Number(String(quickStockQty).replace(',', '.'))}
+              </span>
+            ) : null}
+            <div className="compact-alert-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={quickStockBusy}
+                onClick={() => void quickAdjustStockFromWarn()}
+              >
+                {quickStockBusy ? 'Salvando…' : 'Ajustar estoque'}
               </button>
-              <button type="button" className="btn btn-primary" onClick={confirmStockWarnContinue}>
-                CONTINUAR VENDA
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={quickStockBusy}
+                onClick={confirmStockWarnContinue}
+              >
+                Continuar
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={quickStockBusy}
+                onClick={() => {
+                  setStockWarn(null);
+                  setQuickStockQty('');
+                  focusSearch();
+                }}
+              >
+                Agora não
               </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
       {receiptCancelSale && (
         <AdminAuthModal

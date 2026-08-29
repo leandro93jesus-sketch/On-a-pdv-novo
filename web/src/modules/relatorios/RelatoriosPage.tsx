@@ -469,7 +469,13 @@ export default function RelatoriosPage() {
               </div>
               <div>
                 <strong>Situação</strong>
-                <div>{detailSale.status === 'cancelled' ? 'CANCELADA' : 'Concluída'}</div>
+                <div>
+                  {detailSale.status === 'cancelled'
+                    ? 'CANCELADA'
+                    : detailSale.amended_at
+                      ? 'ALTERADA'
+                      : 'Concluída'}
+                </div>
               </div>
               <div>
                 <strong>Desconto</strong>
@@ -478,6 +484,14 @@ export default function RelatoriosPage() {
               <div>
                 <strong>Total</strong>
                 <div>{formatBRL(detailSale.total_cents)}</div>
+              </div>
+              <div>
+                <strong>Valor recebido</strong>
+                <div>{formatBRL(detailSale.amount_received_cents || 0)}</div>
+              </div>
+              <div>
+                <strong>Troco</strong>
+                <div>{formatBRL(detailSale.change_cents || 0)}</div>
               </div>
               <div className="span-2">
                 <strong>Pagamento</strong>

@@ -17,7 +17,14 @@ server/data/
 # Desktop packaging (gerado; não inclui dados reais)
 desktop-resources/
 release/dist/
+release/final/*.zip
+release/final/ONCA-PDV-FINAL/
+release/final/_backup-source-*/
 *.exe
+
+# Entrega local (ONCA-PDV-FINAL.zip é versionado com git add -f; o resto é gerado)
+TESTE-ZIP-EXTRAIDO/
+ENTREGA-FINAL-RELATORIO.json
 *.AppImage
 *.blockmap
 *.dmg

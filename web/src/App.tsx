@@ -3,8 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import AppShell from './layouts/AppShell';
 import { getAuthToken, getStoredAuthUser } from './api/client';
 import VendasPage from './modules/vendas/VendasPage';
-import ProdutosPage from './modules/produtos/ProdutosPage';
-import EstoquePage from './modules/estoque/EstoquePage';
+import ProdutosEstoquePage from './modules/produtos/ProdutosEstoquePage';
 import CaixaPage from './modules/caixa/CaixaPage';
 import ClientesPage from './modules/clientes/ClientesPage';
 import FornecedoresPage from './modules/fornecedores/FornecedoresPage';
@@ -45,8 +44,9 @@ export default function App() {
           <Route path="/historico-vendas" element={<HistoricoVendasPage />} />
           <Route path="/orcamentos" element={<OrcamentosPage />} />
           <Route path="/caixa" element={<CaixaPage />} />
-          <Route path="/produtos" element={<ProdutosPage />} />
-          <Route path="/estoque" element={<EstoquePage />} />
+          <Route path="/produtos-estoque" element={<ProdutosEstoquePage />} />
+          <Route path="/produtos" element={<Navigate to="/produtos-estoque" replace />} />
+          <Route path="/estoque" element={<Navigate to="/produtos-estoque" replace />} />
           <Route path="/clientes" element={<ClientesPage />} />
           <Route path="/fornecedores" element={<FornecedoresPage />} />
           <Route path="/compras" element={<ComprasPage />} />

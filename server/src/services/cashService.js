@@ -244,6 +244,42 @@ export function recordSaleAmendOnCash(db, { sessionId, saleId, deltaCents, reaso
   });
 }
 
+/** Recebimento de crediário: dinheiro/pix/cartão entra no caixa; reduz o saldo de crediário da sessão. */
+export function recordCreditPaymentOnCash(db, {
+  sessionId,
+  creditAccountId,
+  amountCents,
+  method,
+  userName,
+}) {
+  const amount = assertNonNegativeCents(amountCents, 'amount_cents');
+  if (amount <= 0) return;
+  const m = String(method || 'dinheiro').toLowerCase();
+  const dinheiro = m === 'dinheiro' ? amount : 0;
+  const pix = m === 'pix' ? amount : 0;
+  const cartao = m === 'cartao' ? amount : 0;
+
+  db.prepare(
+    `UPDATE cash_sessions SET
+       sales_dinheiro_cents = sales_dinheiro_cents + ?,
+       sales_pix_cents = sales_pix_cents + ?,
+       sales_cartao_cents = sales_cartao_cents + ?,
+       sales_crediario_cents = MAX(sales_crediario_cents - ?, 0)
+     WHERE id = ? AND status = 'open'`
+  ).run(dinheiro, pix, cartao, amount, sessionId);
+
+  addCashMovementTx(db, {
+    sessionId,
+    movementType: 'recebimento_crediario',
+    amountCents: amount,
+    paymentMethod: m,
+    reason: `Recebimento crediário #${creditAccountId}`,
+    userName,
+    referenceType: 'credit_account',
+    referenceId: creditAccountId,
+  });
+}
+
 /** Estorno de venda cancelada no caixa. */
 export function recordSaleCancelOnCash(db, { sessionId, saleId, totalCents, payments, reason, userName }) {
   let dinheiro = 0;

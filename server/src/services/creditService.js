@@ -3,6 +3,7 @@ import { AppError } from '../utils/errors.js';
 import { assertNonNegativeCents } from '../utils/money.js';
 import { writeAudit } from './auditService.js';
 import { getCurrentOperator } from './settingsService.js';
+import { getOpenCashSession, recordCreditPaymentOnCash } from './cashService.js';
 
 function addMonths(dateStr, months) {
   const d = new Date(`${dateStr}T12:00:00`);
@@ -112,7 +113,14 @@ export function listCreditAccounts({ status, customerId, limit = 100 } = {}) {
   params.push(safeLimit);
   return db
     .prepare(
-      `SELECT a.*, c.name AS customer_name, s.sale_number
+      `SELECT a.*, c.name AS customer_name, s.sale_number,
+              (a.total_cents - a.balance_cents) AS paid_cents,
+              (
+                SELECT MIN(i.due_date)
+                FROM credit_installments i
+                WHERE i.credit_account_id = a.id
+                  AND i.status IN ('aberto','parcialmente_pago','vencido')
+              ) AS next_due_date
        FROM credit_accounts a
        JOIN customers c ON c.id = a.customer_id
        JOIN sales s ON s.id = a.sale_id
@@ -273,6 +281,16 @@ export function registerCreditPayment(payload = {}) {
     }
 
     refreshAccountStatus(db, accountId);
+    const open = getOpenCashSession();
+    if (open?.id) {
+      recordCreditPaymentOnCash(db, {
+        sessionId: open.id,
+        creditAccountId: accountId,
+        amountCents: amount,
+        method,
+        userName,
+      });
+    }
     writeAudit({
       action: 'credit.payment',
       entityType: 'credit_account',

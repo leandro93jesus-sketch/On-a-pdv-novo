@@ -132,14 +132,6 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
     }
   }
 
-  async function openReceipt(id: number) {
-    try {
-      setReceipt(await fetchSale(id));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erro ao abrir comprovante');
-    }
-  }
-
   function startAmend(sale: Sale) {
     if (sale.status === 'cancelled') {
       setError('Venda cancelada não pode ser alterada.');
@@ -359,14 +351,11 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
           <thead>
             <tr>
               <th>Nº</th>
-              <th>Data</th>
-              <th>Hora</th>
               <th>Cliente</th>
-              <th>Itens</th>
-              <th>Total</th>
+              <th>Data</th>
               <th>Pagamento</th>
-              <th>Operador</th>
-              <th>Situação</th>
+              <th>Total</th>
+              <th>Status</th>
               <th>Ações</th>
             </tr>
           </thead>
@@ -376,38 +365,19 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
               return (
                 <tr key={s.id}>
                   <td>{s.sale_number}</td>
-                  <td>{date}</td>
-                  <td>{time}</td>
                   <td>{s.customer_name || '—'}</td>
-                  <td>{s.items_count != null ? `${s.items_count} itens` : '—'}</td>
-                  <td>{formatBRL(s.total_cents)}</td>
+                  <td>
+                    {date}
+                    {time ? ` ${time}` : ''}
+                  </td>
                   <td>{paymentLabel(s.payment_method)}</td>
-                  <td>{s.operator_name || '—'}</td>
+                  <td>{formatBRL(s.total_cents)}</td>
                   <td>
                     <strong>{situationOf(s)}</strong>
                   </td>
                   <td className="row-actions">
-                    <button type="button" className="btn btn-ghost" onClick={() => void openDetail(s.id)}>
-                      VER
-                    </button>
-                    <button type="button" className="btn btn-ghost" onClick={() => void openReceipt(s.id)}>
-                      PDF / IMPRIMIR
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-accent"
-                      disabled={s.status === 'cancelled'}
-                      onClick={() => startAmend(s)}
-                    >
-                      ALTERAR
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-danger"
-                      disabled={s.status === 'cancelled'}
-                      onClick={() => startCancel(s)}
-                    >
-                      EXCLUIR
+                    <button type="button" className="btn btn-primary" onClick={() => void openDetail(s.id)}>
+                      Abrir
                     </button>
                   </td>
                 </tr>
@@ -415,7 +385,7 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
             })}
             {!busy && sales.length === 0 && (
               <tr>
-                <td colSpan={10}>Nenhuma venda encontrada.</td>
+                <td colSpan={7}>Nenhuma venda encontrada.</td>
               </tr>
             )}
           </tbody>
@@ -463,39 +433,125 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
 
       {detail && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
-          <div className="modal modal-wide">
-            <h3>Detalhes — {detail.sale_number}</h3>
-            <p>
-              {detail.created_at} · {detail.customer?.name || detail.customer_name || '—'} ·{' '}
-              {situationOf(detail)}
-            </p>
+          <div className="modal modal-wide" style={{ width: 'min(900px, 100%)' }}>
+            <h3>Abrir venda — {detail.sale_number}</h3>
+            <div className="form-grid" style={{ marginBottom: 12 }}>
+              <div>
+                <strong>Número</strong>
+                <div>{detail.sale_number}</div>
+              </div>
+              <div>
+                <strong>Data / Hora</strong>
+                <div>{detail.created_at}</div>
+              </div>
+              <div>
+                <strong>Cliente</strong>
+                <div>{detail.customer?.name || detail.customer_name || '—'}</div>
+              </div>
+              <div>
+                <strong>Telefone</strong>
+                <div>
+                  {detail.customer?.whatsapp || detail.customer?.phone || '—'}
+                </div>
+              </div>
+              <div>
+                <strong>Status</strong>
+                <div>{situationOf(detail)}</div>
+              </div>
+              <div>
+                <strong>Operador</strong>
+                <div>
+                  {detail.operator_name ||
+                    detail.amend_authorized_by ||
+                    detail.amended_by ||
+                    detail.cancelled_by ||
+                    '—'}
+                </div>
+              </div>
+            </div>
+
+            <h4>Produtos</h4>
             <table className="product-table">
               <thead>
                 <tr>
-                  <th>Produto</th>
                   <th>Código</th>
+                  <th>Produto</th>
                   <th>Qtd</th>
                   <th>Unit.</th>
+                  <th>Desconto</th>
                   <th>Subtotal</th>
                 </tr>
               </thead>
               <tbody>
                 {(detail.items || []).map((it) => (
                   <tr key={it.id}>
-                    <td>{it.name}</td>
                     <td>{it.barcode || '—'}</td>
+                    <td>
+                      {it.name}
+                      {it.is_misc ? ' (Diversos)' : ''}
+                    </td>
                     <td>{it.quantity}</td>
                     <td>{formatBRL(it.unit_price_cents)}</td>
+                    <td>{formatBRL(it.discount_cents || 0)}</td>
                     <td>{formatBRL(it.line_total_cents)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <p>
-              Desconto {formatBRL(detail.discount_cents)} · Total {formatBRL(detail.total_cents)} ·{' '}
-              {paymentLabel(detail.payment_method)}
-            </p>
-            <div className="modal-actions">
+
+            <h4 style={{ marginTop: 12 }}>Pagamento</h4>
+            <div className="form-grid" style={{ marginBottom: 8 }}>
+              <div className="span-2">
+                <strong>Formas</strong>
+                <div>
+                  {(detail.payments || [])
+                    .map((p) => `${paymentLabel(p.method, p.card_type)} (${formatBRL(p.amount_cents)})`)
+                    .join(' + ') || paymentLabel(detail.payment_method) || '—'}
+                </div>
+              </div>
+              <div>
+                <strong>Subtotal</strong>
+                <div>{formatBRL(detail.subtotal_cents)}</div>
+              </div>
+              <div>
+                <strong>Descontos</strong>
+                <div>{formatBRL(detail.discount_cents)}</div>
+              </div>
+              <div>
+                <strong>Total final</strong>
+                <div>{formatBRL(detail.total_cents)}</div>
+              </div>
+              <div>
+                <strong>Valor recebido</strong>
+                <div>{formatBRL(detail.amount_received_cents || 0)}</div>
+              </div>
+              <div>
+                <strong>Troco</strong>
+                <div>{formatBRL(detail.change_cents || 0)}</div>
+              </div>
+            </div>
+
+            {detail.notes ? (
+              <p>
+                <strong>Observações:</strong> {detail.notes}
+              </p>
+            ) : null}
+            {detail.cancelled_at ? (
+              <p className="alert alert-error">
+                Cancelada em {detail.cancelled_at}
+                {detail.cancel_reason ? ` — ${detail.cancel_reason}` : ''}
+                {detail.cancelled_by ? ` · ${detail.cancelled_by}` : ''}
+              </p>
+            ) : null}
+            {detail.amended_at ? (
+              <p className="alert alert-ok">
+                Alterada em {detail.amended_at}
+                {detail.amend_reason ? ` — ${detail.amend_reason}` : ''}
+                {detail.amended_by ? ` · ${detail.amended_by}` : ''}
+              </p>
+            ) : null}
+
+            <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
               <button type="button" className="btn btn-ghost" onClick={() => setDetail(null)}>
                 Fechar
               </button>
@@ -507,8 +563,32 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
                   setDetail(null);
                 }}
               >
-                PDF / IMPRIMIR / WHATSAPP
+                Imprimir / PDF / WhatsApp
               </button>
+              {detail.status !== 'cancelled' && (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-accent"
+                    onClick={() => {
+                      setDetail(null);
+                      startAmend(detail);
+                    }}
+                  >
+                    Alterar venda
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => {
+                      setDetail(null);
+                      startCancel(detail);
+                    }}
+                  >
+                    Excluir / Cancelar
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
