@@ -122,6 +122,7 @@ export default function VendasPage() {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [quickBarcode, setQuickBarcode] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const cashReceivedRef = useRef<HTMLInputElement>(null);
   const searchTimer = useRef<number | null>(null);
   const submittingRef = useRef(false);
   const requestIdRef = useRef<string | null>(null);
@@ -457,6 +458,15 @@ export default function VendasPage() {
   const parsedDiscount = parseDiscountInput(discountInput);
   const discountCents = parsedDiscount.ok ? Math.min(parsedDiscount.cents, subtotal) : 0;
   const total = Math.max(subtotal - discountCents, 0);
+  // Troco em dinheiro: calculado a cada digitação, sem depender de botão.
+  const cashReceivedCents = useMemo(() => {
+    const raw = cashReceivedInput.trim();
+    if (!raw) return null;
+    const n = Number(raw.replace(/\./g, '').replace(',', '.'));
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.round(n * 100);
+  }, [cashReceivedInput]);
+  const cashShortfall = cashReceivedCents == null ? 0 : Math.max(total - cashReceivedCents, 0);
   const itemCount = cart.length;
   const unitCount = useMemo(() => cart.reduce((sum, line) => sum + line.quantity, 0), [cart]);
 
@@ -822,7 +832,10 @@ export default function VendasPage() {
       }
       amountReceivedCents = Math.round(n * 100);
       if (amountReceivedCents < total) {
-        setError('Valor recebido menor que o total. Informe o valor correto ou use pagamento misto.');
+        setError(
+          `FALTAM ${formatBRL(total - amountReceivedCents)}. Informe o valor correto ou use pagamento misto.`
+        );
+        cashReceivedRef.current?.focus();
         return;
       }
     }
@@ -1279,6 +1292,10 @@ export default function VendasPage() {
                       setPayment(m.id);
                       setMixedDraft(null);
                       setCardType(null);
+                      if (m.id === 'dinheiro') {
+                        // Foco direto no valor recebido para o caixa só digitar.
+                        window.setTimeout(() => cashReceivedRef.current?.focus(), 0);
+                      }
                     }}
                   >
                     {m.label}
@@ -1342,36 +1359,29 @@ export default function VendasPage() {
                     <label>
                       Valor recebido (R$)
                       <input
+                        ref={cashReceivedRef}
                         value={cashReceivedInput}
                         onChange={(e) => setCashReceivedInput(e.target.value)}
                         inputMode="decimal"
                         placeholder={(total / 100).toFixed(2).replace('.', ',')}
                         autoComplete="off"
+                        data-testid="valor-recebido"
                       />
                     </label>
                     <div>
-                      <div className="muted-line">Troco</div>
+                      <div className="muted-line">{cashShortfall > 0 ? 'Faltam' : 'Troco'}</div>
                       <strong
                         style={{
                           fontSize: '1.25rem',
-                          color:
-                            cashReceivedInput.trim() &&
-                            Math.round(
-                              Number(cashReceivedInput.replace(/\./g, '').replace(',', '.')) * 100
-                            ) < total
-                              ? '#b42318'
-                              : '#0f3d2e',
+                          color: cashShortfall > 0 ? '#b42318' : '#0f3d2e',
                         }}
+                        data-testid="troco-valor"
                       >
-                        {(() => {
-                          const raw = cashReceivedInput.trim();
-                          if (!raw) return '—';
-                          const n = Number(raw.replace(/\./g, '').replace(',', '.'));
-                          if (!Number.isFinite(n)) return '—';
-                          const received = Math.round(n * 100);
-                          if (received < total) return formatBRL(0) + ' (insuficiente)';
-                          return formatBRL(received - total);
-                        })()}
+                        {cashReceivedCents == null
+                          ? '—'
+                          : cashShortfall > 0
+                            ? `FALTAM ${formatBRL(cashShortfall)}`
+                            : formatBRL(cashReceivedCents - total)}
                       </strong>
                     </div>
                   </div>
