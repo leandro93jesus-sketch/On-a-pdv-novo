@@ -128,8 +128,10 @@ export default function QuickProductModal({
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Produto não cadastrado">
       <form className="modal" onSubmit={(e) => void submit(e)}>
-        <h3>Produto não cadastrado</h3>
-        <p className="muted-line">Preencha o essencial e continue a venda.</p>
+        <h3>PRODUTO NÃO CADASTRADO</h3>
+        <p className="muted-line">
+          Código lido: <strong>{barcode}</strong> — preencha o essencial e continue a venda.
+        </p>
         <div className="modal-fields">
           <label>
             Código de barras
