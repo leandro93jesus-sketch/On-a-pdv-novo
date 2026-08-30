@@ -1,7 +1,24 @@
 import { getDb } from '../db/index.js';
 import { AppError } from '../utils/errors.js';
 
+function isoDay(offsetDays = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return d.toISOString().slice(0, 10);
+}
+
 function dateRange(filters = {}) {
+  // Atalhos de período (hoje/ontem). Só entram quando o filtro é informado, então
+  // relatórios que já usavam apenas from/to mantêm o comportamento atual.
+  const period = String(filters.period || filters.periodo || '').toLowerCase();
+  if (period === 'hoje' || period === 'today') {
+    const day = isoDay(0);
+    return { from: day, to: day };
+  }
+  if (period === 'ontem' || period === 'yesterday') {
+    const day = isoDay(-1);
+    return { from: day, to: day };
+  }
   const from = filters.from || filters.date_from || null;
   const to = filters.to || filters.date_to || null;
   return { from, to };
@@ -20,7 +37,167 @@ function betweenClause(column, from, to, params) {
   return parts;
 }
 
+// Cláusulas de filtro compartilhadas entre "Vendas por período" e "Vendas detalhadas".
+function salesFilterClauses(f, params) {
+  const where = [];
+
+  const statusFilter = f.status || f.situacao || null;
+  if (statusFilter === 'completed' || statusFilter === 'concluida' || statusFilter === 'Concluída') {
+    where.push(`s.status = 'completed'`);
+  } else if (
+    statusFilter === 'cancelled' ||
+    statusFilter === 'cancelada' ||
+    statusFilter === 'Cancelada'
+  ) {
+    where.push(`s.status = 'cancelled'`);
+  } else {
+    where.push(`s.status IN ('completed', 'cancelled')`);
+  }
+
+  if (f.customer_id) {
+    where.push('s.customer_id = ?');
+    params.push(Number(f.customer_id));
+  }
+  if (f.customer) {
+    where.push(`LOWER(COALESCE(c.name, '')) LIKE ?`);
+    params.push(`%${String(f.customer).toLowerCase()}%`);
+  }
+  if (f.operator || f.operador) {
+    where.push(`LOWER(COALESCE(cs.operator_name, '')) LIKE ?`);
+    params.push(`%${String(f.operator || f.operador).toLowerCase()}%`);
+  }
+  if (f.sale_number || f.numero) {
+    where.push(`s.sale_number LIKE ?`);
+    params.push(`%${String(f.sale_number || f.numero)}%`);
+  }
+  if (f.product || f.produto) {
+    const term = String(f.product || f.produto).trim();
+    where.push(
+      `EXISTS (SELECT 1 FROM sale_items si2
+               LEFT JOIN products p2 ON p2.id = si2.product_id
+               WHERE si2.sale_id = s.id
+                 AND (LOWER(si2.name) LIKE ? OR si2.barcode = ? OR COALESCE(p2.sku, '') = ?))`
+    );
+    params.push(`%${term.toLowerCase()}%`, term, term);
+  }
+  if (f.payment_method) {
+    const pm = String(f.payment_method).toLowerCase();
+    if (pm === 'misto') {
+      where.push(`(SELECT COUNT(*) FROM sale_payments sp WHERE sp.sale_id = s.id) > 1`);
+    } else if (pm === 'cartao_credito') {
+      where.push(
+        `EXISTS (SELECT 1 FROM sale_payments sp WHERE sp.sale_id = s.id AND sp.method = 'cartao' AND sp.card_type = 'CREDIT')`
+      );
+    } else if (pm === 'cartao_debito') {
+      where.push(
+        `EXISTS (SELECT 1 FROM sale_payments sp WHERE sp.sale_id = s.id AND sp.method = 'cartao' AND sp.card_type = 'DEBIT')`
+      );
+    } else {
+      where.push(`EXISTS (SELECT 1 FROM sale_payments sp WHERE sp.sale_id = s.id AND sp.method = ?)`);
+      params.push(pm);
+    }
+  }
+
+  return where;
+}
+
 const REPORTS = {
+  vendas_detalhadas: {
+    title: 'Vendas detalhadas',
+    run(f) {
+      const db = getDb();
+      const { from, to } = dateRange(f);
+      const params = [];
+      const where = [
+        ...betweenClause('s.created_at', from, to, params),
+        ...salesFilterClauses(f, params),
+      ];
+      const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+      const rows = db
+        .prepare(
+          `SELECT s.id,
+                  s.sale_number,
+                  date(s.created_at) AS sale_date,
+                  time(s.created_at) AS sale_time,
+                  s.created_at,
+                  COALESCE(c.name, '') AS customer_name,
+                  COALESCE(cs.operator_name, '') AS operator_name,
+                  (SELECT COALESCE(SUM(si.quantity), 0) FROM sale_items si WHERE si.sale_id = s.id) AS items_count,
+                  (SELECT GROUP_CONCAT(si.quantity || 'x ' || si.name, ' | ')
+                     FROM sale_items si WHERE si.sale_id = s.id) AS products_summary,
+                  s.subtotal_cents,
+                  s.discount_cents,
+                  s.total_cents,
+                  COALESCE(s.amount_received_cents, 0) AS amount_received_cents,
+                  COALESCE(s.change_cents, 0) AS change_cents,
+                  (SELECT GROUP_CONCAT(
+                     CASE
+                       WHEN sp.method = 'cartao' AND sp.card_type = 'CREDIT' THEN 'cartao_credito'
+                       WHEN sp.method = 'cartao' AND sp.card_type = 'DEBIT' THEN 'cartao_debito'
+                       ELSE sp.method
+                     END, ' + ')
+                     FROM sale_payments sp WHERE sp.sale_id = s.id) AS payment_methods,
+                  (SELECT COALESCE(SUM(si.quantity * COALESCE(p.cost_cents, 0)), 0)
+                     FROM sale_items si
+                     LEFT JOIN products p ON p.id = si.product_id
+                     WHERE si.sale_id = s.id) AS cost_cents,
+                  s.status,
+                  CASE s.status WHEN 'cancelled' THEN 'Cancelada' ELSE 'Concluída' END AS status_label
+           FROM sales s
+           LEFT JOIN customers c ON c.id = s.customer_id
+           LEFT JOIN cash_sessions cs ON cs.id = s.cash_session_id
+           ${clause}
+           ORDER BY s.created_at, s.id`
+        )
+        .all(...params);
+
+      for (const row of rows) {
+        row.profit_cents = Number(row.total_cents || 0) - Number(row.cost_cents || 0);
+      }
+
+      const completed = rows.filter((r) => r.status === 'completed');
+      const sum = (list, key) => list.reduce((a, r) => a + Number(r[key] || 0), 0);
+      // Bruto = soma dos subtotais (antes do desconto); líquido = soma dos totais.
+      const grossCents = sum(completed, 'subtotal_cents');
+      const discountCents = sum(completed, 'discount_cents');
+      const netCents = sum(completed, 'total_cents');
+      const costCents = sum(completed, 'cost_cents');
+      const itemsSold = sum(completed, 'items_count');
+
+      return {
+        columns: [
+          'sale_number',
+          'sale_date',
+          'sale_time',
+          'customer_name',
+          'operator_name',
+          'products_summary',
+          'items_count',
+          'subtotal_cents',
+          'discount_cents',
+          'total_cents',
+          'payment_methods',
+          'amount_received_cents',
+          'change_cents',
+          'status_label',
+        ],
+        rows,
+        totals: {
+          sales_count: completed.length,
+          cancelled_count: rows.length - completed.length,
+          items_sold: itemsSold,
+          gross_cents: grossCents,
+          discount_cents: discountCents,
+          net_cents: netCents,
+          cost_cents: costCents,
+          profit_cents: netCents - costCents,
+          ticket_avg_cents: completed.length ? Math.round(netCents / completed.length) : 0,
+        },
+      };
+    },
+  },
+
   vendas_periodo: {
     title: 'Vendas por período',
     run(f) {

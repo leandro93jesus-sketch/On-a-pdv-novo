@@ -3,6 +3,7 @@ import {
   fetchReportCatalog,
   fetchSale,
   formatBRL,
+  getAuthToken,
   paymentLabel,
   runReport,
   type ReportCatalogItem,
@@ -12,6 +13,7 @@ import {
 import { ModuleToolbar } from '../../components/ModuleChrome';
 import ChoosePrinterModal from '../../components/ChoosePrinterModal';
 import { printDocument } from '../../lib/printDocument';
+import { savePdfToComputer } from '../../lib/savePdf';
 import ReceiptModal from '../vendas/ReceiptModal';
 
 const VENDAS_PERIODO_LABELS: Record<string, string> = {
@@ -43,7 +45,26 @@ const VENDAS_PERIODO_LABELS: Record<string, string> = {
   misto_cents: 'Misto',
   count: 'Qtd. vendas',
   discount_cents: 'Descontos',
+  products_summary: 'Produtos',
+  subtotal_cents: 'Subtotal',
+  amount_received_cents: 'Valor recebido',
+  change_cents: 'Troco',
+  cost_cents: 'Custo',
+  profit_cents: 'Lucro',
+  items_sold: 'Itens vendidos',
 };
+
+const DETALHADAS_SUMMARY_ORDER = [
+  'sales_count',
+  'items_sold',
+  'gross_cents',
+  'discount_cents',
+  'net_cents',
+  'cost_cents',
+  'profit_cents',
+  'ticket_avg_cents',
+  'cancelled_count',
+];
 
 const SUMMARY_ORDER = [
   'sales_count',
@@ -97,7 +118,11 @@ function formatCell(col: string, value: unknown, reportId?: string): string {
   }
   if (typeof value === 'number' && /_cents$/i.test(col)) return formatBRL(value);
   if (typeof value === 'number') return value.toLocaleString('pt-BR');
-  if (reportId === 'vendas_periodo' && col === 'status_label' && String(value).toLowerCase().includes('cancel')) {
+  if (
+    (reportId === 'vendas_periodo' || reportId === 'vendas_detalhadas') &&
+    col === 'status_label' &&
+    String(value).toLowerCase().includes('cancel')
+  ) {
     return 'CANCELADA';
   }
   return String(value);
@@ -124,22 +149,32 @@ export default function RelatoriosPage() {
   const [filterPayment, setFilterPayment] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSaleNumber, setFilterSaleNumber] = useState('');
+  const [filterProduct, setFilterProduct] = useState('');
+  const [quickPeriod, setQuickPeriod] = useState('');
   const [result, setResult] = useState<ReportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [choosePrinter, setChoosePrinter] = useState(false);
+  const [exporting, setExporting] = useState<'pdf' | 'csv' | null>(null);
   const [detailSale, setDetailSale] = useState<Sale | null>(null);
   const [receiptSale, setReceiptSale] = useState<Sale | null>(null);
   const [actionBusyId, setActionBusyId] = useState<number | null>(null);
 
   const isVendasPeriodo = reportId === 'vendas_periodo' || result?.id === 'vendas_periodo';
+  const isVendasDetalhadas = reportId === 'vendas_detalhadas' || result?.id === 'vendas_detalhadas';
+  // Os dois relatórios de venda compartilham filtros e ações por linha.
+  const isSalesReport = isVendasPeriodo || isVendasDetalhadas;
+  const resultIsSalesReport = result?.id === 'vendas_periodo' || result?.id === 'vendas_detalhadas';
 
   useEffect(() => {
     void (async () => {
       try {
         const items = await fetchReportCatalog();
         setCatalog(items);
-        const prefer = items.find((r) => r.id === 'vendas_periodo') || items[0];
+        const prefer =
+          items.find((r) => r.id === 'vendas_detalhadas') ||
+          items.find((r) => r.id === 'vendas_periodo') ||
+          items[0];
         if (prefer) setReportId(prefer.id);
         setError(null);
       } catch (e) {
@@ -151,6 +186,13 @@ export default function RelatoriosPage() {
   const summaryEntries = useMemo(() => {
     if (!result?.totals) return [];
     const entries = Object.entries(result.totals);
+    if (result.id === 'vendas_detalhadas') {
+      const ordered: Array<[string, unknown]> = [];
+      for (const key of DETALHADAS_SUMMARY_ORDER) {
+        if (key in result.totals) ordered.push([key, result.totals[key]]);
+      }
+      return ordered;
+    }
     if (result.id !== 'vendas_periodo') return entries;
     const ordered: Array<[string, unknown]> = [];
     for (const key of SUMMARY_ORDER) {
@@ -168,6 +210,70 @@ export default function RelatoriosPage() {
     return ordered;
   }, [result]);
 
+  function currentFilters(): Record<string, string | undefined> {
+    const filters: Record<string, string | undefined> = {
+      from: dateFrom || undefined,
+      to: dateTo || undefined,
+    };
+    if (quickPeriod) {
+      filters.period = quickPeriod;
+      filters.from = undefined;
+      filters.to = undefined;
+    }
+    if (reportId === 'vendas_periodo' || reportId === 'vendas_detalhadas') {
+      if (filterCustomer.trim()) filters.customer = filterCustomer.trim();
+      if (filterOperator.trim()) filters.operator = filterOperator.trim();
+      if (filterPayment) filters.payment_method = filterPayment;
+      if (filterStatus) filters.status = filterStatus;
+      if (filterSaleNumber.trim()) filters.sale_number = filterSaleNumber.trim();
+      if (filterProduct.trim()) filters.product = filterProduct.trim();
+    }
+    return filters;
+  }
+
+  async function handleExport(format: 'pdf' | 'csv') {
+    if (!reportId) return;
+    setExporting(format);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(currentFilters())) {
+        if (value != null && value !== '') params.set(key, value);
+      }
+      if (format === 'pdf') params.set('download', '1');
+      const query = params.toString();
+      const url = `/api/reports/${reportId}/${format}${query ? `?${query}` : ''}`;
+      const suggested = `onca-pdv-${reportId}-${new Date().toISOString().slice(0, 10)}`;
+
+      if (format === 'pdf') {
+        const res = await savePdfToComputer({
+          suggestedName: `${suggested}.pdf`,
+          downloadUrl: url,
+          title: 'Salvar relatório em PDF',
+        });
+        if (!res.ok && !res.canceled) setError(res.error || 'Não foi possível gerar o PDF.');
+        return;
+      }
+
+      const token = getAuthToken();
+      const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = `${suggested}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao exportar relatório');
+    } finally {
+      setExporting(null);
+    }
+  }
+
   async function handleRun() {
     if (!reportId) {
       setError('Selecione um relatório');
@@ -177,18 +283,7 @@ export default function RelatoriosPage() {
     setError(null);
     setDetailSale(null);
     try {
-      const filters: Record<string, string | undefined> = {
-        from: dateFrom || undefined,
-        to: dateTo || undefined,
-      };
-      if (reportId === 'vendas_periodo') {
-        if (filterCustomer.trim()) filters.customer = filterCustomer.trim();
-        if (filterOperator.trim()) filters.operator = filterOperator.trim();
-        if (filterPayment) filters.payment_method = filterPayment;
-        if (filterStatus) filters.status = filterStatus;
-        if (filterSaleNumber.trim()) filters.sale_number = filterSaleNumber.trim();
-      }
-      const data = await runReport(reportId, filters);
+      const data = await runReport(reportId, currentFilters());
       setResult(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao gerar relatório');
@@ -217,10 +312,9 @@ export default function RelatoriosPage() {
     }
   }
 
-  const displayColumns =
-    result?.id === 'vendas_periodo'
-      ? (result.columns || []).filter((c) => c !== 'id' && c !== 'status' && c !== 'created_at')
-      : result?.columns || [];
+  const displayColumns = resultIsSalesReport
+    ? (result?.columns || []).filter((c) => c !== 'id' && c !== 'status' && c !== 'created_at')
+    : result?.columns || [];
 
   return (
     <section className="module-panel report-print-area">
@@ -273,10 +367,47 @@ export default function RelatoriosPage() {
         >
           IMPRIMIR RELATÓRIO
         </button>
+        <button
+          type="button"
+          className="btn btn-ghost no-print"
+          disabled={!result || exporting !== null}
+          onClick={() => void handleExport('pdf')}
+        >
+          {exporting === 'pdf' ? 'Gerando PDF…' : 'GERAR PDF'}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost no-print"
+          disabled={!result || exporting !== null}
+          onClick={() => void handleExport('csv')}
+        >
+          {exporting === 'csv' ? 'Exportando…' : 'EXPORTAR CSV'}
+        </button>
       </ModuleToolbar>
 
-      {reportId === 'vendas_periodo' && (
+      {isSalesReport && (
         <div className="form-grid no-print" style={{ marginBottom: 12 }}>
+          <label>
+            Período rápido
+            <select
+              className="field-input"
+              value={quickPeriod}
+              onChange={(e) => setQuickPeriod(e.target.value)}
+            >
+              <option value="">Usar datas acima</option>
+              <option value="hoje">Hoje</option>
+              <option value="ontem">Ontem</option>
+            </select>
+          </label>
+          <label>
+            Produto
+            <input
+              className="field-input"
+              value={filterProduct}
+              onChange={(e) => setFilterProduct(e.target.value)}
+              placeholder="Nome ou código de barras"
+            />
+          </label>
           <label>
             Cliente
             <input
@@ -367,7 +498,7 @@ export default function RelatoriosPage() {
             {result.generated_at ? (
               <p className="muted-line">Gerado em {result.generated_at}</p>
             ) : null}
-            {isVendasPeriodo ? (
+            {isSalesReport ? (
               <p className="muted-line">
                 Lista completa das vendas do período ({(result.rows || []).length} registro
                 {(result.rows || []).length === 1 ? '' : 's'}).
@@ -386,14 +517,14 @@ export default function RelatoriosPage() {
             </div>
           ) : null}
 
-          <div className="product-table-wrap" style={{ maxHeight: isVendasPeriodo ? 520 : undefined, overflow: 'auto' }}>
+          <div className="product-table-wrap" style={{ maxHeight: isSalesReport ? 520 : undefined, overflow: 'auto' }}>
             <table className="product-table report-table" data-testid="relatorio-vendas-tabela">
               <thead>
                 <tr>
                   {displayColumns.map((col) => (
                     <th key={col}>{columnLabel(col)}</th>
                   ))}
-                  {result.id === 'vendas_periodo' && <th className="no-print">Ações</th>}
+                  {resultIsSalesReport && <th className="no-print">Ações</th>}
                 </tr>
               </thead>
               <tbody>
@@ -413,7 +544,7 @@ export default function RelatoriosPage() {
                           )}
                         </td>
                       ))}
-                      {result.id === 'vendas_periodo' && (
+                      {resultIsSalesReport && (
                         <td className="row-actions no-print">
                           <button
                             type="button"
@@ -438,7 +569,7 @@ export default function RelatoriosPage() {
                 })}
                 {(result.rows || []).length === 0 && (
                   <tr>
-                    <td colSpan={Math.max(displayColumns.length + (result.id === 'vendas_periodo' ? 1 : 0), 1)}>
+                    <td colSpan={Math.max(displayColumns.length + (resultIsSalesReport ? 1 : 0), 1)}>
                       Sem dados no período.
                     </td>
                   </tr>
