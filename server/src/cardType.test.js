@@ -137,12 +137,17 @@ test('vendas antigas com cartão NULL continuam como CARTÃO', async () => {
   assert.equal(res.payments[0].card_type, null);
 });
 
-test('migration 021 no banco real (cópia) preserva dados e NULL em cartões antigos', () => {
-  const backup = join(
-    __dirname,
-    '../data/backups/onca-pdv-backup-pre-card-type-20260811T221620Z.db'
-  );
-  assert.ok(existsSync(backup), 'backup pré-migration deve existir');
+// Backup real do cliente (server/data não é versionado). Sem ele o teste pula em
+// vez de reprovar: em máquina com o banco real presente ele roda normalmente.
+const REAL_BACKUP = join(
+  __dirname,
+  '../data/backups/onca-pdv-backup-pre-card-type-20260811T221620Z.db'
+);
+
+test('migration 021 no banco real (cópia) preserva dados e NULL em cartões antigos', {
+  skip: existsSync(REAL_BACKUP) ? false : `backup real ausente (${REAL_BACKUP})`,
+}, () => {
+  const backup = REAL_BACKUP;
   const copy = join(tmp, 'compat-real.db');
   copyFileSync(backup, copy);
   const real = new Database(copy);
