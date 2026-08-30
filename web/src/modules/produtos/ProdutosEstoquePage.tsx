@@ -13,6 +13,17 @@ import {
 import { ModuleToolbar, StatusPill } from '../../components/ModuleChrome';
 import StockAdjustModal, { type AdjustMode } from '../estoque/StockAdjustModal';
 
+const MOVEMENT_LABELS: Record<string, string> = {
+  entry: 'Entrada',
+  exit: 'Saída',
+  adjust_in: 'Ajuste (+)',
+  adjust_out: 'Ajuste (−)',
+  sale: 'Venda',
+  sale_cancel: 'Cancelamento de venda',
+  return: 'Devolução',
+  purchase: 'Compra',
+};
+
 /**
  * Área única PRODUTOS / ESTOQUE — cadastro + saldos + ajustes em uma tela.
  */
@@ -41,6 +52,8 @@ export default function ProdutosEstoquePage() {
   });
   const [saving, setSaving] = useState(false);
 
+  const [historyProduct, setHistoryProduct] = useState<Product | null>(null);
+  const [historyRows, setHistoryRows] = useState<StockMovement[] | null>(null);
   const [adjustProduct, setAdjustProduct] = useState<Product | null>(null);
   const [adjustMode, setAdjustMode] = useState<AdjustMode>('entry');
   const [showAdjust, setShowAdjust] = useState(false);
@@ -99,6 +112,17 @@ export default function ProdutosEstoquePage() {
       active: p.active !== 0,
     });
     setShowForm(true);
+  }
+
+  async function openHistory(p: Product) {
+    setHistoryProduct(p);
+    setHistoryRows(null);
+    try {
+      setHistoryRows(await fetchStockMovements({ product_id: p.id, limit: 100 }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao carregar histórico do produto');
+      setHistoryProduct(null);
+    }
   }
 
   function openAdjust(p: Product, mode: AdjustMode) {
@@ -203,10 +227,12 @@ export default function ProdutosEstoquePage() {
         <table className="product-table">
           <thead>
             <tr>
-              <th>Código</th>
               <th>Produto</th>
-              <th>Preço</th>
+              <th>Código</th>
               <th>Estoque</th>
+              <th>Custo</th>
+              <th>Preço</th>
+              <th>Categoria</th>
               <th>Status</th>
               <th>Ações</th>
             </tr>
@@ -216,30 +242,48 @@ export default function ProdutosEstoquePage() {
               const st = statusOf(p);
               return (
                 <tr key={p.id}>
-                  <td>{p.barcode || '—'}</td>
                   <td>
                     <strong>{p.name}</strong>
                   </td>
-                  <td>{formatBRL(p.price_cents)}</td>
+                  <td>{p.barcode || p.sku || '—'}</td>
                   <td>
                     <strong>{p.stock_qty}</strong>
                   </td>
+                  <td>{formatBRL(p.cost_cents)}</td>
+                  <td>{formatBRL(p.price_cents)}</td>
+                  <td>{p.category || '—'}</td>
                   <td>
                     <StatusPill tone={st.tone}>{st.label}</StatusPill>
                   </td>
                   <td className="row-actions">
                     <button type="button" className="btn btn-ghost" onClick={() => openEdit(p)}>
-                      Editar
+                      EDITAR
                     </button>
                     {canAdjust ? (
-                      <button
-                        type="button"
-                        className="btn btn-accent"
-                        onClick={() => openAdjust(p, 'entry')}
-                      >
-                        Ajustar
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="btn btn-accent"
+                          onClick={() => openAdjust(p, 'entry')}
+                        >
+                          + ESTOQUE
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() => openAdjust(p, 'exit')}
+                        >
+                          − ESTOQUE
+                        </button>
+                      </>
                     ) : null}
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => void openHistory(p)}
+                    >
+                      HISTÓRICO
+                    </button>
                   </td>
                 </tr>
               );
@@ -393,6 +437,84 @@ export default function ProdutosEstoquePage() {
                 onClick={() => void saveForm()}
               >
                 {saving ? 'Salvando…' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {historyProduct && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Histórico de movimentações do produto"
+        >
+          <div className="modal modal-wide" style={{ width: 'min(860px, 100%)' }}>
+            <h3>Histórico — {historyProduct.name}</h3>
+            <p className="muted-line">
+              Estoque atual: <strong>{historyProduct.stock_qty}</strong> · Código:{' '}
+              {historyProduct.barcode || historyProduct.sku || '—'}
+            </p>
+            <div className="table-wrap" style={{ maxHeight: 420, overflow: 'auto' }}>
+              <table className="product-table">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Hora</th>
+                    <th>Tipo</th>
+                    <th>Antes</th>
+                    <th>Movimentação</th>
+                    <th>Depois</th>
+                    <th>Motivo</th>
+                    <th>Usuário</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(historyRows || []).map((m) => {
+                    const [date, time] = String(m.created_at || '').includes('T')
+                      ? String(m.created_at).split('T')
+                      : String(m.created_at || '').split(' ');
+                    return (
+                      <tr key={m.id}>
+                        <td>{date || '—'}</td>
+                        <td>{(time || '').slice(0, 8) || '—'}</td>
+                        <td>{MOVEMENT_LABELS[m.movement_type] || m.movement_type}</td>
+                        <td>{m.stock_before ?? '—'}</td>
+                        <td>
+                          <strong>
+                            {m.quantity_delta > 0 ? `+${m.quantity_delta}` : String(m.quantity_delta)}
+                          </strong>
+                        </td>
+                        <td>{m.stock_after ?? '—'}</td>
+                        <td>{m.reason || m.note || '—'}</td>
+                        <td>{m.user_name || '—'}</td>
+                      </tr>
+                    );
+                  })}
+                  {historyRows != null && historyRows.length === 0 && (
+                    <tr>
+                      <td colSpan={8}>Sem movimentações para este produto.</td>
+                    </tr>
+                  )}
+                  {historyRows == null && (
+                    <tr>
+                      <td colSpan={8}>Carregando…</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setHistoryProduct(null);
+                  setHistoryRows(null);
+                }}
+              >
+                Fechar
               </button>
             </div>
           </div>
