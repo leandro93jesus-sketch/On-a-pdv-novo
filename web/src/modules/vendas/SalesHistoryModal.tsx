@@ -4,15 +4,17 @@ import {
   cancelSale,
   fetchProducts,
   fetchSale,
+  fetchSaleRelated,
   fetchSalesPaged,
   formatBRL,
   paymentLabel,
   type Customer,
   type Product,
   type Sale,
+  type SaleRelated,
 } from '../../api/client';
 import ReceiptModal from './ReceiptModal';
-import AdminAuthModal from './AdminAuthModal';
+import AdminAuthModal, { CANCEL_REASON_OPTIONS } from './AdminAuthModal';
 import CustomerPicker from './CustomerPicker';
 
 type Period = '' | 'today' | 'yesterday' | 'last7' | 'month' | 'custom';
@@ -64,6 +66,7 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<Sale | null>(null);
+  const [related, setRelated] = useState<SaleRelated | null>(null);
   const [receipt, setReceipt] = useState<Sale | null>(null);
 
   const [authMode, setAuthMode] = useState<null | 'amend' | 'cancel'>(null);
@@ -126,7 +129,12 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
 
   async function openDetail(id: number) {
     try {
+      setRelated(null);
       setDetail(await fetchSale(id));
+      // Crediário / entrega / devoluções são carregados em seguida, sem travar o detalhe.
+      fetchSaleRelated(id)
+        .then(setRelated)
+        .catch(() => setRelated(null));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao abrir venda');
     }
@@ -351,8 +359,11 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
           <thead>
             <tr>
               <th>Nº</th>
-              <th>Cliente</th>
               <th>Data</th>
+              <th>Hora</th>
+              <th>Cliente</th>
+              <th>Operador</th>
+              <th>Itens</th>
               <th>Pagamento</th>
               <th>Total</th>
               <th>Status</th>
@@ -365,11 +376,11 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
               return (
                 <tr key={s.id}>
                   <td>{s.sale_number}</td>
+                  <td>{date}</td>
+                  <td>{time || '—'}</td>
                   <td>{s.customer_name || '—'}</td>
-                  <td>
-                    {date}
-                    {time ? ` ${time}` : ''}
-                  </td>
+                  <td>{s.operator_name || '—'}</td>
+                  <td>{s.items_count ?? '—'}</td>
                   <td>{paymentLabel(s.payment_method)}</td>
                   <td>{formatBRL(s.total_cents)}</td>
                   <td>
@@ -385,7 +396,7 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
             })}
             {!busy && sales.length === 0 && (
               <tr>
-                <td colSpan={7}>Nenhuma venda encontrada.</td>
+                <td colSpan={10}>Nenhuma venda encontrada.</td>
               </tr>
             )}
           </tbody>
@@ -531,6 +542,64 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
               </div>
             </div>
 
+            {related?.credit ? (
+              <>
+                <h4 style={{ marginTop: 12 }}>Crediário</h4>
+                <p className="muted-line">
+                  Situação <strong>{related.credit.status}</strong> · total{' '}
+                  {formatBRL(related.credit.total_cents)} · entrada{' '}
+                  {formatBRL(related.credit.entry_cents)} · pago{' '}
+                  {formatBRL(related.credit.paid_cents)} · saldo{' '}
+                  <strong>{formatBRL(related.credit.balance_cents)}</strong> em{' '}
+                  {related.credit.installment_count}x
+                </p>
+                <table className="product-table">
+                  <thead>
+                    <tr>
+                      <th>Parcela</th>
+                      <th>Vencimento</th>
+                      <th>Valor</th>
+                      <th>Pago</th>
+                      <th>Situação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {related.credit.installments.map((i) => (
+                      <tr key={i.installment_number}>
+                        <td>{i.installment_number}</td>
+                        <td>{i.due_date || '—'}</td>
+                        <td>{formatBRL(i.amount_cents)}</td>
+                        <td>{formatBRL(i.paid_amount_cents)}</td>
+                        <td>{i.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            ) : null}
+
+            {related?.delivery_order || related?.delivery ? (
+              <p style={{ marginTop: 12 }}>
+                <strong>Entrega:</strong>{' '}
+                {related.delivery_order
+                  ? `pedido #${related.delivery_order.id} · ${related.delivery_order.status} · pagamento ${related.delivery_order.payment_status}`
+                  : `agendada #${related.delivery?.id} · ${related.delivery?.status}`}
+                {(related.delivery_order?.scheduled_date || related.delivery?.scheduled_date) &&
+                  ` · ${related.delivery_order?.scheduled_date || related.delivery?.scheduled_date}`}
+                {(related.delivery_order?.courier_name || related.delivery?.courier_name) &&
+                  ` · entregador ${related.delivery_order?.courier_name || related.delivery?.courier_name}`}
+              </p>
+            ) : null}
+
+            {related?.returns?.length ? (
+              <p>
+                <strong>Devoluções:</strong>{' '}
+                {related.returns
+                  .map((r) => `#${r.id} ${formatBRL(r.total_cents)}${r.reason ? ` (${r.reason})` : ''}`)
+                  .join(' · ')}
+              </p>
+            ) : null}
+
             {detail.notes ? (
               <p>
                 <strong>Observações:</strong> {detail.notes}
@@ -552,7 +621,14 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
             ) : null}
 
             <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
-              <button type="button" className="btn btn-ghost" onClick={() => setDetail(null)}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setDetail(null);
+                  setRelated(null);
+                }}
+              >
                 Fechar
               </button>
               <button
@@ -618,6 +694,7 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
               : 'ESTE PEDIDO JÁ POSSUI PAGAMENTO CONFIRMADO. ALTERAR OS ITENS PODE GERAR DIFERENÇA FINANCEIRA.'
           }
           reasonLabel={authMode === 'cancel' ? 'MOTIVO DA EXCLUSÃO/CANCELAMENTO' : 'MOTIVO DA ALTERAÇÃO'}
+          reasonOptions={authMode === 'cancel' ? CANCEL_REASON_OPTIONS : undefined}
           confirmLabel="AUTORIZAR"
           onCancel={() => {
             setAuthMode(null);

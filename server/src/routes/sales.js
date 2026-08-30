@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { amendSale, cancelSale, createSale, getSaleById, listSales } from '../services/salesService.js';
+import { getSaleRelated } from '../services/saleRelatedService.js';
 
 const router = Router();
 
@@ -29,6 +30,20 @@ router.get('/', (req, res, next) => {
     }
     res.set('X-Total-Count', String(result.total));
     res.json(result.items);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Precisa vir antes de '/:id' para não ser capturado por ele.
+router.get('/:id/related', (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ error: 'ID inválido', code: 'INVALID_ID' });
+    }
+    getSaleById(id); // 404 quando a venda não existe
+    res.json(getSaleRelated(id));
   } catch (err) {
     next(err);
   }

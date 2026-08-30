@@ -778,8 +778,13 @@ export function cancelSale(id, payload = {}) {
       details: {
         reason,
         userName,
+        operator: userName,
         authorized: true,
+        authorized_by: authorizedBy,
         sale_number: sale.sale_number,
+        total_before_cents: sale.total_cents,
+        total_after_cents: 0,
+        items_before: items,
         note: 'Administrador autorizou cancelamento',
       },
       userName,
@@ -1028,6 +1033,8 @@ export function amendSale(id, payload = {}) {
       details: {
         sale_number: sale.sale_number,
         reason,
+        operator: userName,
+        authorized_by: authorizedBy,
         total_before_cents: totalBefore,
         total_after_cents: total,
         delta_cents: delta,

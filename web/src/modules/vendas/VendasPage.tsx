@@ -28,7 +28,7 @@ import QuickProductModal from './QuickProductModal';
 import ReceiptModal from './ReceiptModal';
 import SaleRecoveryModal from './SaleRecoveryModal';
 import SalesHistoryModal from './SalesHistoryModal';
-import AdminAuthModal from './AdminAuthModal';
+import AdminAuthModal, { CANCEL_REASON_OPTIONS } from './AdminAuthModal';
 import {
   clearDraft,
   getMemoryDraft,
@@ -1691,6 +1691,7 @@ export default function VendasPage() {
           title={`EXCLUIR / CANCELAR VENDA ${receiptCancelSale.sale_number}`}
           subtitle="A venda será cancelada (estorno) e permanecerá no histórico."
           reasonLabel="MOTIVO DA EXCLUSÃO/CANCELAMENTO"
+          reasonOptions={CANCEL_REASON_OPTIONS}
           onCancel={() => setReceiptCancelSale(null)}
           onAuthorized={async ({ password, reason }) => {
             const cancelled = await cancelCompletedSale(receiptCancelSale.id, {

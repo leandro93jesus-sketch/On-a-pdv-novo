@@ -6,9 +6,21 @@ type Props = {
   requireReason?: boolean;
   reasonLabel?: string;
   confirmLabel?: string;
+  /** Motivos padronizados; quando informado, mostra seleção + campo "Outro". */
+  reasonOptions?: readonly string[];
   onCancel: () => void;
   onAuthorized: (data: { password: string; reason: string }) => void | Promise<void>;
 };
+
+/** Motivos de cancelamento/exclusão de venda. */
+export const CANCEL_REASON_OPTIONS = [
+  'Lançamento incorreto',
+  'Duplicidade',
+  'Cliente desistiu',
+  'Erro operacional',
+  'Teste',
+  'Outro',
+] as const;
 
 /**
  * Autorização administrativa com campo password (nunca exibe a senha).
@@ -20,13 +32,24 @@ export default function AdminAuthModal({
   requireReason = true,
   reasonLabel = 'MOTIVO',
   confirmLabel = 'AUTORIZAR',
+  reasonOptions,
   onCancel,
   onAuthorized,
 }: Props) {
   const [password, setPassword] = useState('');
   const [reason, setReason] = useState('');
+  const [reasonChoice, setReasonChoice] = useState(reasonOptions ? reasonOptions[0] : '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const usesOptions = Boolean(reasonOptions?.length);
+  const needsFreeText = !usesOptions || reasonChoice === 'Outro';
+
+  function resolveReason(): string {
+    if (!usesOptions) return reason.trim();
+    if (reasonChoice === 'Outro') return reason.trim();
+    return reasonChoice;
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -35,13 +58,14 @@ export default function AdminAuthModal({
       setError('Informe a senha administrativa.');
       return;
     }
-    if (requireReason && !reason.trim()) {
+    const finalReason = resolveReason();
+    if (requireReason && !finalReason) {
       setError('Informe o motivo.');
       return;
     }
     setBusy(true);
     try {
-      await onAuthorized({ password, reason: reason.trim() });
+      await onAuthorized({ password, reason: finalReason });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha na autorização');
     } finally {
@@ -68,9 +92,25 @@ export default function AdminAuthModal({
               autoFocus
             />
           </label>
-          {requireReason && (
+          {requireReason && usesOptions && (
             <label style={{ display: 'block', marginTop: 10 }}>
               {reasonLabel}
+              <select
+                className="field-input"
+                value={reasonChoice}
+                onChange={(e) => setReasonChoice(e.target.value)}
+              >
+                {reasonOptions?.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {requireReason && needsFreeText && (
+            <label style={{ display: 'block', marginTop: 10 }}>
+              {usesOptions ? 'DESCREVA O MOTIVO' : reasonLabel}
               <textarea
                 className="field-input"
                 rows={3}

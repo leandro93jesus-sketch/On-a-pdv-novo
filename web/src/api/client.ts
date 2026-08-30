@@ -517,6 +517,50 @@ export function fetchSale(id: number): Promise<Sale> {
   return fetch(`/api/sales/${id}`).then((r) => handle<Sale>(r));
 }
 
+export interface SaleRelated {
+  sale_id: number;
+  credit: {
+    id: number;
+    status: string;
+    total_cents: number;
+    entry_cents: number;
+    balance_cents: number;
+    paid_cents: number;
+    installment_count: number;
+    installments: Array<{
+      installment_number: number;
+      due_date: string | null;
+      amount_cents: number;
+      paid_amount_cents: number;
+      status: string;
+    }>;
+  } | null;
+  delivery_order: {
+    id: number;
+    status: string;
+    payment_status: string;
+    total_cents: number;
+    amount_paid_cents: number;
+    courier_name: string | null;
+    scheduled_date: string | null;
+    period: string | null;
+  } | null;
+  delivery: {
+    id: number;
+    status: string;
+    scheduled_date: string | null;
+    period: string | null;
+    courier_name: string | null;
+    city: string | null;
+    neighborhood: string | null;
+  } | null;
+  returns: Array<{ id: number; total_cents: number; reason: string | null; created_at: string }>;
+}
+
+export function fetchSaleRelated(id: number): Promise<SaleRelated> {
+  return fetch(`/api/sales/${id}/related`).then((r) => handle<SaleRelated>(r));
+}
+
 export function createSale(payload: CreateSalePayload): Promise<Sale> {
   return fetch('/api/sales', {
     method: 'POST',
