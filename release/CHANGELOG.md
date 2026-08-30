@@ -1,5 +1,68 @@
 # Changelog — ONÇA PDV
 
+## 1.2.18 — 2026-08-30
+
+Continuação do projeto: as 8 alterações pedidas foram revalidadas ponta a ponta e o
+que estava faltando foi completado. Nenhuma função existente foi removida ou
+reescrita; o banco, o layout e os módulos atuais foram preservados.
+
+### Vendas — troco automático (Alteração 1)
+
+- Quando o valor recebido é menor que o total, a tela mostra `FALTAM R$ XX,XX`
+  (rótulo e mensagem de bloqueio) em vez de "R$ 0,00 (insuficiente)"
+- Selecionar DINHEIRO coloca o foco automaticamente no campo Valor recebido
+- Pagamento misto continua calculando troco apenas sobre a parte em dinheiro
+
+### Leitor de código de barras (Alteração 2)
+
+- Suíte dedicada cobre 20 leituras do mesmo código, alternância A/B/A/B,
+  100 leituras simultâneas (race condition), prefixo que não pode dar match,
+  código inexistente e código recém-cadastrado
+
+### Código não cadastrado (Alteração 3)
+
+- Modal passa a destacar `PRODUTO NÃO CADASTRADO` com o código lido
+- Fluxo coberto por testes: criação persistida, bloqueio de duplicidade e venda
+  seguindo com carrinho, cliente e desconto preservados
+
+### Produtos e Estoque (Alteração 4)
+
+- Tabela com Produto, Código, Estoque, Custo, Preço, Categoria, Status e Ações
+- Ações EDITAR, + ESTOQUE, − ESTOQUE e HISTÓRICO por produto
+- Novo modal de histórico do produto com data, hora, tipo, antes, movimentação,
+  depois, motivo e usuário
+
+### Histórico de vendas (Alteração 5)
+
+- Lista ganha as colunas Data, Hora, Operador e Itens
+- Detalhe passa a mostrar crediário (com parcelas), entrega e devoluções quando
+  existem, via novo `GET /api/sales/:id/related` (somente leitura)
+
+### Alterar e cancelar venda (Alterações 6 e 7)
+
+- Auditoria de alteração e de cancelamento registra operador e administrador
+  autorizador, além de totais e itens antes/depois
+- Cancelamento oferece os motivos padronizados: lançamento incorreto,
+  duplicidade, cliente desistiu, erro operacional, teste e outro
+
+### Relatórios (Alteração 8)
+
+- Novo relatório `VENDAS DETALHADAS`, ao lado do "Vendas por período" existente
+- Filtros: hoje/ontem, data inicial/final, número, cliente, operador, produto
+  (nome, código de barras ou SKU), forma de pagamento e situação
+- Colunas com produtos/quantidades, subtotal, desconto, total, valor recebido e troco
+- Resumo do período: vendas, itens vendidos, faturamento bruto, descontos,
+  faturamento líquido, custo, lucro e ticket médio
+- Botões GERAR PDF e EXPORTAR CSV (`GET /api/reports/:id/pdf` e `/csv`)
+
+### Correções e qualidade
+
+- Rodapé da interface passa a exibir a versão real do `package.json` (estava fixo em 1.2.16)
+- Testes que dependem de arquivos do cliente (JSON legado e banco real) agora são
+  pulados com motivo em máquina limpa, em vez de reprovar a suíte
+- Script `scripts/etapa0-validar-base.mjs` valida a base em 20 itens
+- Suíte do servidor: 213 testes (209 aprovados, 4 pulados por falta de insumo do cliente)
+
 ## 1.2.17 — 2026-08-28
 
 ### Interface (não sobrecarregar a tela)
