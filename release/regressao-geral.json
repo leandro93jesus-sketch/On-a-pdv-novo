@@ -1,0 +1,133 @@
+{
+  "etapa": "Regressao geral — melhorias operacionais",
+  "total": 25,
+  "aprovados": 25,
+  "reprovados": 0,
+  "itens": [
+    {
+      "nome": "01. Abertura do sistema (API responde)",
+      "resultado": "PASS",
+      "detalhe": "versao=1.2.19"
+    },
+    {
+      "nome": "02. Login",
+      "resultado": "PASS",
+      "detalhe": ""
+    },
+    {
+      "nome": "03. Caixa: abertura",
+      "resultado": "PASS",
+      "detalhe": "id=1"
+    },
+    {
+      "nome": "04. Produtos: cadastro",
+      "resultado": "PASS",
+      "detalhe": "id=1"
+    },
+    {
+      "nome": "05. Estoque: entrada com antes/depois",
+      "resultado": "PASS",
+      "detalhe": "10 -> 15"
+    },
+    {
+      "nome": "06. Codigo de barras: match exato e prefixo sem resultado",
+      "resultado": "PASS",
+      "detalhe": "exato=1 prefixo=0"
+    },
+    {
+      "nome": "07. Consulta rapida / busca manual inteligente",
+      "resultado": "PASS",
+      "detalhe": "resultados=1"
+    },
+    {
+      "nome": "08. Cadastro de codigo desconhecido durante a venda",
+      "resultado": "PASS",
+      "detalhe": "criado id=2"
+    },
+    {
+      "nome": "09. Carrinho e venda concluida",
+      "resultado": "PASS",
+      "detalhe": "total=3750"
+    },
+    {
+      "nome": "10. Troco",
+      "resultado": "PASS",
+      "detalhe": "recebido=5000 total=3750 troco=1250"
+    },
+    {
+      "nome": "11. Pagamento misto com troco so sobre a parte em dinheiro",
+      "resultado": "PASS",
+      "detalhe": "troco=250"
+    },
+    {
+      "nome": "12. Estoque baixa na venda",
+      "resultado": "PASS",
+      "detalhe": "15 -> 13"
+    },
+    {
+      "nome": "13. Caixa registra vendas por forma",
+      "resultado": "PASS",
+      "detalhe": "dinheiro=5500"
+    },
+    {
+      "nome": "14. Fechamento: valor esperado ignora pix/cartao/crediario",
+      "resultado": "PASS",
+      "detalhe": "esperado=15500"
+    },
+    {
+      "nome": "15. Fechamento: resumo com vendas, itens, bruto, descontos e liquido",
+      "resultado": "PASS",
+      "detalhe": "vendas=2 itens=2"
+    },
+    {
+      "nome": "16. Historico: lista, detalhe e dados relacionados",
+      "resultado": "PASS",
+      "detalhe": "vendas=2"
+    },
+    {
+      "nome": "17. Alteracao de venda com PIN",
+      "resultado": "PASS",
+      "detalhe": "total=7500"
+    },
+    {
+      "nome": "18. Cancelamento com estorno",
+      "resultado": "PASS",
+      "detalhe": ""
+    },
+    {
+      "nome": "19. Relatorios: catalogo, vendas detalhadas e vendas por periodo",
+      "resultado": "PASS",
+      "detalhe": "relatorios=28 linhas=2"
+    },
+    {
+      "nome": "20. Impressao: fila e configuracao de impressoras",
+      "resultado": "PASS",
+      "detalhe": "job=201"
+    },
+    {
+      "nome": "21. PDF de venda, de relatorio e de fechamento + CSV",
+      "resultado": "PASS",
+      "detalhe": "venda=2084B relatorio=2340B fechamento=2846B"
+    },
+    {
+      "nome": "22. Reimpressao/PDF sao somente leitura",
+      "resultado": "PASS",
+      "detalhe": "{\"sales\":2,\"items\":2,\"payments\":3,\"stock\":14}"
+    },
+    {
+      "nome": "23. Backup",
+      "resultado": "PASS",
+      "detalhe": "onca-pdv-backup-2026-08-31-012449.db"
+    },
+    {
+      "nome": "24. Firebase: nao ha integracao neste projeto (local-first SQLite)",
+      "resultado": "PASS",
+      "detalhe": "nada a validar nem a quebrar"
+    },
+    {
+      "nome": "25. Integridade do banco",
+      "resultado": "PASS",
+      "detalhe": "integrity=ok fk=0"
+    }
+  ]
+}
