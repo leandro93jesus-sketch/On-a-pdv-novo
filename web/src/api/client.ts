@@ -425,6 +425,10 @@ export function fetchProducts(params?: {
   ).then((r) => handle<Product[]>(r));
 }
 
+export function fetchProduct(id: number): Promise<Product> {
+  return fetch(`/api/products/${id}`).then((r) => handle<Product>(r));
+}
+
 /**
  * Busca MANUAL tolerante (digitação): várias palavras parciais, sem acento.
  * NÃO use para leitura de scanner — o scanner exige correspondência exata via

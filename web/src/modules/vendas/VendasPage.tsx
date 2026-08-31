@@ -5,6 +5,7 @@ import {
   createSale,
   createStockMovement,
   fetchOpenCash,
+  fetchProduct,
   fetchProducts,
   fetchProductsManual,
   fetchSale,
@@ -32,6 +33,7 @@ import SalesHistoryModal from './SalesHistoryModal';
 import AdminAuthModal, { CANCEL_REASON_OPTIONS } from './AdminAuthModal';
 import {
   clearDraft,
+  draftSummary,
   getMemoryDraft,
   hasOpenSaleContent,
   loadPersistedDraft,
@@ -196,6 +198,70 @@ export default function VendasPage() {
     clearDeliveryFields();
     requestIdRef.current = null;
     clearDraft();
+  }
+
+  /**
+   * Recupera o rascunho conferindo antes se os produtos ainda existem. Produto
+   * apagado sai do carrinho com aviso; preço alterado é atualizado e avisado.
+   * Nunca travar o PDV por causa disso: no pior caso recupera como estava.
+   */
+  async function recoverDraft(draft: SaleDraft) {
+    let recuperado = draft;
+    const avisos: string[] = [];
+    try {
+      const comProduto = draft.cart.filter((l) => l.productId != null);
+      const atuais = await Promise.all(
+        comProduto.map((l) =>
+          fetchProduct(l.productId as number)
+            .then((p) => ({ id: l.productId as number, product: p }))
+            .catch(() => ({ id: l.productId as number, product: null }))
+        )
+      );
+      const porId = new Map(atuais.map((a) => [a.id, a.product]));
+
+      const cart = draft.cart.filter((l) => {
+        if (l.productId == null) return true;
+        const atual = porId.get(l.productId);
+        if (!atual) {
+          avisos.push(`"${l.name}" não está mais cadastrado e saiu do carrinho.`);
+          return false;
+        }
+        return true;
+      });
+
+      const cartAtualizado = cart.map((l) => {
+        if (l.productId == null) return l;
+        const atual = porId.get(l.productId);
+        if (!atual) return l;
+        if (atual.price_cents !== l.unitPriceCents) {
+          avisos.push(
+            `"${l.name}" mudou de ${formatBRL(l.unitPriceCents)} para ${formatBRL(atual.price_cents)}.`
+          );
+        }
+        return {
+          ...l,
+          name: atual.name,
+          unitPriceCents: atual.price_cents,
+          stockQty: atual.stock_qty,
+          allowNegative: Boolean(atual.allow_negative_stock),
+        };
+      });
+
+      recuperado = { ...draft, cart: cartAtualizado };
+    } catch {
+      avisos.push('Não foi possível conferir os produtos agora. Revise o carrinho antes de concluir.');
+    }
+
+    applyDraft(recuperado);
+    saveDraft({ ...recuperado, updatedAt: new Date().toISOString() });
+    setPendingRecovery(null);
+    setShowRecovery(false);
+    setNotice(
+      avisos.length
+        ? `Venda recuperada, mas confira: ${avisos.join(' ')}`
+        : 'Venda recuperada. Continue de onde parou.'
+    );
+    focusSearch();
   }
 
   function buildCurrentDraft(): SaleDraft {
@@ -1548,13 +1614,11 @@ export default function VendasPage() {
       {showRecovery && pendingRecovery && (
         <SaleRecoveryModal
           itemCount={pendingRecovery.cart.length}
+          unitCount={draftSummary(pendingRecovery).unitCount}
+          approxTotalCents={draftSummary(pendingRecovery).approxTotalCents}
+          time={draftSummary(pendingRecovery).time}
           onRecover={() => {
-            applyDraft(pendingRecovery);
-            saveDraft({ ...pendingRecovery, updatedAt: new Date().toISOString() });
-            setPendingRecovery(null);
-            setShowRecovery(false);
-            setNotice('Venda recuperada. Continue de onde parou.');
-            focusSearch();
+            void recoverDraft(pendingRecovery);
           }}
           onDiscard={() => {
             clearDraft();
