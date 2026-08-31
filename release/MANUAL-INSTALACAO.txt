@@ -1,0 +1,44 @@
+ONÇA PDV 1.2.18 — MANUAL SIMPLES DE INSTALAÇÃO
+==================================================
+
+REQUISITOS
+- Windows 10 ou 11 (64 bits)
+- Cerca de 400 MB livres no disco
+
+INSTALAR PELA PRIMEIRA VEZ
+1. Feche o ONÇA PDV se estiver aberto.
+2. Dê dois cliques em ONCA-PDV-SETUP.exe.
+3. Se o Windows mostrar o aviso azul do SmartScreen (o instalador não tem
+   assinatura digital paga), clique em "Mais informações" e depois em
+   "Executar assim mesmo".
+4. Siga o assistente. Você pode escolher a pasta de instalação.
+5. Ao terminar, abra o sistema pelo atalho "ONÇA PDV" na Área de Trabalho
+   (também fica no Menu Iniciar).
+6. Entre com o usuário administrador e troque a senha quando for solicitado.
+
+ATUALIZAR UM COMPUTADOR QUE JÁ USA O SISTEMA
+1. Feche o ONÇA PDV.
+2. Execute o ONCA-PDV-SETUP.exe da versão nova por cima.
+3. O instalador troca apenas os arquivos do programa.
+   Vendas, produtos, clientes, estoque e configurações NÃO são apagados.
+4. Abra o sistema e confira o histórico de vendas para ter certeza.
+
+ONDE FICAM OS DADOS
+%APPDATA%\onca-pdv\ONCA-PDV\onca-pdv.db
+
+Essa pasta fica fora da pasta do programa de propósito: assim atualizar ou
+desinstalar não apaga o movimento da loja.
+
+LEVAR OS DADOS PARA OUTRO COMPUTADOR
+1. No computador antigo, abra o módulo Backup e gere o backup
+   (arquivo onca-pdv-backup-AAAA-MM-DD-HHMMSS.db).
+2. Copie esse arquivo para a MESMA pasta onde está o ONCA-PDV-SETUP.exe.
+3. Instale no computador novo. Na primeira abertura o sistema encontra o backup:
+   - se o computador novo não tem banco, ele pergunta se deve carregar o backup;
+   - se já tem dados, mostra a comparação e não sobrescreve nada sem confirmação.
+
+SE ALGO DER ERRADO
+- Reinstale por cima: o banco não é tocado.
+- O módulo Backup permite restaurar um backup anterior a qualquer momento.
+
+Versão: 1.2.18 (build 2026.08.30-continuacao-vendas-relatorios)

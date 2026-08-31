@@ -1,6 +1,6 @@
 {
   "etapa": "ETAPA 0 — base funcional",
-  "versao": "1.2.17",
+  "versao": "1.2.18",
   "total": 20,
   "aprovados": 20,
   "reprovados": 0,
@@ -9,13 +9,13 @@
       "n": 1,
       "name": "API inicia e responde /api/health",
       "result": "PASS",
-      "detail": "status=200 versao=1.2.17"
+      "detail": "status=200 versao=1.2.18"
     },
     {
       "n": 4,
       "name": "Conexao SQLite ativa",
       "result": "PASS",
-      "detail": "arquivo=/tmp/onca-etapa0-6Ph0JJ/etapa0.db"
+      "detail": "arquivo=/tmp/onca-etapa0-mXsdAM/etapa0.db"
     },
     {
       "n": 5,
@@ -111,7 +111,7 @@
       "n": 19,
       "name": "Backup/checkpoint da versao funcional",
       "result": "PASS",
-      "detail": "status=201 arquivo=onca-pdv-backup-2026-08-30-220502.db"
+      "detail": "status=201 arquivo=onca-pdv-backup-2026-08-31-000430.db"
     },
     {
       "n": 20,

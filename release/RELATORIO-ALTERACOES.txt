@@ -1,0 +1,86 @@
+ONÇA PDV 1.2.18 — RELATÓRIO DAS ALTERAÇÕES
+================================================
+Build: 2026.08.30-continuacao-vendas-relatorios
+Gerado em: 2026-08-31T00:04:30.255Z
+
+REGRA SEGUIDA: continuar o projeto existente. Nada foi reconstruído, nenhum
+módulo foi removido, o layout (barra lateral verde, vendas com produtos ao
+centro e carrinho à direita) foi preservado e o banco não foi apagado.
+
+ETAPA 0 — BASE VALIDADA ANTES DE MEXER
+- script scripts/etapa0-validar-base.mjs: 20 itens conferidos (API, SQLite,
+  integrity_check, venda completa gravando sales / sale_items / sale_payments /
+  stock_movements, histórico, produtos-estoque, caixa, relatórios, backup)
+- checkpoint git: checkpoint-base-funcional
+
+ALTERAÇÃO 1 — TROCO AUTOMÁTICO  (checkpoint-troco-ok)
+- Já existia: total, valor recebido e troco calculados a cada digitação, com
+  bloqueio de conclusão quando o dinheiro é insuficiente.
+- Completado: rótulo e mensagem passam a mostrar "FALTAM R$ XX,XX"; ao escolher
+  DINHEIRO o foco vai automaticamente para o campo Valor recebido.
+- Mantido: pix/débito/crédito sem troco; misto calcula troco só sobre a parte
+  em dinheiro.
+
+ALTERAÇÃO 2 — LEITOR DE CÓDIGO DE BARRAS  (checkpoint-scanner-ok)
+- Já existia: consulta por barcode com igualdade exata (SQL "barcode = ?"),
+  trava contra Enter/handler duplicado e acúmulo de quantidade por ID do produto.
+- Completado: suíte que prova o cenário relatado — 20 leituras do mesmo código,
+  alternância A/B/A/B, 100 leituras disparadas em paralelo, prefixo que não pode
+  dar match, código inexistente e código recém-cadastrado.
+
+ALTERAÇÃO 3 — CÓDIGO NÃO CADASTRADO  (checkpoint-cadastro-rapido-ok)
+- Já existia: modal de cadastro rápido abrindo dentro da venda com o código
+  preenchido, reconsulta antes de criar (evita duplicidade) e botão
+  "Cadastrar e adicionar".
+- Completado: título "PRODUTO NÃO CADASTRADO" com o código lido em destaque e
+  suíte cobrindo persistência, duplicidade e continuidade da venda (carrinho,
+  cliente e desconto preservados).
+
+ALTERAÇÃO 4 — PRODUTOS E ESTOQUE  (checkpoint-estoque-ok)
+- Já existia: área única com busca, cadastro, edição e ajuste de saldo.
+- Completado: colunas Produto, Código, Estoque, Custo, Preço, Categoria, Status,
+  Ações; botões EDITAR, + ESTOQUE, - ESTOQUE e HISTÓRICO; modal de histórico do
+  produto com data, hora, tipo, antes, movimentação, depois, motivo e usuário.
+- Toda movimentação continua gravando stock_movements com saldo antes/depois.
+
+ALTERAÇÃO 5 — HISTÓRICO DETALHADO  (checkpoint-historico-ok)
+- Já existia: filtros, detalhe com itens, resumo, recebido, troco, observação e
+  ações de reimprimir / PDF / WhatsApp / alterar / cancelar.
+- Completado: colunas Data, Hora, Operador e Itens na lista; novo endpoint
+  somente-leitura GET /api/sales/:id/related trazendo crediário (com parcelas),
+  entrega e devoluções, exibidos no detalhe quando existem.
+
+ALTERAÇÃO 6 — ALTERAR VENDA CONCLUÍDA  (checkpoint-alteracao-venda-ok)
+- Já existia: autorização por PIN validado no servidor (nunca no frontend, nunca
+  em log), recálculo de itens, estoque, caixa e crediário, marcação "Alterada".
+- Completado: auditoria passa a registrar operador e administrador autorizador,
+  além de totais e itens antes/depois.
+
+ALTERAÇÃO 7 — CANCELAR / EXCLUIR VENDA  (checkpoint-cancelamento-venda-ok)
+- Já existia: status "cancelada" (a venda não é apagada), estorno de estoque com
+  movimentação própria, correção de caixa, cancelamento do crediário e
+  idempotência contra duplo cancelamento.
+- Completado: lista padronizada de motivos (lançamento incorreto, duplicidade,
+  cliente desistiu, erro operacional, teste, outro) com campo livre em "Outro".
+
+ALTERAÇÃO 8 — RELATÓRIO DE VENDAS DETALHADAS  (checkpoint-relatorios-ok)
+- Criado o relatório "Vendas detalhadas" AO LADO do "Vendas por período" que já
+  existia (o antigo não foi alterado).
+- Filtros: hoje, ontem, data inicial/final, número da venda, cliente, operador,
+  produto (nome, código de barras ou SKU), forma de pagamento e situação.
+- Colunas: nº, data, hora, cliente, operador, produtos/quantidades, itens,
+  subtotal, desconto, total, forma de pagamento, valor recebido, troco, situação.
+- Resumo do período: vendas, itens vendidos, faturamento bruto, descontos,
+  faturamento líquido, custo, lucro e ticket médio.
+- Exportação: GERAR PDF e EXPORTAR CSV (endpoints /api/reports/:id/pdf e /csv).
+- Clicar na venda abre os detalhes completos.
+
+CORREÇÕES DE APOIO
+- O rodapé da interface mostrava 1.2.16 fixo enquanto a API respondia outra
+  versão; agora a versão vem do package.json no build.
+- Testes que dependem de arquivos do cliente (JSON legado e banco real) passam a
+  ser pulados com motivo em máquina limpa, em vez de reprovar a suíte.
+
+BANCO DE DADOS
+- Nenhuma migration destrutiva. A última migration da série (024) já existia.
+- integrity_check e foreign_key_check conferidos antes e depois dos testes.
