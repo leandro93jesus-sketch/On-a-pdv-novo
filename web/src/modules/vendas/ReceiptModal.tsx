@@ -9,8 +9,7 @@ import {
 } from '../../api/client';
 import BrandLogo from '../../components/BrandLogo';
 import ChoosePrinterModal, { type ChoosePrinterResult } from '../../components/ChoosePrinterModal';
-import { printDocument } from '../../lib/printDocument';
-import { savePdfToComputer } from '../../lib/savePdf';
+import { printSaleReceipt, saveSaleReceiptPdf } from '../../lib/saleDocuments';
 
 interface Props {
   sale: Sale;
@@ -55,11 +54,7 @@ export default function ReceiptModal({
     setPrintBusy(true);
     setPrintNote(null);
     try {
-      const res = await printDocument({
-        kind: 'receipt',
-        title: `Comprovante ${sale.sale_number}`,
-        documentType: 'comprovante',
-        documentRef: sale.sale_number,
+      const res = await printSaleReceipt(sale, {
         printerName: choice.printerName || undefined,
         paperFormat: choice.paperFormat,
       });
@@ -113,13 +108,8 @@ export default function ReceiptModal({
   async function savePdfDisk() {
     setWaNote(null);
     try {
-      const meta = await ensurePdf(false);
-      const result = await savePdfToComputer({
-        suggestedName: meta.filename || `ONCA-VENDA-${sale.sale_number}.pdf`,
-        downloadUrl: meta.download_url || buildReceiptPdfUrl(sale.id, { download: true }),
-        absolutePath: meta.absolute_path,
-        title: 'Salvar comprovante em PDF',
-      });
+      const result = await saveSaleReceiptPdf(sale);
+      const meta = result.meta as ReceiptPdfMeta;
       if (result.canceled) {
         setWaNote('Salvar PDF cancelado.');
         return;

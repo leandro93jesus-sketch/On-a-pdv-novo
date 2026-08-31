@@ -14,6 +14,8 @@ import {
   type SaleRelated,
 } from '../../api/client';
 import ReceiptModal from './ReceiptModal';
+import ChoosePrinterModal from '../../components/ChoosePrinterModal';
+import { printSaleReceipt, saveSaleReceiptPdf } from '../../lib/saleDocuments';
 import AdminAuthModal, { CANCEL_REASON_OPTIONS } from './AdminAuthModal';
 import CustomerPicker from './CustomerPicker';
 
@@ -67,6 +69,8 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<Sale | null>(null);
   const [related, setRelated] = useState<SaleRelated | null>(null);
+  const [reprintSale, setReprintSale] = useState<Sale | null>(null);
+  const [quickBusyId, setQuickBusyId] = useState<number | null>(null);
   const [receipt, setReceipt] = useState<Sale | null>(null);
 
   const [authMode, setAuthMode] = useState<null | 'amend' | 'cancel'>(null);
@@ -137,6 +141,30 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
         .catch(() => setRelated(null));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao abrir venda');
+    }
+  }
+
+  /** PDF direto da linha. Somente leitura: não altera venda, estoque nem caixa. */
+  async function quickPdf(sale: Sale) {
+    setQuickBusyId(sale.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await saveSaleReceiptPdf(sale);
+      if (res.canceled) return;
+      if (!res.ok) {
+        setError(res.error || 'Não foi possível gerar o PDF.');
+        return;
+      }
+      setNotice(
+        res.filePath
+          ? `PDF da venda ${sale.sale_number} salvo em ${res.filePath}. A venda não foi alterada.`
+          : `PDF da venda ${sale.sale_number} gerado. A venda não foi alterada.`
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao gerar PDF');
+    } finally {
+      setQuickBusyId(null);
     }
   }
 
@@ -388,7 +416,23 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
                   </td>
                   <td className="row-actions">
                     <button type="button" className="btn btn-primary" onClick={() => void openDetail(s.id)}>
-                      Abrir
+                      VER
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      disabled={quickBusyId === s.id}
+                      onClick={() => setReprintSale(s)}
+                    >
+                      REIMPRIMIR
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      disabled={quickBusyId === s.id}
+                      onClick={() => void quickPdf(s)}
+                    >
+                      {quickBusyId === s.id ? '…' : 'PDF'}
                     </button>
                   </td>
                 </tr>
@@ -668,6 +712,29 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
             </div>
           </div>
         </div>
+      )}
+
+      {reprintSale && (
+        <ChoosePrinterModal
+          kind="receipt"
+          title={`Reimprimir comprovante ${reprintSale.sale_number}`}
+          onCancel={() => setReprintSale(null)}
+          onConfirm={(choice) => {
+            const sale = reprintSale;
+            setReprintSale(null);
+            setQuickBusyId(sale.id);
+            void printSaleReceipt(sale, {
+              printerName: choice.printerName || undefined,
+              paperFormat: choice.paperFormat,
+              reprint: true,
+            })
+              .then((res) => {
+                if (res.ok) setNotice(`Reimpressão enviada: venda ${sale.sale_number}.`);
+                else setError(res.error || 'Não foi possível reimprimir.');
+              })
+              .finally(() => setQuickBusyId(null));
+          }}
+        />
       )}
 
       {receipt && (
