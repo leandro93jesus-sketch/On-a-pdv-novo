@@ -6,6 +6,7 @@ import {
   getProductById,
   listProductPriceHistory,
   searchProducts,
+  searchProductsManual,
   updateProduct,
 } from '../services/productsService.js';
 import {
@@ -31,6 +32,27 @@ router.get('/', (req, res, next) => {
       includeInactive,
     });
     res.json(products);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Busca MANUAL tolerante (várias palavras, sem acento, parcial), usada quando o
+ * operador digita. A leitura do scanner NÃO passa por aqui: ela continua em
+ * GET / com ?barcode=, que é correspondência exata.
+ */
+router.get('/busca-manual', (req, res, next) => {
+  try {
+    const includeInactive =
+      req.query.include_inactive === '1' || req.query.include_inactive === 'true';
+    res.json(
+      searchProductsManual({
+        q: req.query.q,
+        includeInactive,
+        limit: req.query.limit,
+      })
+    );
   } catch (err) {
     next(err);
   }

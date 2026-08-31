@@ -115,6 +115,89 @@ export function searchProducts({
   return rows.map(mapProduct);
 }
 
+/** Remove acentos e baixa a caixa, para comparação tolerante na busca manual. */
+function normalizeSearchText(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Busca MANUAL (digitada) com tolerância: várias palavras parciais, sem acento e
+ * sem caixa, procurando em nome, código interno, código de barras, categoria e
+ * fornecedor. Os resultados são ordenados por proximidade.
+ *
+ * ATENÇÃO: esta função é exclusiva da digitação manual. A leitura do scanner
+ * continua usando searchProducts({ barcode }) / getProductByBarcode, que exigem
+ * correspondência EXATA — nunca aproximada.
+ */
+export function searchProductsManual({ q, includeInactive = false, limit = 30 } = {}) {
+  const termo = String(q ?? '').trim();
+  if (!termo) return [];
+
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT ${PRODUCT_FIELDS}
+       FROM products p
+       LEFT JOIN suppliers s ON s.id = p.supplier_id
+       ${includeInactive ? '' : 'WHERE p.active = 1'}`
+    )
+    .all();
+
+  const alvo = normalizeSearchText(termo);
+  const tokens = alvo.split(/\s+/).filter(Boolean);
+  const somenteDigitos = /^[0-9]+$/.test(alvo);
+
+  const pontuados = [];
+  for (const row of rows) {
+    const nome = normalizeSearchText(row.name);
+    const sku = normalizeSearchText(row.sku);
+    const barras = normalizeSearchText(row.barcode);
+    const categoria = normalizeSearchText(row.category);
+    const fornecedor = normalizeSearchText(row.supplier_name);
+    const tudo = `${nome} ${sku} ${barras} ${categoria} ${fornecedor}`;
+
+    let pontos = 0;
+
+    // Acertos exatos vêm primeiro, mesmo na busca manual.
+    if (barras && barras === alvo) pontos += 1000;
+    if (sku && sku === alvo) pontos += 900;
+    if (nome === alvo) pontos += 800;
+
+    if (somenteDigitos) {
+      if (barras.startsWith(alvo)) pontos += 300;
+      if (sku.startsWith(alvo)) pontos += 250;
+    }
+
+    // Todas as palavras digitadas precisam aparecer em algum campo.
+    const todasNoNome = tokens.every((t) => nome.includes(t));
+    const todasEmAlgumCampo = tokens.every((t) => tudo.includes(t));
+    if (todasNoNome) {
+      pontos += 400;
+      if (nome.startsWith(tokens[0])) pontos += 120;
+      // palavras completas valem mais que pedaços de palavra
+      const palavrasDoNome = nome.split(/\s+/);
+      pontos += tokens.filter((t) => palavrasDoNome.includes(t)).length * 40;
+      // quanto mais curto o nome, mais próximo do que foi digitado
+      pontos += Math.max(0, 60 - nome.length);
+    } else if (todasEmAlgumCampo) {
+      pontos += 200;
+      pontos += tokens.filter((t) => categoria.includes(t) || fornecedor.includes(t)).length * 20;
+    } else {
+      continue;
+    }
+
+    pontuados.push({ row, pontos });
+  }
+
+  pontuados.sort((a, b) => b.pontos - a.pontos || a.row.name.localeCompare(b.row.name, 'pt-BR'));
+  const max = Math.min(Math.max(Number(limit) || 30, 1), 300);
+  return pontuados.slice(0, max).map((p) => mapProduct(p.row));
+}
+
 export function getProductById(id) {
   const db = getDb();
   const row = db

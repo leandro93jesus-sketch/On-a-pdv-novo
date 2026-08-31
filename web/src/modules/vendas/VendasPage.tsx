@@ -6,6 +6,7 @@ import {
   createStockMovement,
   fetchOpenCash,
   fetchProducts,
+  fetchProductsManual,
   fetchSale,
   formatBRL,
   markQuoteConvertedApi,
@@ -231,8 +232,18 @@ export default function VendasPage() {
     Boolean(receipt);
   const showSuggestions = query.trim().length > 0;
 
-  async function searchProducts(q?: string, barcode?: string) {
-    const list = await fetchProducts({ q, barcode });
+  /**
+   * Busca MANUAL (o operador digitou). Usa a busca tolerante do servidor.
+   * A leitura do scanner não passa por aqui: ela vai direto em
+   * fetchProducts({ barcode }), com correspondência exata.
+   */
+  async function searchProducts(q?: string) {
+    const termo = String(q ?? '').trim();
+    if (!termo) {
+      setSuggestions([]);
+      return [];
+    }
+    const list = await fetchProductsManual({ q: termo, limit: SUGGESTION_LIMIT });
     setSuggestions(list.slice(0, SUGGESTION_LIMIT));
     setHighlightIdx(0);
     return list;

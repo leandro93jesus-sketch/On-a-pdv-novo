@@ -425,6 +425,25 @@ export function fetchProducts(params?: {
   ).then((r) => handle<Product[]>(r));
 }
 
+/**
+ * Busca MANUAL tolerante (digitação): várias palavras parciais, sem acento.
+ * NÃO use para leitura de scanner — o scanner exige correspondência exata via
+ * fetchProducts({ barcode }).
+ */
+export function fetchProductsManual(params: {
+  q: string;
+  include_inactive?: boolean;
+  limit?: number;
+}): Promise<Product[]> {
+  return fetch(
+    `/api/products/busca-manual${qs({
+      q: params.q,
+      include_inactive: params.include_inactive ? '1' : undefined,
+      limit: params.limit,
+    })}`
+  ).then((r) => handle<Product[]>(r));
+}
+
 export function createProduct(payload: Record<string, unknown>): Promise<Product> {
   return apiFetch('/api/products', {
     method: 'POST',
