@@ -15,7 +15,7 @@
       "n": 4,
       "name": "Conexao SQLite ativa",
       "result": "PASS",
-      "detail": "arquivo=/tmp/onca-etapa0-mXsdAM/etapa0.db"
+      "detail": "arquivo=/tmp/onca-etapa0-bNPH5y/etapa0.db"
     },
     {
       "n": 5,
@@ -111,7 +111,7 @@
       "n": 19,
       "name": "Backup/checkpoint da versao funcional",
       "result": "PASS",
-      "detail": "status=201 arquivo=onca-pdv-backup-2026-08-31-000430.db"
+      "detail": "status=201 arquivo=onca-pdv-backup-2026-08-31-012152.db"
     },
     {
       "n": 20,
