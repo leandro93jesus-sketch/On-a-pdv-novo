@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { NAV_ITEMS } from '../navigation';
 import { clearAuth, getStoredAuthUser, logoutApi } from '../api/client';
 import BrandLogo from '../components/BrandLogo';
+import { APP_VERSION } from '../appVersion';
 
 function titleForPath(pathname: string) {
   const item = NAV_ITEMS.find((n) => n.path === pathname);
@@ -47,7 +48,7 @@ export default function AppShell() {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="sidebar-version">ONÇA PDV {__APP_VERSION__}</div>
+          <div className="sidebar-version">ONÇA PDV {APP_VERSION}</div>
           {user ? (
             <div className="sidebar-user">
               <span title={user.role}>{user.name || user.login}</span>
