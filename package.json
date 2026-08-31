@@ -50,6 +50,7 @@
     "validar:base": "node scripts/etapa0-validar-base.mjs",
     "testar:instalador": "node scripts/testar-instalador-windows.mjs",
     "entrega:final": "node scripts/montar-entrega.mjs",
+    "entrega:artefatos": "node scripts/montar-release-final.mjs",
     "test:sidecar-pendrive": "node scripts/test-sidecar-pendrive-flow.mjs",
     "desktop:pack:linux": "npm run build && npm run desktop:prepare:linux && npm run desktop:dist:linux && npm run desktop:linux:portable",
     "desktop:portable:readme": "node scripts/write-portable-readme.mjs",

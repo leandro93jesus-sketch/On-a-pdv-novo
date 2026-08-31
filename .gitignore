@@ -24,6 +24,9 @@ release/final/_backup-source-*/
 
 # Entrega final (release/ONCA-PDV-FINAL.zip é versionado com git add -f;
 # o instalador solto e as pastas de verificação são gerados)
+release-final/
+release/ONCA-PDV-CODIGO-FONTE-COMPLETO.zip
+release/release-final.json
 release/TESTE-ZIP-EXTRAIDO/
 release/ENTREGA-FINAL/
 release/ENTREGA-RELATORIO.json
