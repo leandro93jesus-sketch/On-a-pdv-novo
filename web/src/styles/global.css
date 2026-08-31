@@ -1192,6 +1192,18 @@ select.field-input {
   color: var(--brand);
 }
 
+/* Linha de destaque do fechamento (total vendido, esperado, diferença) */
+.cash-line-strong {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  padding-top: 6px;
+}
+
+.cash-line-strong strong {
+  font-size: 1.15rem;
+  color: var(--brand);
+}
+
 .customer-bar {
   background: var(--surface);
   border: 1px solid var(--border);

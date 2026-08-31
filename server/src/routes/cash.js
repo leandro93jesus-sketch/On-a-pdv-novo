@@ -10,6 +10,10 @@ import {
   registerCashMovement,
   reprintCashClosing,
 } from '../services/cashService.js';
+import {
+  buildCashClosingFilename,
+  buildCashClosingPdf,
+} from '../services/cashClosingPdfService.js';
 import { requireAdminSensitive } from '../middleware/auth.js';
 
 const router = Router();
@@ -50,6 +54,22 @@ router.get('/sessions/:id/movements', (req, res, next) => {
 router.get('/sessions/:id/reprint', (req, res, next) => {
   try {
     res.json(reprintCashClosing(Number(req.params.id)));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PDF do fechamento (somente leitura; não altera caixa nem venda).
+router.get('/sessions/:id/pdf', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const buffer = await buildCashClosingPdf(id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `${req.query.download ? 'attachment' : 'inline'}; filename="${buildCashClosingFilename(id)}"`
+    );
+    res.send(buffer);
   } catch (err) {
     next(err);
   }

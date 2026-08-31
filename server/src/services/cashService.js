@@ -342,6 +342,60 @@ export function getCashConference(sessionId) {
          AND sp.method = 'cartao'`
     )
     .get(Number(sessionId));
+
+  // Complementos SOMENTE de leitura para o fechamento ficar claro. Nenhum valor
+  // ou regra existente muda: expected_amount_cents continua vindo de
+  // computeExpectedCash e os totais da sessão seguem como estão.
+  const vendas = db
+    .prepare(
+      `SELECT COUNT(*) AS vendas,
+              COALESCE(SUM(s.subtotal_cents), 0) AS bruto_cents,
+              COALESCE(SUM(s.discount_cents), 0) AS descontos_cents,
+              COALESCE(SUM(s.total_cents), 0) AS liquido_cents,
+              COALESCE((SELECT SUM(si.quantity) FROM sale_items si
+                        INNER JOIN sales s2 ON s2.id = si.sale_id
+                        WHERE s2.cash_session_id = ? AND s2.status = 'completed'), 0) AS itens
+       FROM sales s
+       WHERE s.cash_session_id = ? AND s.status = 'completed'`
+    )
+    .get(Number(sessionId), Number(sessionId));
+
+  const outras = db
+    .prepare(
+      `SELECT COALESCE(SUM(sp.amount_cents), 0) AS cents
+       FROM sale_payments sp
+       INNER JOIN sales s ON s.id = sp.sale_id
+       WHERE s.cash_session_id = ?
+         AND s.status = 'completed'
+         AND sp.method NOT IN ('dinheiro', 'pix', 'cartao', 'crediario')`
+    )
+    .get(Number(sessionId));
+
+  const porTipo = db
+    .prepare(
+      `SELECT movement_type, COALESCE(SUM(amount_cents), 0) AS cents
+       FROM cash_movements
+       WHERE cash_session_id = ?
+       GROUP BY movement_type`
+    )
+    .all(Number(sessionId));
+  const somaTipo = (tipos) =>
+    porTipo.filter((m) => tipos.includes(m.movement_type)).reduce((a, m) => a + Number(m.cents || 0), 0);
+
+  // Dinheiro devolvido ao cliente por cancelamento nesta sessão. Já está fora de
+  // sales_dinheiro_cents (recordSaleCancelOnCash desconta na hora); aqui só é
+  // exibido para o operador entender a composição da gaveta.
+  const canceladasDinheiro = db
+    .prepare(
+      `SELECT COALESCE(SUM(sp.amount_cents), 0) AS cents
+       FROM sale_payments sp
+       INNER JOIN sales s ON s.id = sp.sale_id
+       WHERE s.cash_session_id = ?
+         AND s.status = 'cancelled'
+         AND sp.method = 'dinheiro'`
+    )
+    .get(Number(sessionId));
+
   return {
     session,
     expected_amount_cents: expected,
@@ -355,8 +409,17 @@ export function getCashConference(sessionId) {
       sales_cartao_debito_cents: Number(cardSplit?.debit_cents || 0),
       sales_cartao_legado_cents: Number(cardSplit?.legacy_cents || 0),
       sales_crediario_cents: session.sales_crediario_cents || 0,
+      sales_outras_cents: Number(outras?.cents || 0),
       cash_in_cents: session.cash_in_cents,
       cash_out_cents: session.cash_out_cents,
+      suprimentos_cents: somaTipo(['suprimento', 'entrada']),
+      sangrias_cents: somaTipo(['sangria', 'saida']),
+      cancelamentos_dinheiro_cents: Number(canceladasDinheiro?.cents || 0),
+      sales_count: Number(vendas?.vendas || 0),
+      items_sold: Number(vendas?.itens || 0),
+      gross_cents: Number(vendas?.bruto_cents || 0),
+      discount_cents: Number(vendas?.descontos_cents || 0),
+      net_cents: Number(vendas?.liquido_cents || 0),
       expected_amount_cents: expected,
       counted_amount_cents: session.counted_amount_cents,
       difference_cents: session.difference_cents,

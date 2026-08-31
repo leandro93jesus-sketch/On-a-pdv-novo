@@ -12,6 +12,9 @@ import {
   type CashSession,
 } from '../../api/client';
 import { ModuleToolbar, StatusPill } from '../../components/ModuleChrome';
+import ChoosePrinterModal from '../../components/ChoosePrinterModal';
+import { printDocument } from '../../lib/printDocument';
+import { savePdfToComputer } from '../../lib/savePdf';
 
 export default function CaixaPage() {
   const [current, setCurrent] = useState<CashSession | null>(null);
@@ -30,6 +33,8 @@ export default function CaixaPage() {
     expected_amount_cents: number;
     breakdown: Record<string, number>;
   } | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [choosePrinter, setChoosePrinter] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [operator, setOperator] = useState('Operador');
@@ -79,6 +84,37 @@ export default function CaixaPage() {
     () => (expectedCents != null ? formatBRL(expectedCents) : '—'),
     [expectedCents]
   );
+
+  const b = conference?.breakdown;
+  const cents = (key: string) => Number(b?.[key] ?? 0);
+
+  /** FALTA / SOBRA / CAIXA CORRETO, em texto direto para o operador. */
+  const diffLabel =
+    liveDiffCents == null
+      ? '—'
+      : liveDiffCents === 0
+        ? 'CAIXA CORRETO'
+        : liveDiffCents > 0
+          ? `SOBRA ${formatBRL(liveDiffCents)}`
+          : `FALTA ${formatBRL(Math.abs(liveDiffCents))}`;
+
+  async function handleClosingPdf() {
+    if (!current) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const res = await savePdfToComputer({
+        suggestedName: `onca-pdv-fechamento-caixa-${current.id}.pdf`,
+        downloadUrl: `/api/cash/sessions/${current.id}/pdf?download=1`,
+        title: 'Salvar fechamento de caixa em PDF',
+      });
+      if (!res.ok && !res.canceled) setError(res.error || 'Não foi possível gerar o PDF.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao gerar PDF do fechamento');
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function handleOpen() {
     const cents = parseBRLToCents(opening);
@@ -150,6 +186,27 @@ export default function CaixaPage() {
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-ok">{notice}</div>}
 
+      {choosePrinter && current && (
+        <ChoosePrinterModal
+          kind="report"
+          title="Imprimir fechamento de caixa"
+          onCancel={() => setChoosePrinter(false)}
+          onConfirm={(choice) => {
+            setChoosePrinter(false);
+            void printDocument({
+              kind: 'report',
+              title: `Fechamento de caixa #${current.id}`,
+              documentType: 'fechamento_caixa',
+              documentRef: String(current.id),
+              printerName: choice.printerName || undefined,
+              paperFormat: choice.paperFormat,
+            }).then((res) => {
+              if (!res.ok) setError(res.error || 'Não foi possível imprimir o fechamento.');
+            });
+          }}
+        />
+      )}
+
       <div className="cash-grid">
         {!current ? (
           <div className="side-card">
@@ -171,48 +228,98 @@ export default function CaixaPage() {
         ) : (
           <>
             <div className="side-card">
-              <h3>Totalizador do caixa</h3>
-              <div className="kv-list cash-totalizer" data-testid="cash-totalizer">
-                <div><span>Operador</span><strong>{current.operator_name}</strong></div>
-                <div><span>Abertura</span><strong>{current.opened_at}</strong></div>
-                <div><span>Fundo inicial</span><strong>{formatBRL(current.opening_amount_cents)}</strong></div>
-                <div><span>Total vendido</span><strong>{formatBRL(current.sales_total_cents)}</strong></div>
-                <div><span>Total dinheiro</span><strong>{formatBRL(current.sales_dinheiro_cents)}</strong></div>
-                <div><span>Total Pix</span><strong>{formatBRL(current.sales_pix_cents)}</strong></div>
-                <div><span>Total cartão</span><strong>{formatBRL(current.sales_cartao_cents)}</strong></div>
+              <h3>Vendas do período</h3>
+              <p className="muted-line">
+                Conferência do faturamento por forma de pagamento. Pix, cartões e crediário{' '}
+                <strong>não entram</strong> no dinheiro esperado na gaveta.
+              </p>
+              <div className="kv-list cash-totalizer" data-testid="cash-vendas-periodo">
+                <div><span>Dinheiro</span><strong>{formatBRL(cents('sales_dinheiro_cents'))}</strong></div>
+                <div><span>Pix</span><strong>{formatBRL(cents('sales_pix_cents'))}</strong></div>
+                <div><span>Cartão débito</span><strong>{formatBRL(cents('sales_cartao_debito_cents'))}</strong></div>
+                <div><span>Cartão crédito</span><strong>{formatBRL(cents('sales_cartao_credito_cents'))}</strong></div>
+                {cents('sales_cartao_legado_cents') > 0 ? (
+                  <div>
+                    <span>Cartão (sem tipo registrado)</span>
+                    <strong>{formatBRL(cents('sales_cartao_legado_cents'))}</strong>
+                  </div>
+                ) : null}
+                <div><span>Crediário</span><strong>{formatBRL(cents('sales_crediario_cents'))}</strong></div>
+                <div><span>Outras formas</span><strong>{formatBRL(cents('sales_outras_cents'))}</strong></div>
+                <div className="cash-line-strong">
+                  <span>TOTAL VENDIDO</span>
+                  <strong data-testid="cash-total-vendido">{formatBRL(cents('sales_total_cents'))}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="side-card">
+              <h3>Movimentações do caixa</h3>
+              <p className="muted-line">Somente o que entra e sai de dinheiro físico.</p>
+              <div className="kv-list cash-totalizer" data-testid="cash-movimentacoes">
+                <div><span>Fundo / saldo inicial</span><strong>{formatBRL(cents('opening_amount_cents'))}</strong></div>
+                <div><span>Dinheiro de vendas</span><strong>+ {formatBRL(cents('sales_dinheiro_cents'))}</strong></div>
+                <div><span>Suprimentos</span><strong>+ {formatBRL(cents('suprimentos_cents'))}</strong></div>
+                <div><span>Sangrias</span><strong>- {formatBRL(cents('sangrias_cents'))}</strong></div>
                 <div>
-                  <span>Cartão crédito</span>
-                  <strong>
-                    {formatBRL(conference?.breakdown?.sales_cartao_credito_cents || 0)}
-                  </strong>
+                  <span>Cancelamentos em dinheiro</span>
+                  <strong>- {formatBRL(cents('cancelamentos_dinheiro_cents'))}</strong>
+                </div>
+                <div className="cash-line-strong">
+                  <span>VALOR ESPERADO EM DINHEIRO</span>
+                  <strong data-testid="cash-expected">{expectedLabel}</strong>
                 </div>
                 <div>
-                  <span>Cartão débito</span>
-                  <strong>
-                    {formatBRL(conference?.breakdown?.sales_cartao_debito_cents || 0)}
-                  </strong>
-                </div>
-                <div>
-                  <span>Total crediário</span>
-                  <strong>{formatBRL(current.sales_crediario_cents || 0)}</strong>
-                </div>
-                <div><span>Entradas / suprimentos</span><strong>{formatBRL(current.cash_in_cents)}</strong></div>
-                <div><span>Saídas / sangrias</span><strong>{formatBRL(current.cash_out_cents)}</strong></div>
-                <div><span>Valor esperado (gaveta)</span><strong>{expectedLabel}</strong></div>
-                <div>
-                  <span>Valor informado</span>
+                  <span>Dinheiro contado</span>
                   <strong>{countedCents != null ? formatBRL(countedCents) : '—'}</strong>
                 </div>
-                <div>
-                  <span>Diferença</span>
-                  <strong data-testid="cash-difference">
-                    {liveDiffCents == null
-                      ? '—'
-                      : `${formatBRL(liveDiffCents)} (${
-                          liveDiffCents === 0 ? 'bateu' : liveDiffCents > 0 ? 'sobra' : 'falta'
-                        })`}
+                <div className="cash-line-strong">
+                  <span>Diferença de caixa</span>
+                  <strong
+                    data-testid="cash-difference"
+                    style={{
+                      color: liveDiffCents == null || liveDiffCents === 0 ? '#0f3d2e' : '#b42318',
+                    }}
+                  >
+                    {diffLabel}
                   </strong>
                 </div>
+              </div>
+            </div>
+
+            <div className="side-card">
+              <h3>Resumo final</h3>
+              <div className="kv-list cash-totalizer" data-testid="cash-resumo-final">
+                <div><span>Operador</span><strong>{current.operator_name}</strong></div>
+                <div><span>Abertura</span><strong>{current.opened_at}</strong></div>
+                <div><span>Quantidade de vendas</span><strong>{cents('sales_count')}</strong></div>
+                <div><span>Itens vendidos</span><strong>{cents('items_sold')}</strong></div>
+                <div><span>Faturamento bruto</span><strong>{formatBRL(cents('gross_cents'))}</strong></div>
+                <div><span>Descontos</span><strong>{formatBRL(cents('discount_cents'))}</strong></div>
+                <div><span>Faturamento líquido</span><strong>{formatBRL(cents('net_cents'))}</strong></div>
+                <div><span>Valor esperado</span><strong>{expectedLabel}</strong></div>
+                <div>
+                  <span>Valor contado</span>
+                  <strong>{countedCents != null ? formatBRL(countedCents) : '—'}</strong>
+                </div>
+                <div><span>Diferença</span><strong>{diffLabel}</strong></div>
+              </div>
+              <div className="modal-actions" style={{ marginTop: 10, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setChoosePrinter(true)}
+                >
+                  IMPRIMIR FECHAMENTO
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={exporting}
+                  onClick={() => void handleClosingPdf()}
+                >
+                  {exporting ? 'Gerando PDF…' : 'GERAR PDF'}
+                </button>
               </div>
             </div>
 
