@@ -1,28 +1,28 @@
-ONÇA PDV 1.2.18 — RELATÓRIO DE TESTES
+ONÇA PDV 1.2.19 — RELATÓRIO DE TESTES
 ==========================================
-Build: 2026.08.30-continuacao-vendas-relatorios
-Gerado em: 2026-08-31T00:04:30.256Z
+Build: 2026.08.31-fechamento-busca-recuperacao-reimpressao
+Gerado em: 2026-08-31T02:23:05.411Z
 
-1) SUÍTE AUTOMATIZADA DO SERVIDOR  (npm test)
-   213 testes: 209 aprovados, 0 reprovados, 4 pulados.
+1) SUÍTE AUTOMATIZADA  (npm test)
+   Servidor: 242 testes, 238 aprovados, 0 reprovados, 4 pulados.
+   Web (rascunho de venda): 8/8 aprovados.
    Os 4 pulados exigem arquivos que só existem na máquina do cliente
    (JSON do sistema antigo e cópia do banco real) e informam o motivo.
-   Suítes criadas nesta continuação:
-     - trocoAutomatico.test.js               (5 testes)  troco / bloqueio / misto
-     - scannerCodigoBarras.test.js           (7 testes)  20x, A/B, 100 paralelas
-     - cadastroRapidoDuranteVenda.test.js    (5 testes)  código novo na venda
-     - produtosEstoqueUnificado.test.js      (7 testes)  entrada/saída/ajuste
-     - historicoDetalheAuditoria.test.js     (8 testes)  histórico/alterar/cancelar
-     - relatorioVendasDetalhadas.test.js     (8 testes)  filtros/resumo/PDF/CSV
+   Suítes novas desta versão:
+     - fechamentoCaixaClaro.test.js          (6 testes)
+     - buscaInteligente.test.js              (11 testes)
+     - recuperacaoVendaFinalizacao.test.js   (5 testes)
+     - reimpressaoRapida.test.js             (7 testes)
+     - saleDraftStore.test.mjs               (8 testes, web)
 
 2) LINT E TIPAGEM
    eslint --max-warnings 0 : sem avisos
    tsc --noEmit            : sem erros
-   build de produção (vite): concluído
+   build de produção (vite): concluído (1.2.19)
 
 3) ETAPA 0 — BASE FUNCIONAL (node scripts/etapa0-validar-base.mjs)
   [PASS] 01. API inicia e responde /api/health — status=200 versao=1.2.18
-  [PASS] 04. Conexao SQLite ativa — arquivo=/tmp/onca-etapa0-mXsdAM/etapa0.db
+  [PASS] 04. Conexao SQLite ativa — arquivo=/tmp/onca-etapa0-bNPH5y/etapa0.db
   [PASS] 05. PRAGMA integrity_check (antes) — resultado=ok
   [PASS] 02. Autenticacao do operador — status=200
   [PASS] 16. Tela Caixa: abertura de sessao — status=201
@@ -38,14 +38,42 @@ Gerado em: 2026-08-31T00:04:30.256Z
   [PASS] 15. Tela Produtos/Estoque abre com movimentacoes — movimentacoes=2
   [PASS] 17. Caixa registra a venda em dinheiro — dinheiro=5000
   [PASS] 18. Tela Relatorios abre (catalogo + vendas por periodo + vendas detalhadas) — catalogo=28 periodo=1 detalhado=1
-  [PASS] 19. Backup/checkpoint da versao funcional — status=201 arquivo=onca-pdv-backup-2026-08-31-000430.db
+  [PASS] 19. Backup/checkpoint da versao funcional — status=201 arquivo=onca-pdv-backup-2026-08-31-012152.db
   [PASS] 20. Configuracoes de impressao presentes — settings=200 impressoras={"use_windows_default":true,"receipt_printer":"","reports_printer":"","delivery_
   [PASS] 21. PRAGMA integrity_check (depois) — resultado=ok
 
-4) TESTE REAL DO INSTALADOR WINDOWS (node scripts/testar-instalador-windows.mjs)
+4) REGRESSÃO GERAL DAS FUNÇÕES ANTIGAS E NOVAS (node scripts/regressao-geral.mjs)
+   25/25 aprovados
+  [PASS] 01. Abertura do sistema (API responde) — versao=1.2.19
+  [PASS] 02. Login
+  [PASS] 03. Caixa: abertura — id=1
+  [PASS] 04. Produtos: cadastro — id=1
+  [PASS] 05. Estoque: entrada com antes/depois — 10 -> 15
+  [PASS] 06. Codigo de barras: match exato e prefixo sem resultado — exato=1 prefixo=0
+  [PASS] 07. Consulta rapida / busca manual inteligente — resultados=1
+  [PASS] 08. Cadastro de codigo desconhecido durante a venda — criado id=2
+  [PASS] 09. Carrinho e venda concluida — total=3750
+  [PASS] 10. Troco — recebido=5000 total=3750 troco=1250
+  [PASS] 11. Pagamento misto com troco so sobre a parte em dinheiro — troco=250
+  [PASS] 12. Estoque baixa na venda — 15 -> 13
+  [PASS] 13. Caixa registra vendas por forma — dinheiro=5500
+  [PASS] 14. Fechamento: valor esperado ignora pix/cartao/crediario — esperado=15500
+  [PASS] 15. Fechamento: resumo com vendas, itens, bruto, descontos e liquido — vendas=2 itens=2
+  [PASS] 16. Historico: lista, detalhe e dados relacionados — vendas=2
+  [PASS] 17. Alteracao de venda com PIN — total=7500
+  [PASS] 18. Cancelamento com estorno
+  [PASS] 19. Relatorios: catalogo, vendas detalhadas e vendas por periodo — relatorios=28 linhas=2
+  [PASS] 20. Impressao: fila e configuracao de impressoras — job=201
+  [PASS] 21. PDF de venda, de relatorio e de fechamento + CSV — venda=2084B relatorio=2340B fechamento=2846B
+  [PASS] 22. Reimpressao/PDF sao somente leitura — {"sales":2,"items":2,"payments":3,"stock":14}
+  [PASS] 23. Backup — onca-pdv-backup-2026-08-31-012449.db
+  [PASS] 24. Firebase: nao ha integracao neste projeto (local-first SQLite) — nada a validar nem a quebrar
+  [PASS] 25. Integridade do banco — integrity=ok fk=0
+
+5) TESTE REAL DO INSTALADOR WINDOWS (node scripts/testar-instalador-windows.mjs)
    Ambiente: Wine wine-9.0 (Ubuntu 9.0~repack-4build3) (Windows simulado em Linux)
-   Instalador: ONCA-PDV-Setup-1.2.18.exe (96.5 MB)
-   SHA-256: c44ffce86592fbb9ed668b69f0aa933351722ea8219891865fbc246f20286188
+   Instalador: ONCA-PDV-Setup-1.2.19.exe (96.5 MB)
+   SHA-256: 49eed60d7fba56e88de2cfc1cdea1b54793ecc5d8cebfdf00f734879546abcde
    Destino: C:/users/ubuntu/AppData/Local/Programs/onca-pdv
   [PASS] 00. Instalador existe e é executável Windows — 96.5 MB · PE32 executable (GUI) Intel 80386, for MS Windows, Nullsoft Installer self-extracting archive, 5 sections
   [PASS] 01. Ambiente Windows limpo preparado (prefixo Wine novo) — wineboot ok
@@ -60,7 +88,7 @@ Gerado em: 2026-08-31T00:04:30.256Z
   [PASS] 06. Atalho na Área de Trabalho — <Wine>/drive_c/users/ubuntu/Desktop/ONÇA PDV.lnk
   [PASS] 07. Atalho no Menu Iniciar — <Wine>/drive_c/users/ubuntu/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/ONÇA PDV.lnk
   [PASS] 08. Desinstalador presente — Uninstall ONÇA PDV.exe
-  [PASS] 09. Sistema instalado inicia e responde — versao=1.2.18 build=2026.08.30-continuacao-vendas-relatorios
+  [PASS] 09. Sistema instalado inicia e responde — versao=1.2.19 build=2026.08.31-fechamento-busca-recuperacao-reimpressao
   [PASS] 10. Banco criado pela instalação — Z:\tmp\onca-instalado-dados\onca-pdv.db
   [PASS] 11. Login no sistema instalado — status=200
   [PASS] 12. Cadastro de produto no sistema instalado — id=1
@@ -70,30 +98,28 @@ Gerado em: 2026-08-31T00:04:30.256Z
   [PASS] 16. Histórico mostra a venda — vendas=1
   [PASS] 17. Relatório Vendas detalhadas no sistema instalado — linhas=1 lucro=2250
   [PASS] 18. Sistema fecha corretamente — API parou
-  [PASS] 19. Sistema reabre depois de fechar — versao=1.2.18
+  [PASS] 19. Sistema reabre depois de fechar — versao=1.2.19
   [PASS] 20. Dados persistiram após reabrir (venda, troco e estoque) — venda=VD-20260831-000001 troco=1250 estoque=9
   [PASS] 21. Atualização instalada por cima da anterior — concluída em 26s
   [PASS] 22. Banco NÃO foi substituído por um vazio — sha256 14948fa5e2d8… inalterado
   [PASS] 23. Configurações do usuário preservadas — /tmp/onca-instalado-dados/configuracoes/marcador-do-usuario.txt
-  [PASS] 24. Sistema abre após a atualização — versao=1.2.18
+  [PASS] 24. Sistema abre após a atualização — versao=1.2.19
   [PASS] 25. Vendas, produtos e estoque intactos após atualizar — venda=VD-20260831-000001 estoque=9
 
-5) FLUXO DE PONTA A PONTA (API + interface)
-   e2e:etapa3  19/19 aprovados (banco limpo)
-   e2e:etapa4  12/12 aprovados
-   backup/restauração isolada  8/8 aprovados (banco real não é sobrescrito)
+5b) ATUALIZAÇÃO POR CIMA DA 1.2.18 OFICIAL
+   10/10 aprovados (instala 1.2.18, grava venda, instala 1.2.19 por cima, banco inalterado)
+  [PASS] 01. Prefixo Wine novo — wineboot status=0
+  [PASS] 02. 1.2.18 instalada — em 30s
+  [PASS] 03. API 1.2.18 responde — versao=1.2.18
+  [PASS] 04. Login 1.2.18 — status=200
+  [PASS] 05. Venda gravada na 1.2.18 — id=1 total=2500
+  [PASS] 06. Banco da 1.2.18 existe — 14948fa5e2d8f2d2
+  [PASS] 07. 1.2.19 instalada por cima — em 30s
+  [PASS] 08. Banco NÃO foi substituído — antes=14948fa5e2d8 depois=14948fa5e2d8
+  [PASS] 09. API agora é 1.2.19 — versao=1.2.19 build=2026.08.31-fechamento-busca-recuperacao-reimpressao
+  [PASS] 10. Venda e estoque da 1.2.18 intactos na 1.2.19 — total=2500 estoque=7
 
-6) VERIFICAÇÃO VISUAL NA INTERFACE
-   Conferido manualmente no navegador, com capturas de tela:
-     - DINHEIRO foca o campo Valor recebido; valor menor mostra FALTAM R$ e a
-       conclusão é bloqueada; valor maior mostra o troco correto
-     - código não cadastrado abre PRODUTO NÃO CADASTRADO com o código lido
-     - Produtos/Estoque com as colunas e as ações + ESTOQUE / - ESTOQUE / HISTÓRICO
-     - histórico com Data, Hora, Operador, Itens e detalhe completo
-     - cancelamento pedindo motivo da lista e senha administrativa
-     - relatório Vendas detalhadas com resumo de custo e lucro, PDF e CSV baixados
-
-7) LIMITES DECLARADOS
+6) LIMITES DECLARADOS
    - Não existe integração com Firebase neste projeto (arquitetura local-first com
      SQLite). Não havia o que validar nem o que quebrar.
    - A impressão é validada por configuração e fila de impressão; não há impressora
@@ -104,6 +130,5 @@ Gerado em: 2026-08-31T00:04:30.256Z
    - Os scripts scripts/review-*.mjs são de etapas antigas e falham por
      expectativas superadas (por exemplo exigem bloqueio de venda com estoque
      insuficiente, hoje permitido de propósito, e não enviam a senha
-     administrativa que passou a ser obrigatória). A mesma execução no código
-     anterior a esta continuação produz exatamente as mesmas falhas, ou seja,
-     não são regressões.
+     administrativa que passou a ser obrigatória). A mesma execução na 1.2.18
+     produz exatamente as mesmas falhas, ou seja, não são regressões.

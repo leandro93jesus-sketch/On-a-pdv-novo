@@ -88,6 +88,7 @@ copyFileSync(setupOrigem, setupEntrega);
 // --------------------------------------------------------------- textos/relatos
 const etapa0 = readJsonIfExists(join(releaseDir, 'etapa0-base-funcional.json'));
 const instalador = readJsonIfExists(join(releaseDir, 'teste-instalador-windows.json'));
+const overlay1218 = readJsonIfExists(join(releaseDir, 'teste-overlay-1-2-18.json'));
 
 const changelogMd = existsSync(join(releaseDir, 'CHANGELOG.md'))
   ? readFileSync(join(releaseDir, 'CHANGELOG.md'), 'utf8')
@@ -284,6 +285,14 @@ ${linhasRegressao}
    SHA-256: ${instalador?.instalador_sha256 ?? '(ver CHECKSUM-SHA256.txt)'}
    Destino: ${instalador?.destino_instalacao?.replace(/^.*drive_c/, 'C:') ?? '-'}
 ${linhasInstalador}
+
+5b) ATUALIZAÇÃO POR CIMA DA 1.2.18 OFICIAL
+   ${overlay1218 ? `${overlay1218.aprovados}/${overlay1218.total} aprovados (instala 1.2.18, grava venda, instala 1.2.19 por cima, banco inalterado)` : '(não encontrado)'}
+${
+  overlay1218?.itens
+    ? overlay1218.itens.map((i) => `  [${i.result}] ${i.name}${i.detail ? ` — ${i.detail}` : ''}`).join('\n')
+    : '  (relatório do overlay 1.2.18→1.2.19 não encontrado)'
+}
 
 6) LIMITES DECLARADOS
    - Não existe integração com Firebase neste projeto (arquitetura local-first com

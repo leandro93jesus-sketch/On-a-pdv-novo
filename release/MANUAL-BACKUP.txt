@@ -1,4 +1,4 @@
-ONÇA PDV 1.2.18 — MANUAL SIMPLES DE BACKUP E RECUPERAÇÃO
+ONÇA PDV 1.2.19 — MANUAL SIMPLES DE BACKUP E RECUPERAÇÃO
 ==============================================================
 
 POR QUE FAZER BACKUP
@@ -37,4 +37,4 @@ RECUPERAÇÃO EM COMPUTADOR NOVO
    restaure depois pelo módulo Backup.
 3. Confira o histórico de vendas e o estoque antes de voltar a vender.
 
-Versão: 1.2.18 (build 2026.08.30-continuacao-vendas-relatorios)
+Versão: 1.2.19 (build 2026.08.31-fechamento-busca-recuperacao-reimpressao)

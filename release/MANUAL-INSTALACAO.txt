@@ -1,4 +1,4 @@
-ONÇA PDV 1.2.18 — MANUAL SIMPLES DE INSTALAÇÃO
+ONÇA PDV 1.2.19 — MANUAL SIMPLES DE INSTALAÇÃO
 ==================================================
 
 REQUISITOS
@@ -41,4 +41,4 @@ SE ALGO DER ERRADO
 - Reinstale por cima: o banco não é tocado.
 - O módulo Backup permite restaurar um backup anterior a qualquer momento.
 
-Versão: 1.2.18 (build 2026.08.30-continuacao-vendas-relatorios)
+Versão: 1.2.19 (build 2026.08.31-fechamento-busca-recuperacao-reimpressao)

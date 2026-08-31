@@ -1,5 +1,78 @@
 Changelog — ONÇA PDV
 
+1.2.19 — 2026-08-31
+
+Atualização incremental da versão oficial 1.2.18. Nada foi redesenhado: o layout,
+os módulos, o banco e as funções aprovadas continuam como estavam. Foram
+acrescentadas quatro melhorias operacionais, uma etapa por vez, com checkpoint e
+regressão após cada uma.
+
+Fechamento diário de caixa mais claro (Etapa 1)
+
+- Tela de Caixa reorganizada em três blocos: **Vendas do período** (dinheiro, pix,
+  débito, crédito, crediário, outras formas e TOTAL VENDIDO), **Movimentações do
+  caixa** (fundo inicial, dinheiro de vendas, suprimentos, sangrias,
+  cancelamentos em dinheiro e VALOR ESPERADO EM DINHEIRO) e **Resumo final**
+- Diferença de caixa agora em texto direto: `FALTA R$ XX,XX`, `SOBRA R$ XX,XX`
+  ou `CAIXA CORRETO`
+- Resumo final com quantidade de vendas, itens vendidos, faturamento bruto,
+  descontos, faturamento líquido, formas de pagamento, suprimentos, sangrias,
+  valor esperado, valor contado e diferença
+- Botões `IMPRIMIR FECHAMENTO` e `GERAR PDF` (novo `GET /api/cash/sessions/:id/pdf`)
+- **O cálculo não mudou**: `computeExpectedCash` continua sendo saldo inicial +
+  dinheiro de vendas + suprimentos − sangrias. Pix, cartões e crediário aparecem
+  para conferência mas não entram no dinheiro físico da gaveta
+- Complementos apenas de leitura em `getCashConference`: `sales_outras_cents`,
+  `suprimentos_cents`, `sangrias_cents`, `cancelamentos_dinheiro_cents`,
+  `sales_count`, `items_sold`, `gross_cents`, `discount_cents`, `net_cents`
+
+Busca manual inteligente, separada do scanner (Etapa 2)
+
+- A leitura do scanner **não mudou**: continua em `?barcode=` com correspondência
+  exata (`p.barcode = ?`), sem LIKE e sem aproximação
+- Novo caminho exclusivo da digitação: `GET /api/products/busca-manual?q=`
+  aceita várias palavras parciais, ignora acentos e maiúsculas e procura em nome,
+  código interno, código de barras, categoria e fornecedor
+- Resultados ordenados por proximidade (exato > todas as palavras no nome >
+  palavras em outros campos)
+- Exemplos: `desinf lav` encontra DESINFETANTE LAVANDA 5L e 2L; `sabao maca`
+  encontra SABÃO EM PÓ MAÇÃ VERDE; `5l`, `deterg` e `lavanda` também funcionam
+- A lista de sugestões já mostrava nome, código, preço e estoque, com seleção por
+  mouse, setas e Enter — preservado
+
+Recuperação de venda após queda de energia (Etapa 3)
+
+- O rascunho automático do carrinho já existia; agora a tela de recuperação mostra
+  **horário**, **itens** (com unidades) e **valor aproximado**
+- Ao recuperar, cada produto é reconferido: produto apagado sai do carrinho com
+  aviso e preço alterado é atualizado e avisado, sem travar o PDV
+- Rascunho inválido ou corrompido é registrado no log, descartado e o PDV abre
+  normalmente
+- Gravação em duas etapas (chave temporária e depois definitiva) para não deixar
+  rascunho pela metade
+- O rascunho continua não gerando faturamento, estoque, caixa nem pagamento, e é
+  apagado ao concluir ou cancelar a venda
+
+Reimpressão rápida (Etapa 4)
+
+- Cada linha do histórico ganhou `VER`, `REIMPRIMIR` e `PDF`, em um clique
+- As rotinas aprovadas de impressão e de PDF foram extraídas para
+  `web/src/lib/saleDocuments.ts` e são reutilizadas pelo comprovante e pelas
+  ações rápidas — não existe implementação paralela de impressão
+- A reimpressão é identificada discretamente (título `REIMPRESSÃO — Comprovante
+  VD-...` e `document_type` `comprovante_reimpressao` na fila), sem alterar
+  nenhum valor do comprovante
+- Somente leitura: não duplica venda, não cria itens ou pagamento, não baixa
+  estoque e não altera faturamento
+
+Qualidade
+
+- Suítes novas: `fechamentoCaixaClaro` (6), `buscaInteligente` (11),
+  `recuperacaoVendaFinalizacao` (5), `reimpressaoRapida` (7) e
+  `saleDraftStore.test.mjs` no lado web (8)
+- `npm test` passa a rodar servidor **e** web: 242 testes no servidor
+  (238 aprovados, 4 pulados por falta de insumo do cliente) + 8 no web
+
 1.2.18 — 2026-08-30
 
 Continuação do projeto: as 8 alterações pedidas foram revalidadas ponta a ponta e o

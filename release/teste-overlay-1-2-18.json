@@ -1,0 +1,58 @@
+{
+  "total": 10,
+  "aprovados": 10,
+  "reprovados": 0,
+  "itens": [
+    {
+      "name": "01. Prefixo Wine novo",
+      "result": "PASS",
+      "detail": "wineboot status=0"
+    },
+    {
+      "name": "02. 1.2.18 instalada",
+      "result": "PASS",
+      "detail": "em 30s"
+    },
+    {
+      "name": "03. API 1.2.18 responde",
+      "result": "PASS",
+      "detail": "versao=1.2.18"
+    },
+    {
+      "name": "04. Login 1.2.18",
+      "result": "PASS",
+      "detail": "status=200"
+    },
+    {
+      "name": "05. Venda gravada na 1.2.18",
+      "result": "PASS",
+      "detail": "id=1 total=2500"
+    },
+    {
+      "name": "06. Banco da 1.2.18 existe",
+      "result": "PASS",
+      "detail": "14948fa5e2d8f2d2"
+    },
+    {
+      "name": "07. 1.2.19 instalada por cima",
+      "result": "PASS",
+      "detail": "em 30s"
+    },
+    {
+      "name": "08. Banco NÃO foi substituído",
+      "result": "PASS",
+      "detail": "antes=14948fa5e2d8 depois=14948fa5e2d8"
+    },
+    {
+      "name": "09. API agora é 1.2.19",
+      "result": "PASS",
+      "detail": "versao=1.2.19 build=2026.08.31-fechamento-busca-recuperacao-reimpressao"
+    },
+    {
+      "name": "10. Venda e estoque da 1.2.18 intactos na 1.2.19",
+      "result": "PASS",
+      "detail": "total=2500 estoque=7"
+    }
+  ],
+  "hash_banco": "14948fa5e2d8f2d2f9d9f9349a2626f275b36c870d724b183d7c9216d676f20e"
+}
