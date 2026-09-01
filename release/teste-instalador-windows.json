@@ -133,7 +133,7 @@
     {
       "name": "20. Dados persistiram após reabrir (venda, troco e estoque)",
       "result": "PASS",
-      "detail": "venda=VD-20260831-000001 troco=1250 estoque=9"
+      "detail": "venda=VD-20260901-000001 troco=1250 estoque=9"
     },
     {
       "name": "21. Atualização instalada por cima da anterior",
@@ -158,7 +158,7 @@
     {
       "name": "25. Vendas, produtos e estoque intactos após atualizar",
       "result": "PASS",
-      "detail": "venda=VD-20260831-000001 estoque=9"
+      "detail": "venda=VD-20260901-000001 estoque=9"
     }
   ]
 }

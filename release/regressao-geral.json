@@ -107,7 +107,7 @@
     {
       "nome": "21. PDF de venda, de relatorio e de fechamento + CSV",
       "resultado": "PASS",
-      "detalhe": "venda=2084B relatorio=2340B fechamento=2846B"
+      "detalhe": "venda=2082B relatorio=2336B fechamento=2846B"
     },
     {
       "nome": "22. Reimpressao/PDF sao somente leitura",
@@ -117,7 +117,7 @@
     {
       "nome": "23. Backup",
       "resultado": "PASS",
-      "detalhe": "onca-pdv-backup-2026-08-31-012449.db"
+      "detalhe": "onca-pdv-backup-2026-09-01-004504.db"
     },
     {
       "nome": "24. Firebase: nao ha integracao neste projeto (local-first SQLite)",
