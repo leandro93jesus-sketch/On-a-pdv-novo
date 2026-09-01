@@ -296,23 +296,81 @@ function registerPrinterIpc(ipcMain, getMainWindow) {
     }
   });
 
-  ipcMain.handle('printers:test', async (_evt, opts = {}) => {
-    const mainWindow = getMainWindow();
+  ipcMain.handle('printers:print-cupom', async (_evt, opts = {}) => {
+    const text = String(opts.text || '').trim();
+    if (!text || text.length < 20) {
+      return {
+        ok: false,
+        error: 'IMPRESSÃO CANCELADA\nO cupom não foi gerado corretamente.',
+        via: 'guard',
+      };
+    }
     try {
-      if (process.platform === 'linux') {
-        return await testPrintLinux(mainWindow, opts || {});
+      const method = opts.method || 'escpos';
+      if (method === 'windows') {
+        const { printDedicatedHtml } = require('./printHtmlWindow.cjs');
+        return await withTimeout(
+          printDedicatedHtml(opts.html, {
+            deviceName: opts.deviceName,
+            copies: opts.copies,
+            width: opts.width,
+          }),
+          PRINT_TEST_TIMEOUT_MS,
+          { ok: false, error: 'Timeout na impressão do cupom.', timeout: true, via: 'html-window' }
+        );
       }
-      if (!mainWindow || mainWindow.isDestroyed()) {
-        return { ok: false, error: 'Janela indisponível' };
+      const { sendRaw } = require('./rawPrint.cjs');
+      const bytes = opts.bytes
+        ? Buffer.from(opts.bytes)
+        : Buffer.from(text, 'latin1');
+      return await withTimeout(
+        sendRaw({
+          bytes,
+          method,
+          deviceName: opts.deviceName,
+          host: opts.host,
+          port: opts.port,
+        }),
+        PRINT_TEST_TIMEOUT_MS,
+        { ok: false, error: 'Timeout no envio RAW.', timeout: true, via: 'raw' }
+      );
+    } catch (err) {
+      return { ok: false, error: err.message || 'Falha ao imprimir cupom. A venda não é afetada.' };
+    }
+  });
+
+  ipcMain.handle('printers:test', async (_evt, opts = {}) => {
+    // NÃO imprime mais a janela principal do PDV (causa da folha em branco).
+    // Teste físico só com cupom mínimo explícito.
+    const text = String(opts.text || '').trim();
+    if (!text || text.length < 20) {
+      return {
+        ok: false,
+        error:
+          'Teste recusado: a janela do PDV não é enviada à impressora. Use VISUALIZAR TESTE ou o cupom mínimo.',
+        via: 'guard',
+      };
+    }
+    try {
+      const { sendRaw } = require('./rawPrint.cjs');
+      const bytes = opts.bytes ? Buffer.from(opts.bytes) : null;
+      if (!bytes || bytes.length < 20) {
+        return {
+          ok: false,
+          error: 'IMPRESSÃO CANCELADA\nO cupom não foi gerado corretamente.',
+          via: 'guard',
+        };
       }
       return await withTimeout(
-        electronPrint(mainWindow, opts || {}),
+        sendRaw({
+          bytes,
+          method: opts.method || 'escpos',
+          deviceName: opts.deviceName,
+          host: opts.host,
+          port: opts.port,
+        }),
         PRINT_TEST_TIMEOUT_MS,
-        {
-          ok: false,
-          error: 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA.',
-          timeout: true,
-        }
+        { ok: false, error: 'Timeout no teste de impressão.', timeout: true }
       );
     } catch (err) {
       return { ok: false, error: err.message || 'Falha ao imprimir. A venda não é afetada.' };

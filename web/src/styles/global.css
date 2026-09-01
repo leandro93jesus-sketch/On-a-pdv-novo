@@ -1022,22 +1022,51 @@ a {
   }
 }
 
+.cupom-preview-box {
+  margin: 12px 0;
+  padding: 12px;
+  background: #ffffff;
+  color: #000000;
+  font-family: "Courier New", ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: pre-wrap;
+  border: 1px solid var(--border);
+  max-height: 360px;
+  overflow: auto;
+}
+
+.cupom-preview-frame {
+  width: 100%;
+  height: 180px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+}
+
 @media print {
   body * {
     visibility: hidden;
   }
 
   .receipt,
-  .receipt * {
+  .receipt *,
+  .report-result,
+  .report-result *,
+  .cupom-preview-box,
+  .cupom-preview-box * {
     visibility: visible;
   }
 
-  .receipt {
+  .receipt,
+  .report-result,
+  .cupom-preview-box {
     position: absolute;
     left: 0;
     top: 0;
     width: 100%;
     padding: 20px;
+    color: #000;
+    background: #fff;
   }
 
   .no-print {

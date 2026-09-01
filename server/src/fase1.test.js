@@ -110,6 +110,24 @@ test('printer settings persistem formato e cópias', () => {
   assert.equal(cfg.profile.auto_print, true);
 });
 
+test('printer settings persistem método ESC/POS e corte', () => {
+  updatePrinterSettings(
+    {
+      method: 'escpos',
+      cut: true,
+      tcp_host: '192.168.0.50',
+      tcp_port: 9100,
+      profile: { format: '58mm' },
+    },
+    'admin'
+  );
+  const cfg = getPrinterSettings();
+  assert.equal(cfg.method, 'escpos');
+  assert.equal(cfg.cut, true);
+  assert.equal(cfg.tcp_host, '192.168.0.50');
+  assert.equal(cfg.profile.format, '58mm');
+});
+
 test('preview JSON inclui sha256, prechecks e conflitos', () => {
   const sample = {
     version: 2,

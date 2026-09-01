@@ -1074,6 +1074,10 @@ export interface PrinterSettings {
     mode: string;
   };
   per_printer?: Record<string, { format?: string; copies?: number }>;
+  method?: 'windows' | 'escpos' | 'tcp' | string;
+  cut?: boolean;
+  tcp_host?: string;
+  tcp_port?: number;
   note?: string;
 }
 

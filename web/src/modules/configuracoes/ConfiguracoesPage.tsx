@@ -33,6 +33,10 @@ import {
 import { ModuleToolbar, StatusPill } from '../../components/ModuleChrome';
 import BrandLogo from '../../components/BrandLogo';
 import { withUiTimeout } from '../../lib/desktopAsync';
+import CupomPreviewModal from '../../components/CupomPreviewModal';
+import { createDesktopTransport } from '../../lib/print/desktopTransport';
+import { buildPhysicalTestCupom, type CupomWidth } from '../../lib/print/cupomBuilder';
+import { dispatchCupom, prepareCupomJob, previewPhysicalTestCupom } from '../../lib/print/printReceipt';
 
 type Tab = 'empresa' | 'impressoras' | 'pdv' | 'usuarios' | 'auditoria' | 'suporte' | 'exportacao' | 'sobre';
 
@@ -83,6 +87,7 @@ export default function ConfiguracoesPage() {
 
   const [auditAction, setAuditAction] = useState('');
   const [auditUser, setAuditUser] = useState('');
+  const [cupomPreview, setCupomPreview] = useState<{ text: string; html: string } | null>(null);
 
   async function loadSettings() {
     const bundle = await fetchSettings();
@@ -339,38 +344,53 @@ export default function ConfiguracoesPage() {
     }
   }
 
-  async function testPrint() {
+  function receiptWidth(): CupomWidth {
+    return printers?.profile.format === '58mm' ? '58mm' : '80mm';
+  }
+
+  function previewPrinterTest() {
     setError(null);
     setNotice(null);
     setPrinterOpError(null);
-    if (!window.oncaDesktop?.testPrint) {
-      setPrinterOpError(
-        'Teste de impressão disponível no aplicativo desktop. A venda não é afetada por falhas de impressora.'
-      );
+    const preview = previewPhysicalTestCupom(receiptWidth());
+    setCupomPreview({ text: preview.cupom.text, html: preview.html });
+    setNotice('Pré-visualização do cupom mínimo. Nenhum papel foi gasto.');
+  }
+
+  async function physicalPrinterTestOnce() {
+    setError(null);
+    setNotice(null);
+    setPrinterOpError(null);
+    if (!window.confirm('Enviar UM cupom mínimo (4 linhas) à impressora? Não será repetido automaticamente.')) {
       return;
     }
-    setPrintersLoading(true);
-    try {
-      const deviceName = printers?.use_windows_default
-        ? undefined
-        : printers?.receipt_printer || printers?.default_printer || undefined;
-      const res = await withUiTimeout(
-        window.oncaDesktop.testPrint({
-          deviceName,
-          copies: printers?.profile.copies || 1,
-        }),
-        15000,
-        { ok: false, error: 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA.', timeout: true }
+    if (!window.oncaDesktop?.printCupom) {
+      setPrinterOpError(
+        'Teste físico só no aplicativo desktop. Use VISUALIZAR TESTE neste navegador — não gasta papel.'
       );
+      previewPrinterTest();
+      return;
+    }
+    try {
+      const cupom = buildPhysicalTestCupom(receiptWidth());
+      const job = prepareCupomJob(cupom, {
+        physicalTest: true,
+        method: (printers?.method as 'windows' | 'escpos' | 'tcp') || 'escpos',
+        cut: printers?.cut !== false,
+        printerName: printers?.use_windows_default
+          ? undefined
+          : printers?.receipt_printer || printers?.default_printer || undefined,
+        host: printers?.tcp_host,
+        port: printers?.tcp_port,
+      });
+      const res = await dispatchCupom(job, createDesktopTransport());
       if (!res.ok) {
-        setPrinterOpError(res.error || 'Impressora indisponível. A venda não é afetada.');
+        setPrinterOpError(res.error || 'Não foi possível enviar o cupom de teste.');
       } else {
-        setNotice('Teste de impressão enviado.');
+        setNotice('Único teste físico enviado (cupom mínimo). Não será repetido nesta sessão.');
       }
     } catch (e) {
       setPrinterOpError(e instanceof Error ? e.message : 'Falha no teste de impressão');
-    } finally {
-      setPrintersLoading(false);
     }
   }
 
@@ -750,7 +770,7 @@ export default function ConfiguracoesPage() {
               </select>
             </label>
             <label>
-              Formato
+              Largura
               <select
                 className="field-input"
                 disabled={!isAdmin}
@@ -762,10 +782,56 @@ export default function ConfiguracoesPage() {
                   })
                 }
               >
-                <option value="A4">A4</option>
-                <option value="80mm">80 mm</option>
                 <option value="58mm">58 mm</option>
+                <option value="80mm">80 mm</option>
+                <option value="A4">A4 (relatórios)</option>
               </select>
+            </label>
+            <label>
+              Método
+              <select
+                className="field-input"
+                disabled={!isAdmin}
+                value={printers.method || 'escpos'}
+                onChange={(e) => setPrinters({ ...printers, method: e.target.value })}
+              >
+                <option value="windows">Impressora Windows</option>
+                <option value="escpos">ESC/POS</option>
+                <option value="tcp">Rede TCP/IP</option>
+              </select>
+            </label>
+            {(printers.method || 'escpos') === 'tcp' && (
+              <>
+                <label>
+                  IP da impressora
+                  <input
+                    className="field-input"
+                    disabled={!isAdmin}
+                    value={printers.tcp_host || ''}
+                    onChange={(e) => setPrinters({ ...printers, tcp_host: e.target.value })}
+                    placeholder="192.168.0.50"
+                  />
+                </label>
+                <label>
+                  Porta
+                  <input
+                    className="field-input"
+                    type="number"
+                    disabled={!isAdmin}
+                    value={printers.tcp_port || 9100}
+                    onChange={(e) => setPrinters({ ...printers, tcp_port: Number(e.target.value) || 9100 })}
+                  />
+                </label>
+              </>
+            )}
+            <label className="check-inline span-2">
+              <input
+                type="checkbox"
+                disabled={!isAdmin}
+                checked={printers.cut !== false}
+                onChange={(e) => setPrinters({ ...printers, cut: e.target.checked })}
+              />
+              Cortar papel
             </label>
             <label>
               Cópias
@@ -829,9 +895,17 @@ export default function ConfiguracoesPage() {
               type="button"
               className="btn btn-accent"
               disabled={busy}
-              onClick={() => void testPrint()}
+              onClick={() => previewPrinterTest()}
             >
-              Testar impressão
+              VISUALIZAR TESTE
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={busy}
+              onClick={() => void physicalPrinterTestOnce()}
+            >
+              TESTAR IMPRESSORA - 1 CUPOM
             </button>
             <button
               type="button"
@@ -1531,6 +1605,14 @@ export default function ConfiguracoesPage() {
             </div>
           </div>
         </div>
+      )}
+      {cupomPreview && (
+        <CupomPreviewModal
+          title="VISUALIZAR TESTE"
+          text={cupomPreview.text}
+          html={cupomPreview.html}
+          onClose={() => setCupomPreview(null)}
+        />
       )}
     </section>
   );

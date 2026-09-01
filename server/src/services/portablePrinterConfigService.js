@@ -32,6 +32,10 @@ export function buildPortablePrinterConfig() {
       default_printer: settings.default_printer,
       profile: settings.profile,
       per_printer: settings.per_printer || {},
+      method: settings.method,
+      cut: settings.cut,
+      tcp_host: settings.tcp_host,
+      tcp_port: settings.tcp_port,
     },
     note:
       'O pareamento Bluetooth pertence ao sistema operacional e pode precisar ser refeito em outro computador. Papel e perfil são preservados.',
@@ -64,6 +68,10 @@ export function importPortablePrinterConfig(payload = {}, userName) {
       default_printer: root.default_printer,
       profile: root.profile,
       per_printer: root.per_printer,
+      method: root.method,
+      cut: root.cut,
+      tcp_host: root.tcp_host,
+      tcp_port: root.tcp_port,
     },
     userName
   );
