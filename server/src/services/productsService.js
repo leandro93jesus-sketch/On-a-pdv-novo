@@ -1,0 +1,468 @@
+import { getDb } from '../db/index.js';
+import { AppError } from '../utils/errors.js';
+import { assertNonNegativeCents } from '../utils/money.js';
+import { applyStockMovement } from './stockService.js';
+import { writeAudit } from './auditService.js';
+import { getCurrentOperator } from './settingsService.js';
+// Nome NÃO é único: produtos com o mesmo nome são permitidos.
+// Unicidade permanece apenas em sku/barcode (quando preenchidos).
+
+const PRODUCT_FIELDS = `
+  p.id, p.sku, p.barcode, p.name, p.category, p.unit,
+  p.price_cents, p.cost_cents, p.stock_qty, p.min_stock_qty,
+  p.allow_negative_stock, p.supplier_id, p.notes, p.active,
+  p.created_at, p.updated_at,
+  s.name AS supplier_name
+`;
+
+function normalizeOptionalText(value) {
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text ? text : null;
+}
+
+function mapProduct(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    sku: row.sku,
+    barcode: row.barcode,
+    name: row.name,
+    category: row.category,
+    unit: row.unit,
+    price_cents: row.price_cents,
+    cost_cents: row.cost_cents,
+    stock_qty: row.stock_qty,
+    min_stock_qty: row.min_stock_qty,
+    allow_negative_stock: row.allow_negative_stock,
+    supplier_id: row.supplier_id,
+    supplier_name: row.supplier_name ?? null,
+    notes: row.notes,
+    active: row.active,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    situation:
+      row.stock_qty <= 0 ? 'zerado' : row.stock_qty <= row.min_stock_qty ? 'baixo' : 'ok',
+  };
+}
+
+function assertUniqueCodes(db, { sku, barcode, excludeId = null }) {
+  if (sku) {
+    const row = db
+      .prepare(
+        `SELECT id FROM products WHERE sku = ? AND (? IS NULL OR id != ?)`
+      )
+      .get(sku, excludeId, excludeId);
+    if (row) {
+      throw new AppError('Já existe um produto com este código.', {
+        status: 409,
+        code: 'DUPLICATE_SKU',
+      });
+    }
+  }
+  if (barcode) {
+    const row = db
+      .prepare(
+        `SELECT id FROM products WHERE barcode = ? AND (? IS NULL OR id != ?)`
+      )
+      .get(barcode, excludeId, excludeId);
+    if (row) {
+      throw new AppError('Já existe um produto com este código de barras.', {
+        status: 409,
+        code: 'DUPLICATE_BARCODE',
+      });
+    }
+  }
+}
+
+export function searchProducts({
+  q,
+  barcode,
+  includeInactive = false,
+  category = null,
+} = {}) {
+  const db = getDb();
+  const where = [];
+  const params = {};
+
+  if (!includeInactive) where.push('p.active = 1');
+
+  if (barcode) {
+    where.push('p.barcode = @barcode');
+    params.barcode = String(barcode).trim();
+  } else if (q && String(q).trim()) {
+    const term = `%${String(q).trim()}%`;
+    where.push('(p.name LIKE @term OR p.sku LIKE @term OR p.barcode LIKE @term OR p.category LIKE @term)');
+    params.term = term;
+  }
+
+  if (category && String(category).trim()) {
+    where.push('p.category = @category');
+    params.category = String(category).trim();
+  }
+
+  const rows = db
+    .prepare(
+      `SELECT ${PRODUCT_FIELDS}
+       FROM products p
+       LEFT JOIN suppliers s ON s.id = p.supplier_id
+       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+       ORDER BY p.name
+       LIMIT 300`
+    )
+    .all(params);
+
+  return rows.map(mapProduct);
+}
+
+/** Remove acentos e baixa a caixa, para comparação tolerante na busca manual. */
+function normalizeSearchText(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Busca MANUAL (digitada) com tolerância: várias palavras parciais, sem acento e
+ * sem caixa, procurando em nome, código interno, código de barras, categoria e
+ * fornecedor. Os resultados são ordenados por proximidade.
+ *
+ * ATENÇÃO: esta função é exclusiva da digitação manual. A leitura do scanner
+ * continua usando searchProducts({ barcode }) / getProductByBarcode, que exigem
+ * correspondência EXATA — nunca aproximada.
+ */
+export function searchProductsManual({ q, includeInactive = false, limit = 30 } = {}) {
+  const termo = String(q ?? '').trim();
+  if (!termo) return [];
+
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT ${PRODUCT_FIELDS}
+       FROM products p
+       LEFT JOIN suppliers s ON s.id = p.supplier_id
+       ${includeInactive ? '' : 'WHERE p.active = 1'}`
+    )
+    .all();
+
+  const alvo = normalizeSearchText(termo);
+  const tokens = alvo.split(/\s+/).filter(Boolean);
+  const somenteDigitos = /^[0-9]+$/.test(alvo);
+
+  const pontuados = [];
+  for (const row of rows) {
+    const nome = normalizeSearchText(row.name);
+    const sku = normalizeSearchText(row.sku);
+    const barras = normalizeSearchText(row.barcode);
+    const categoria = normalizeSearchText(row.category);
+    const fornecedor = normalizeSearchText(row.supplier_name);
+    const tudo = `${nome} ${sku} ${barras} ${categoria} ${fornecedor}`;
+
+    let pontos = 0;
+
+    // Acertos exatos vêm primeiro, mesmo na busca manual.
+    if (barras && barras === alvo) pontos += 1000;
+    if (sku && sku === alvo) pontos += 900;
+    if (nome === alvo) pontos += 800;
+
+    if (somenteDigitos) {
+      if (barras.startsWith(alvo)) pontos += 300;
+      if (sku.startsWith(alvo)) pontos += 250;
+    }
+
+    // Todas as palavras digitadas precisam aparecer em algum campo.
+    const todasNoNome = tokens.every((t) => nome.includes(t));
+    const todasEmAlgumCampo = tokens.every((t) => tudo.includes(t));
+    if (todasNoNome) {
+      pontos += 400;
+      if (nome.startsWith(tokens[0])) pontos += 120;
+      // palavras completas valem mais que pedaços de palavra
+      const palavrasDoNome = nome.split(/\s+/);
+      pontos += tokens.filter((t) => palavrasDoNome.includes(t)).length * 40;
+      // quanto mais curto o nome, mais próximo do que foi digitado
+      pontos += Math.max(0, 60 - nome.length);
+    } else if (todasEmAlgumCampo) {
+      pontos += 200;
+      pontos += tokens.filter((t) => categoria.includes(t) || fornecedor.includes(t)).length * 20;
+    } else {
+      continue;
+    }
+
+    pontuados.push({ row, pontos });
+  }
+
+  pontuados.sort((a, b) => b.pontos - a.pontos || a.row.name.localeCompare(b.row.name, 'pt-BR'));
+  const max = Math.min(Math.max(Number(limit) || 30, 1), 300);
+  return pontuados.slice(0, max).map((p) => mapProduct(p.row));
+}
+
+export function getProductById(id) {
+  const db = getDb();
+  const row = db
+    .prepare(
+      `SELECT ${PRODUCT_FIELDS}
+       FROM products p
+       LEFT JOIN suppliers s ON s.id = p.supplier_id
+       WHERE p.id = ?`
+    )
+    .get(id);
+  if (!row) {
+    throw new AppError('Produto não encontrado', { status: 404, code: 'PRODUCT_NOT_FOUND' });
+  }
+  return mapProduct(row);
+}
+
+export function getProductByBarcode(barcode) {
+  const code = String(barcode || '').trim();
+  if (!code) {
+    throw new AppError('Código de barras é obrigatório', { status: 400, code: 'BARCODE_REQUIRED' });
+  }
+  const rows = searchProducts({ barcode: code, includeInactive: false });
+  if (!rows.length) {
+    throw new AppError('Produto não encontrado para o código informado', {
+      status: 404,
+      code: 'PRODUCT_NOT_FOUND',
+    });
+  }
+  return rows[0];
+}
+
+export function createProduct(payload = {}) {
+  const db = getDb();
+  const name = normalizeOptionalText(payload.name);
+  if (!name) {
+    throw new AppError('Nome é obrigatório', { status: 400, code: 'NAME_REQUIRED' });
+  }
+
+  const sku = normalizeOptionalText(payload.sku);
+  const barcode = normalizeOptionalText(payload.barcode);
+  const category = normalizeOptionalText(payload.category) || 'Geral';
+  const unit = normalizeOptionalText(payload.unit) || 'UN';
+  const price_cents = assertNonNegativeCents(payload.price_cents ?? 0, 'price_cents');
+  const cost_cents = assertNonNegativeCents(payload.cost_cents ?? 0, 'cost_cents');
+  const min_stock_qty = Number(payload.min_stock_qty ?? 0);
+  if (!Number.isInteger(min_stock_qty) || min_stock_qty < 0) {
+    throw new AppError('Estoque mínimo inválido', { status: 400, code: 'INVALID_MIN_STOCK' });
+  }
+  const initialStock = Number(payload.stock_qty ?? 0);
+  if (!Number.isInteger(initialStock) || initialStock < 0) {
+    throw new AppError('Estoque inicial inválido', { status: 400, code: 'INVALID_STOCK' });
+  }
+  const supplier_id =
+    payload.supplier_id == null || payload.supplier_id === ''
+      ? null
+      : Number(payload.supplier_id);
+  if (supplier_id != null) {
+    const sup = db.prepare('SELECT id FROM suppliers WHERE id = ?').get(supplier_id);
+    if (!sup) {
+      throw new AppError('Fornecedor não encontrado', { status: 400, code: 'SUPPLIER_NOT_FOUND' });
+    }
+  }
+  const notes = normalizeOptionalText(payload.notes);
+  const allow_negative_stock = payload.allow_negative_stock ? 1 : 0;
+  const active = payload.active === 0 || payload.active === false ? 0 : 1;
+  // Mesmo nome é permitido — não bloquear por similaridade/nome igual.
+
+  return db.transaction(() => {
+    assertUniqueCodes(db, { sku, barcode });
+    const info = db
+      .prepare(
+        `INSERT INTO products (
+           sku, barcode, name, category, unit, price_cents, cost_cents,
+           stock_qty, min_stock_qty, allow_negative_stock, supplier_id, notes, active
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        sku,
+        barcode,
+        name,
+        category,
+        unit,
+        price_cents,
+        cost_cents,
+        min_stock_qty,
+        allow_negative_stock,
+        supplier_id,
+        notes,
+        active
+      );
+    const id = Number(info.lastInsertRowid);
+
+    if (initialStock > 0) {
+      applyStockMovement(
+        {
+          productId: id,
+          movementType: 'entry',
+          quantity: initialStock,
+          reason: 'Estoque inicial',
+          referenceType: 'product',
+          referenceId: id,
+        },
+        { db, skipAudit: true }
+      );
+    }
+
+    writeAudit({
+      action: 'product.create',
+      entityType: 'product',
+      entityId: id,
+      details: { name, sku, barcode, initialStock },
+      userName: getCurrentOperator(),
+    });
+
+    return getProductById(id);
+  })();
+}
+
+export function updateProduct(id, payload = {}) {
+  const db = getDb();
+  const current = getProductById(id);
+
+  const name = payload.name != null ? normalizeOptionalText(payload.name) : current.name;
+  if (!name) {
+    throw new AppError('Nome é obrigatório', { status: 400, code: 'NAME_REQUIRED' });
+  }
+
+  const sku = payload.sku !== undefined ? normalizeOptionalText(payload.sku) : current.sku;
+  const barcode =
+    payload.barcode !== undefined ? normalizeOptionalText(payload.barcode) : current.barcode;
+  const category =
+    payload.category != null ? normalizeOptionalText(payload.category) || 'Geral' : current.category;
+  const unit = payload.unit != null ? normalizeOptionalText(payload.unit) || 'UN' : current.unit;
+  const price_cents =
+    payload.price_cents != null
+      ? assertNonNegativeCents(payload.price_cents, 'price_cents')
+      : current.price_cents;
+  const cost_cents =
+    payload.cost_cents != null
+      ? assertNonNegativeCents(payload.cost_cents, 'cost_cents')
+      : current.cost_cents;
+  const min_stock_qty =
+    payload.min_stock_qty != null ? Number(payload.min_stock_qty) : current.min_stock_qty;
+  if (!Number.isInteger(min_stock_qty) || min_stock_qty < 0) {
+    throw new AppError('Estoque mínimo inválido', { status: 400, code: 'INVALID_MIN_STOCK' });
+  }
+  const supplier_id =
+    payload.supplier_id === undefined
+      ? current.supplier_id
+      : payload.supplier_id == null || payload.supplier_id === ''
+        ? null
+        : Number(payload.supplier_id);
+  const notes = payload.notes !== undefined ? normalizeOptionalText(payload.notes) : current.notes;
+  const allow_negative_stock =
+    payload.allow_negative_stock == null
+      ? current.allow_negative_stock
+      : payload.allow_negative_stock
+        ? 1
+        : 0;
+  const active =
+    payload.active == null ? current.active : payload.active === 0 || payload.active === false ? 0 : 1;
+  // Edição cadastral permitida mesmo se o produto estiver em pedido de entrega.
+  // NÃO reescreve delivery_order_items (nome/preço/qtd históricos ficam intactos).
+  // NÃO altera stock_qty / reserved_qty aqui.
+
+  return db.transaction(() => {
+    assertUniqueCodes(db, { sku, barcode, excludeId: Number(id) });
+    db.prepare(
+      `UPDATE products SET
+         sku = ?, barcode = ?, name = ?, category = ?, unit = ?,
+         price_cents = ?, cost_cents = ?, min_stock_qty = ?,
+         allow_negative_stock = ?, supplier_id = ?, notes = ?, active = ?,
+         updated_at = datetime('now')
+       WHERE id = ?`
+    ).run(
+      sku,
+      barcode,
+      name,
+      category,
+      unit,
+      price_cents,
+      cost_cents,
+      min_stock_qty,
+      allow_negative_stock,
+      supplier_id,
+      notes,
+      active,
+      Number(id)
+    );
+
+    if (price_cents !== current.price_cents) {
+      db.prepare(
+        `INSERT INTO product_price_history (product_id, old_price_cents, new_price_cents, user_name)
+         VALUES (?, ?, ?, ?)`
+      ).run(Number(id), current.price_cents, price_cents, getCurrentOperator());
+      writeAudit({
+        action: 'product.price_change',
+        entityType: 'product',
+        entityId: Number(id),
+        details: {
+          old_price_cents: current.price_cents,
+          new_price_cents: price_cents,
+        },
+      });
+    }
+
+    writeAudit({
+      action: 'product.update',
+      entityType: 'product',
+      entityId: Number(id),
+      details: { name, sku, barcode, active },
+    });
+
+    return getProductById(id);
+  })();
+}
+
+export function listProductPriceHistory(productId, { limit = 50 } = {}) {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT * FROM product_price_history WHERE product_id = ? ORDER BY id DESC LIMIT ?`
+    )
+    .all(Number(productId), Math.min(Math.max(Number(limit) || 50, 1), 200));
+}
+
+export function deleteOrInactivateProduct(id) {
+  const db = getDb();
+  const product = getProductById(id);
+  const saleCount = db
+    .prepare('SELECT COUNT(*) AS c FROM sale_items WHERE product_id = ?')
+    .get(Number(id)).c;
+  const movCount = db
+    .prepare('SELECT COUNT(*) AS c FROM stock_movements WHERE product_id = ?')
+    .get(Number(id)).c;
+  let deliveryCount = 0;
+  try {
+    deliveryCount = db
+      .prepare('SELECT COUNT(*) AS c FROM delivery_order_items WHERE product_id = ?')
+      .get(Number(id)).c;
+  } catch {
+    deliveryCount = 0;
+  }
+
+  // Exclusão continua bloqueada por segurança quando há histórico (vendas/estoque/entregas).
+  // Edição cadastral NÃO passa por aqui.
+  if (saleCount > 0 || movCount > 0 || deliveryCount > 0) {
+    db.prepare(
+      `UPDATE products SET active = 0, updated_at = datetime('now') WHERE id = ?`
+    ).run(Number(id));
+    writeAudit({
+      action: 'product.inactivate',
+      entityType: 'product',
+      entityId: Number(id),
+      details: { reason: 'possui histórico', saleCount, movCount, deliveryCount },
+    });
+    return { ...getProductById(id), inactivated: true, deleted: false };
+  }
+
+  db.prepare('DELETE FROM products WHERE id = ?').run(Number(id));
+  writeAudit({
+    action: 'product.delete',
+    entityType: 'product',
+    entityId: Number(id),
+    details: { name: product.name },
+  });
+  return { id: Number(id), deleted: true, inactivated: false };
+}

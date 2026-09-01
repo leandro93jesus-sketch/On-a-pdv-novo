@@ -1,0 +1,164 @@
+{
+  "versao": "1.2.19",
+  "instalador": "/workspace/release/dist/ONCA-PDV-Setup-1.2.19.exe",
+  "instalador_bytes": 101218390,
+  "instalador_sha256": "49eed60d7fba56e88de2cfc1cdea1b54793ecc5d8cebfdf00f734879546abcde",
+  "ambiente": "Wine wine-9.0 (Ubuntu 9.0~repack-4build3) (Windows simulado em Linux)",
+  "prefixo": "/home/ubuntu/.wine-instalador-teste",
+  "destino_instalacao": "/home/ubuntu/.wine-instalador-teste/drive_c/users/ubuntu/AppData/Local/Programs/onca-pdv",
+  "total": 30,
+  "aprovados": 30,
+  "reprovados": 0,
+  "itens": [
+    {
+      "name": "00. Instalador existe e é executável Windows",
+      "result": "PASS",
+      "detail": "96.5 MB · PE32 executable (GUI) Intel 80386, for MS Windows, Nullsoft Installer self-extracting archive, 5 sections"
+    },
+    {
+      "name": "01. Ambiente Windows limpo preparado (prefixo Wine novo)",
+      "result": "PASS",
+      "detail": "wineboot ok"
+    },
+    {
+      "name": "02. Instalação silenciosa concluída",
+      "result": "PASS",
+      "detail": "destino=<Wine>/drive_c/users/ubuntu/AppData/Local/Programs/onca-pdv em 26s"
+    },
+    {
+      "name": "03. Executável instalado",
+      "result": "PASS",
+      "detail": "180.3 MB"
+    },
+    {
+      "name": "04. Arquivo necessário: app.asar (interface + main)",
+      "result": "PASS",
+      "detail": "ok"
+    },
+    {
+      "name": "04. Arquivo necessário: app-server (API)",
+      "result": "PASS",
+      "detail": "ok"
+    },
+    {
+      "name": "04. Arquivo necessário: web-dist (interface compilada)",
+      "result": "PASS",
+      "detail": "ok"
+    },
+    {
+      "name": "04. Arquivo necessário: node.exe embutido",
+      "result": "PASS",
+      "detail": "ok"
+    },
+    {
+      "name": "04. Arquivo necessário: better_sqlite3.node (banco)",
+      "result": "PASS",
+      "detail": "ok"
+    },
+    {
+      "name": "05. Instalação com tamanho coerente",
+      "result": "PASS",
+      "detail": "384.4 MB"
+    },
+    {
+      "name": "06. Atalho na Área de Trabalho",
+      "result": "PASS",
+      "detail": "<Wine>/drive_c/users/ubuntu/Desktop/ONÇA PDV.lnk"
+    },
+    {
+      "name": "07. Atalho no Menu Iniciar",
+      "result": "PASS",
+      "detail": "<Wine>/drive_c/users/ubuntu/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/ONÇA PDV.lnk"
+    },
+    {
+      "name": "08. Desinstalador presente",
+      "result": "PASS",
+      "detail": "Uninstall ONÇA PDV.exe"
+    },
+    {
+      "name": "09. Sistema instalado inicia e responde",
+      "result": "PASS",
+      "detail": "versao=1.2.19 build=2026.08.31-fechamento-busca-recuperacao-reimpressao"
+    },
+    {
+      "name": "10. Banco criado pela instalação",
+      "result": "PASS",
+      "detail": "Z:\\tmp\\onca-instalado-dados\\onca-pdv.db"
+    },
+    {
+      "name": "11. Login no sistema instalado",
+      "result": "PASS",
+      "detail": "status=200"
+    },
+    {
+      "name": "12. Cadastro de produto no sistema instalado",
+      "result": "PASS",
+      "detail": "id=1"
+    },
+    {
+      "name": "13. Bipagem por código de barras",
+      "result": "PASS",
+      "detail": "hits=1"
+    },
+    {
+      "name": "14. Venda de teste com troco (37,50 recebendo 50,00)",
+      "result": "PASS",
+      "detail": "total=3750 troco=1250"
+    },
+    {
+      "name": "15. Estoque baixou 10 → 9",
+      "result": "PASS",
+      "detail": "stock=9"
+    },
+    {
+      "name": "16. Histórico mostra a venda",
+      "result": "PASS",
+      "detail": "vendas=1"
+    },
+    {
+      "name": "17. Relatório Vendas detalhadas no sistema instalado",
+      "result": "PASS",
+      "detail": "linhas=1 lucro=2250"
+    },
+    {
+      "name": "18. Sistema fecha corretamente",
+      "result": "PASS",
+      "detail": "API parou"
+    },
+    {
+      "name": "19. Sistema reabre depois de fechar",
+      "result": "PASS",
+      "detail": "versao=1.2.19"
+    },
+    {
+      "name": "20. Dados persistiram após reabrir (venda, troco e estoque)",
+      "result": "PASS",
+      "detail": "venda=VD-20260901-000001 troco=1250 estoque=9"
+    },
+    {
+      "name": "21. Atualização instalada por cima da anterior",
+      "result": "PASS",
+      "detail": "concluída em 26s"
+    },
+    {
+      "name": "22. Banco NÃO foi substituído por um vazio",
+      "result": "PASS",
+      "detail": "sha256 14948fa5e2d8… inalterado"
+    },
+    {
+      "name": "23. Configurações do usuário preservadas",
+      "result": "PASS",
+      "detail": "/tmp/onca-instalado-dados/configuracoes/marcador-do-usuario.txt"
+    },
+    {
+      "name": "24. Sistema abre após a atualização",
+      "result": "PASS",
+      "detail": "versao=1.2.19"
+    },
+    {
+      "name": "25. Vendas, produtos e estoque intactos após atualizar",
+      "result": "PASS",
+      "detail": "venda=VD-20260901-000001 estoque=9"
+    }
+  ]
+}

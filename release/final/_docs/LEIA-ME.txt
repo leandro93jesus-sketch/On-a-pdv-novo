@@ -1,0 +1,45 @@
+ONÇA PDV — ENTREGA FINAL 1.2.17
+================================
+
+1) ABRIR O PROJETO
+   Extraia o ZIP em uma pasta limpa.
+   Requisitos: Node.js 20+ e npm.
+
+2) INSTALAR DEPENDÊNCIAS
+   cd ONCA-PDV-FINAL
+   npm install
+
+3) RODAR EM DESENVOLVIMENTO
+   npm run dev
+   - API: http://127.0.0.1:3001
+   - Web: http://localhost:5173
+   Login bootstrap (primeira vez): admin / admin123
+   (o sistema exige troca de senha no primeiro acesso)
+
+4) EXECUTAR OS TESTES
+   npm test
+   # suites críticas:
+   npm test -w server -- --test src/validacaoFinalObrigatoria.test.js
+   npm run e2e:etapa3   (com npm run dev já ativo)
+
+5) GERAR O BUILD WEB
+   npm run build
+
+6) GERAR O INSTALADOR (Windows / Linux)
+   # Windows (NSIS + ZIP) — requer Wine/i386 neste ambiente Linux:
+   npm run desktop:pack:win
+   # Linux:
+   npm run desktop:pack:linux
+   Artefatos em release/dist/
+
+7) LOCALIZAÇÃO DO BANCO
+   Desenvolvimento: server/data/onca-pdv.db (criado automaticamente)
+   Desktop Windows: %APPDATA%\onca-pdv\ONCA-PDV\onca-pdv.db
+   Este ZIP NÃO inclui banco de produção.
+
+8) LOCALIZAÇÃO DOS BACKUPS
+   Desenvolvimento: server/data/backups/
+   Desktop: pasta de dados do AppData (backups/)
+
+9) VERSÃO ATUAL
+   1.2.17 (build 2026.08.28-ui-declutter-validacao)

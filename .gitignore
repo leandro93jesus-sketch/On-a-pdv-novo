@@ -1,0 +1,42 @@
+node_modules/
+dist/
+build/
+coverage/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# SQLite runtime data
+server/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Desktop packaging (gerado; não inclui dados reais)
+desktop-resources/
+release/dist/
+release/final/*.zip
+release/final/ONCA-PDV-FINAL/
+release/final/_backup-source-*/
+*.exe
+
+# Entrega final (release/ONCA-PDV-FINAL.zip é versionado com git add -f;
+# o instalador solto e as pastas de verificação são gerados)
+release-final/
+release/ONCA-PDV-CODIGO-FONTE-COMPLETO.zip
+release/release-final.json
+release/TESTE-ZIP-EXTRAIDO/
+release/ENTREGA-FINAL/
+release/ENTREGA-RELATORIO.json
+*.AppImage
+*.blockmap
+*.dmg
+*.snap
+
+# IDE / tooling
+.vscode/
+.idea/
+*.swp
+.turbo/

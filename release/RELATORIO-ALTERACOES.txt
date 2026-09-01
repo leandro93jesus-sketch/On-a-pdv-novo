@@ -1,0 +1,48 @@
+ONÇA PDV 1.2.19 — RELATÓRIO DAS ALTERAÇÕES
+================================================
+Build: 2026.08.31-fechamento-busca-recuperacao-reimpressao
+Gerado em: 2026-08-31T02:23:05.410Z
+
+REGRA SEGUIDA: continuar o projeto existente a partir da 1.2.18 oficial.
+Nada foi reconstruído, nenhum módulo foi removido, o layout (barra lateral
+verde, vendas com produtos ao centro e carrinho à direita) foi preservado
+e o banco não foi apagado. As oito alterações da 1.2.18 continuam intactas.
+
+ETAPA 0 — BASE 1.2.18 VALIDADA ANTES DE MEXER
+- checkpoint git: checkpoint-antes-melhorias-operacionais
+- scripts/etapa0-validar-base.mjs: 20/20
+- suíte do servidor na base: 209 aprovados, 4 pulados
+
+ETAPA 1 — FECHAMENTO DIÁRIO DE CAIXA MAIS CLARO  (checkpoint-fechamento-caixa-ok)
+- Tela reorganizada em três blocos: Vendas do período, Movimentações do caixa
+  e Resumo final.
+- Diferença em texto direto: FALTA R$ / SOBRA R$ / CAIXA CORRETO.
+- Botões IMPRIMIR FECHAMENTO e GERAR PDF (GET /api/cash/sessions/:id/pdf).
+- CÁLCULO INALTERADO: computeExpectedCash continua
+  saldo inicial + dinheiro de vendas + suprimentos − sangrias.
+  Pix, cartões e crediário aparecem só para conferência.
+
+ETAPA 2 — BUSCA MANUAL INTELIGENTE, SEPARADA DO SCANNER  (checkpoint-busca-inteligente-ok)
+- Scanner NÃO MUDOU: GET /api/products?barcode= continua com igualdade exata.
+- Novo GET /api/products/busca-manual?q= (várias palavras, sem acento, nome,
+  SKU, código de barras, categoria e fornecedor).
+- A digitação no PDV usa a busca manual; Enter em código de 8–18 dígitos
+  continua na consulta exata do scanner.
+
+ETAPA 3 — RECUPERAÇÃO DE VENDA APÓS QUEDA DE ENERGIA  (checkpoint-recuperacao-venda-ok)
+- Modal com horário, itens e valor aproximado.
+- Produto apagado sai do carrinho com aviso; preço alterado é atualizado.
+- Rascunho corrompido é descartado e o PDV abre.
+- O rascunho NÃO é venda: não gera faturamento, estoque, caixa nem pagamento.
+
+ETAPA 4 — REIMPRESSÃO / PDF RÁPIDOS NO HISTÓRICO  (checkpoint-reimpressao-rapida-ok)
+- Cada linha: VER / REIMPRIMIR / PDF, reusando as rotinas já aprovadas.
+- Somente leitura: não duplica venda, itens, pagamento, estoque nem faturamento.
+
+CORREÇÃO DE APOIO
+- A barra lateral passa a ler a versão de web/package.json (appVersion.ts),
+  para o número na tela coincidir com a API mesmo no npm run dev:web.
+
+BANCO DE DADOS
+- Nenhuma migration destrutiva. Nenhuma tabela nova obrigatória.
+- integrity_check e foreign_key_check conferidos na regressão geral.

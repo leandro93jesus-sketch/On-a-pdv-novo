@@ -1,0 +1,71 @@
+{
+  "kind": "etapa5_backup_restore_isolated",
+  "created_at": "2026-08-30T22:33:22.533Z",
+  "real_db": "/workspace/server/data/onca-pdv.db",
+  "tmp": "/tmp/onca-pdv-restore-Rp8Ex6",
+  "backup_sha256": "2be356cea7a38f40bcde82ebc6bfb45553bdfd5df2fd79d2f86a6e2d093abcf8",
+  "before": {
+    "integrity": "ok",
+    "fk": 0,
+    "counts": {
+      "products": 12,
+      "customers": 0,
+      "sales": 0,
+      "stock_sum": 730
+    },
+    "label": "isolated-before"
+  },
+  "after": {
+    "integrity": "ok",
+    "fk": 0,
+    "counts": {
+      "products": 12,
+      "customers": 0,
+      "sales": 0,
+      "stock_sum": 730
+    },
+    "label": "restored"
+  },
+  "results": [
+    {
+      "id": "copy",
+      "ok": true,
+      "detail": "/tmp/onca-pdv-restore-Rp8Ex6/isolated.db"
+    },
+    {
+      "id": "integrity-before",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "id": "fk-before",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "id": "backup-hash",
+      "ok": true,
+      "detail": "2be356cea7a38f40…"
+    },
+    {
+      "id": "integrity-after",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "id": "fk-after",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "id": "counts-match",
+      "ok": true,
+      "detail": "{\"products\":12,\"customers\":0,\"sales\":0,\"stock_sum\":730}"
+    },
+    {
+      "id": "real-untouched",
+      "ok": true,
+      "detail": "/workspace/server/data/onca-pdv.db"
+    }
+  ]
+}

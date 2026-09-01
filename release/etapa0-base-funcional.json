@@ -1,0 +1,129 @@
+{
+  "etapa": "ETAPA 0 — base funcional",
+  "versao": "1.2.19",
+  "total": 20,
+  "aprovados": 20,
+  "reprovados": 0,
+  "itens": [
+    {
+      "n": 1,
+      "name": "API inicia e responde /api/health",
+      "result": "PASS",
+      "detail": "status=200 versao=1.2.19"
+    },
+    {
+      "n": 4,
+      "name": "Conexao SQLite ativa",
+      "result": "PASS",
+      "detail": "arquivo=/tmp/onca-etapa0-d0mIt9/etapa0.db"
+    },
+    {
+      "n": 5,
+      "name": "PRAGMA integrity_check (antes)",
+      "result": "PASS",
+      "detail": "resultado=ok"
+    },
+    {
+      "n": 2,
+      "name": "Autenticacao do operador",
+      "result": "PASS",
+      "detail": "status=200"
+    },
+    {
+      "n": 16,
+      "name": "Tela Caixa: abertura de sessao",
+      "result": "PASS",
+      "detail": "status=201"
+    },
+    {
+      "n": 7,
+      "name": "Cadastro/carga de produtos",
+      "result": "PASS",
+      "detail": "status=201 id=1"
+    },
+    {
+      "n": 6,
+      "name": "Tela Vendas: lista de produtos carrega",
+      "result": "PASS",
+      "detail": "itens=1"
+    },
+    {
+      "n": 8,
+      "name": "Adicionar produto ao carrinho (bipagem exata)",
+      "result": "PASS",
+      "detail": "hits=1"
+    },
+    {
+      "n": 9,
+      "name": "Finalizar venda de teste",
+      "result": "PASS",
+      "detail": "status=201 total=5000 troco=5000"
+    },
+    {
+      "n": 10,
+      "name": "Registro em sales",
+      "result": "PASS",
+      "detail": "{\"id\":1,\"total_cents\":5000,\"status\":\"completed\"}"
+    },
+    {
+      "n": 11,
+      "name": "Registro em sale_items",
+      "result": "PASS",
+      "detail": "[{\"product_id\":1,\"quantity\":2,\"line_total_cents\":5000}]"
+    },
+    {
+      "n": 12,
+      "name": "Registro em sale_payments",
+      "result": "PASS",
+      "detail": "[{\"method\":\"dinheiro\",\"amount_cents\":5000}]"
+    },
+    {
+      "n": 13,
+      "name": "Registro em stock_movements",
+      "result": "PASS",
+      "detail": "[{\"movement_type\":\"sale\",\"quantity_delta\":-2,\"stock_before\":10,\"stock_after\":8}]"
+    },
+    {
+      "n": 14,
+      "name": "Tela Historico abre com a venda e detalhe",
+      "result": "PASS",
+      "detail": "itens=1 detalhe=200"
+    },
+    {
+      "n": 15,
+      "name": "Tela Produtos/Estoque abre com movimentacoes",
+      "result": "PASS",
+      "detail": "movimentacoes=2"
+    },
+    {
+      "n": 17,
+      "name": "Caixa registra a venda em dinheiro",
+      "result": "PASS",
+      "detail": "dinheiro=5000"
+    },
+    {
+      "n": 18,
+      "name": "Tela Relatorios abre (catalogo + vendas por periodo + vendas detalhadas)",
+      "result": "PASS",
+      "detail": "catalogo=28 periodo=1 detalhado=1"
+    },
+    {
+      "n": 19,
+      "name": "Backup/checkpoint da versao funcional",
+      "result": "PASS",
+      "detail": "status=201 arquivo=onca-pdv-backup-2026-09-01-004450.db"
+    },
+    {
+      "n": 20,
+      "name": "Configuracoes de impressao presentes",
+      "result": "PASS",
+      "detail": "settings=200 impressoras={\"use_windows_default\":true,\"receipt_printer\":\"\",\"reports_printer\":\"\",\"delivery_"
+    },
+    {
+      "n": 21,
+      "name": "PRAGMA integrity_check (depois)",
+      "result": "PASS",
+      "detail": "resultado=ok"
+    }
+  ]
+}

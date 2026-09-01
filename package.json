@@ -1,0 +1,80 @@
+{
+  "name": "onca-pdv",
+  "version": "1.2.19",
+  "private": true,
+  "author": "ONÇA Produtos de Limpeza",
+  "description": "ONÇA PDV — sistema profissional de ponto de venda local-first.",
+  "main": "electron/main.cjs",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm run dev -w server",
+    "dev:web": "npm run dev -w web",
+    "build": "npm run build -w web",
+    "start:server": "npm run start -w server",
+    "test": "npm run test -w server && npm run test:web",
+    "test:web": "node --experimental-strip-types --test web/src/modules/vendas/saleDraftStore.test.mjs",
+    "lint": "npm run lint -w web",
+    "migrate": "npm run migrate -w server",
+    "seed": "npm run seed -w server",
+    "review:etapa1": "node scripts/review-etapa1.mjs",
+    "review:etapa2": "node scripts/review-etapa2.mjs",
+    "review:etapa3": "node scripts/review-etapa3.mjs",
+    "review:etapa4": "node scripts/review-etapa4.mjs",
+    "review:etapa5": "node scripts/review-etapa5.mjs",
+    "review:fase1": "node scripts/review-fase1.mjs",
+    "review:fase2": "node scripts/review-fase2.mjs",
+    "review:fase3": "node scripts/review-fase3.mjs",
+    "e2e:etapa3": "node scripts/e2e-etapa3.mjs",
+    "e2e:ui:etapa3": "node scripts/e2e-ui-etapa3.mjs",
+    "e2e:ui:etapa5": "node scripts/e2e-ui-etapa5.mjs",
+    "e2e:etapa4": "node scripts/e2e-etapa4.mjs",
+    "e2e:etapa5": "node scripts/e2e-etapa5.mjs",
+    "etapa5:purge-review": "node scripts/etapa5-purge-review-data.mjs",
+    "simulate:oncas-v2": "node scripts/simulate-oncas-v2.mjs",
+    "import:oncas-v2": "node scripts/import-oncas-v2-real.mjs",
+    "etapa5:test-data": "node scripts/etapa5-test-data-report.mjs",
+    "etapa5:restore-isolated": "node scripts/etapa5-backup-restore-isolated.mjs",
+    "desktop:prepare": "node scripts/prepare-desktop.mjs",
+    "desktop:prepare:win": "PDV_DESKTOP_PLATFORM=win node scripts/prepare-desktop.mjs && node scripts/verify-desktop-resources.mjs win",
+    "desktop:prepare:linux": "PDV_DESKTOP_PLATFORM=linux node scripts/prepare-desktop.mjs && node scripts/verify-desktop-resources.mjs linux",
+    "desktop:verify:win": "node scripts/verify-desktop-resources.mjs win",
+    "desktop:verify:linux": "node scripts/verify-desktop-resources.mjs linux",
+    "desktop:dist:linux": "electron-builder --linux AppImage tar.gz dir --config electron-builder.yml",
+    "desktop:dist:win": "electron-builder --win nsis zip --x64 --config electron-builder.yml",
+    "desktop:pack": "npm run build && npm run desktop:prepare:linux && npm run desktop:dist:linux",
+    "desktop:pack:win": "npm run build && npm run desktop:prepare:win && npm run desktop:dist:win && npm run desktop:portable:readme && node scripts/pack-pendrive-zip.mjs",
+    "desktop:pendrive": "node scripts/pack-pendrive-zip.mjs",
+    "validar:base": "node scripts/etapa0-validar-base.mjs",
+    "testar:instalador": "node scripts/testar-instalador-windows.mjs",
+    "entrega:final": "node scripts/montar-entrega.mjs",
+    "entrega:artefatos": "node scripts/montar-release-final.mjs",
+    "test:sidecar-pendrive": "node scripts/test-sidecar-pendrive-flow.mjs",
+    "desktop:pack:linux": "npm run build && npm run desktop:prepare:linux && npm run desktop:dist:linux && npm run desktop:linux:portable",
+    "desktop:portable:readme": "node scripts/write-portable-readme.mjs",
+    "desktop:linux:portable": "node scripts/pack-linux-portable.mjs",
+    "validate:etapa3": "npm test && npm run lint && npm run build && npm run review:etapa1 && npm run review:etapa2 && npm run review:etapa3 && npm run e2e:etapa3 && npm run e2e:ui:etapa3",
+    "validate:etapa4": "npm test && npm run lint && npm run build && npm run review:etapa1 && npm run review:etapa2 && npm run review:etapa3 && npm run review:etapa4 && npm run e2e:etapa4",
+    "validate:etapa5": "npm test && npm run lint && npm run build && npm run review:etapa1 && npm run review:etapa2 && npm run review:etapa3 && npm run review:etapa4 && npm run review:etapa5 && npm run etapa5:test-data && npm run etapa5:restore-isolated && npm run e2e:etapa5 && npm run e2e:ui:etapa5"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "build": {
+    "appId": "br.com.oncaprodutos.pdv",
+    "productName": "ONÇA PDV",
+    "buildVersion": "1.2.19",
+    "extraMetadata": {
+      "version": "1.2.19",
+      "ONCA_BUILD_ID": "2026.08.31-fechamento-busca-recuperacao-reimpressao"
+    }
+  }
+}

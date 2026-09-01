@@ -1,0 +1,26 @@
+ONÇA PDV 1.2.17 — ALTERAÇÕES
+============================
+
+INTERFACE (NÃO SOBRECARREGAR A TELA)
+- Toast de confirmação após bipagem (sem modal para produto cadastrado)
+- Aviso compacto de estoque zerado/insuficiente (Ajustar / Continuar / Agora não)
+- Cadastro rápido: código, nome, preço, estoque + Mais informações
+- Produtos/Estoque unificado com colunas enxutas
+- Histórico com Abrir; detalhes/PDF/alterar/excluir no detalhe
+- Crediário com Receber (modal curto) e Abrir (detalhes)
+
+CREDIÁRIO / CAIXA
+- Pagamento parcial atualiza caixa (dinheiro/pix/cartão)
+- Reduz sales_crediario_cents da sessão
+- Movimento recebimento_crediario (migração 024)
+
+QUALIDADE
+- Suite validacaoFinalObrigatoria.test.js
+- Exact match de barcode (sem selecionar código parecido)
+- Troco em tempo real na venda em dinheiro
+- Proteção de reenvio (client_request_id) na finalização
+
+VERSÕES ANTERIORES RELEVANTES NESTA LINHA
+- 1.2.14 scanner exact + histórico alterar/cancelar
+- 1.2.15 orçamentos + Salvar PDF
+- 1.2.16 troco + Produtos/Estoque + cadastro rápido

@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>ONÇA PDV</title>
+    <style>
+      :root {
+        --bg0: #0f1a14;
+        --bg1: #1a2e22;
+        --ink: #f4f7f2;
+        --muted: #b7c7ba;
+        --ok: #3d9a5f;
+        --warn: #c9a227;
+        --err: #c44b4b;
+        --btn: #214d32;
+        --btn-border: #3f7a54;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+        background: radial-gradient(1200px 600px at 20% 0%, #243f2f 0%, var(--bg0) 55%, #0b120e 100%);
+        color: var(--ink);
+      }
+      .wrap {
+        min-height: 100%;
+        display: grid;
+        place-items: center;
+        padding: 28px;
+      }
+      .panel {
+        width: min(520px, 100%);
+        padding: 28px 28px 22px;
+        border: 1px solid rgba(255,255,255,0.08);
+        background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.12));
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 28px;
+        letter-spacing: 0.04em;
+        font-weight: 700;
+      }
+      .sub {
+        margin: 0 0 22px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 0;
+        border-top: 1px solid rgba(255,255,255,0.08);
+        font-size: 14px;
+      }
+      .label { color: var(--muted); }
+      .value { font-weight: 650; letter-spacing: 0.03em; }
+      .value.ok { color: var(--ok); }
+      .value.busy { color: var(--warn); }
+      .value.err { color: var(--err); }
+      .msg {
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        min-height: 2.8em;
+      }
+      .actions {
+        display: none;
+        gap: 10px;
+        margin-top: 16px;
+      }
+      .actions.show { display: flex; flex-wrap: wrap; }
+      button {
+        appearance: none;
+        border: 1px solid var(--btn-border);
+        background: var(--btn);
+        color: var(--ink);
+        padding: 10px 14px;
+        font-size: 13px;
+        font-weight: 650;
+        letter-spacing: 0.03em;
+        cursor: pointer;
+      }
+      button.ghost {
+        background: transparent;
+        border-color: rgba(255,255,255,0.18);
+      }
+      button:hover { filter: brightness(1.08); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="panel">
+        <h1>ONÇA PDV</h1>
+        <p class="sub">INICIANDO ONÇA PDV…</p>
+        <div class="row">
+          <span class="label">API LOCAL</span>
+          <span id="apiStatus" class="value busy">INICIANDO…</span>
+        </div>
+        <div class="row">
+          <span class="label">HEALTH CHECK</span>
+          <span id="healthStatus" class="value busy">AGUARDANDO…</span>
+        </div>
+        <p id="message" class="msg">Preparando serviço local. Aguarde alguns segundos.</p>
+        <div id="actions" class="actions">
+          <button id="retryBtn" type="button">TENTAR NOVAMENTE</button>
+          <button id="diagBtn" class="ghost" type="button">ABRIR DIAGNÓSTICO</button>
+        </div>
+      </div>
+    </div>
+    <script>
+      const apiEl = document.getElementById('apiStatus');
+      const healthEl = document.getElementById('healthStatus');
+      const msgEl = document.getElementById('message');
+      const actions = document.getElementById('actions');
+      const api = window.oncaSplash;
+
+      function setStatus(el, text, kind) {
+        el.textContent = text;
+        el.className = 'value ' + (kind || 'busy');
+      }
+
+      window.__oncaSplashUpdate = (payload = {}) => {
+        if (payload.api) setStatus(apiEl, payload.api.text, payload.api.kind);
+        if (payload.health) setStatus(healthEl, payload.health.text, payload.health.kind);
+        if (typeof payload.message === 'string') msgEl.textContent = payload.message;
+        if (payload.showActions) actions.classList.add('show');
+        else actions.classList.remove('show');
+      };
+
+      document.getElementById('retryBtn').onclick = () => api?.retry?.();
+      document.getElementById('diagBtn').onclick = () => api?.openDiagnostics?.();
+    </script>
+  </body>
+</html>
