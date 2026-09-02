@@ -221,39 +221,47 @@ async function listPrintersWindows(mainWindow) {
 }
 
 function electronPrint(mainWindow, opts = {}) {
-  const deviceName = opts.deviceName || undefined;
   const copies = Math.max(1, Number(opts.copies || 1));
   return new Promise((resolve) => {
-    try {
-      mainWindow.webContents.print(
-        {
-          silent: Boolean(deviceName),
-          printBackground: true,
-          deviceName,
-          copies,
-          margins: { marginType: 'default' },
-        },
-        (success, failureReason) => {
-          if (!success) {
-            resolve({
-              ok: false,
-              error:
-                failureReason ||
-                'Impressora indisponível ou impressão cancelada. A venda não é afetada.',
-              via: 'electron',
-            });
-            return;
-          }
-          resolve({ ok: true, via: 'electron' });
+    const { pickExactPrinterName } = require('./printerName.cjs');
+    mainWindow.webContents
+      .getPrintersAsync()
+      .then((printers) => {
+        const picked = pickExactPrinterName(printers || [], opts.deviceName);
+        if (!picked.ok || !picked.deviceName) {
+          resolve({ ok: false, error: picked.error, via: 'deviceName' });
+          return;
         }
-      );
-    } catch (err) {
-      resolve({
-        ok: false,
-        error: err.message || 'Falha ao imprimir. A venda não é afetada.',
-        via: 'electron',
+        mainWindow.webContents.print(
+          {
+            silent: true,
+            printBackground: true,
+            deviceName: picked.deviceName,
+            copies,
+            margins: { marginType: 'default' },
+          },
+          (success, failureReason) => {
+            if (!success) {
+              resolve({
+                ok: false,
+                error:
+                  failureReason ||
+                  'Impressora indisponível ou impressão cancelada. A venda não é afetada.',
+                via: 'electron',
+              });
+              return;
+            }
+            resolve({ ok: true, via: 'electron' });
+          }
+        );
+      })
+      .catch((err) => {
+        resolve({
+          ok: false,
+          error: err.message || 'Falha ao imprimir. A venda não é afetada.',
+          via: 'electron',
+        });
       });
-    }
   });
 }
 
@@ -322,21 +330,16 @@ function registerPrinterIpc(ipcMain, getMainWindow) {
           isDefault: p.isDefault,
         }))
       );
-      const wanted = String(opts.deviceName || '').trim();
-      const match =
-        (listed.printers || []).find((p) => p.name === wanted) ||
-        (listed.printers || []).find((p) => (p.displayName || '') === wanted) ||
-        (listed.printers || []).find((p) => p.isDefault) ||
-        (listed.printers || [])[0];
-      const deviceName = match?.name || wanted || undefined;
-      console.log('MAIN: Impressora encontrada', {
-        requested: wanted || null,
-        deviceName: deviceName || null,
-        displayName: match?.displayName || null,
-        isDefault: Boolean(match?.isDefault),
-      });
+      const { pickExactPrinterName } = require('./printerName.cjs');
+      console.log('Impressora salva:', opts.deviceName || '(nenhuma — usar padrão)');
+      const picked = pickExactPrinterName(listed.printers || [], opts.deviceName);
+      if (!picked.ok || !picked.deviceName) {
+        console.log('MAIN: Resultado', 'erro');
+        return { ok: false, error: picked.error, via: 'deviceName' };
+      }
+      const deviceName = picked.deviceName;
       const method = opts.method || 'escpos';
-      console.log('MAIN: Enviando impressão', { method, deviceName: deviceName || null, silent: true });
+      console.log('MAIN: Enviando impressão', { method, deviceName, silent: true });
       if (method === 'windows') {
         const { printDedicatedHtml } = require('./printHtmlWindow.cjs');
         const result = await withTimeout(
@@ -399,11 +402,21 @@ function registerPrinterIpc(ipcMain, getMainWindow) {
           via: 'guard',
         };
       }
+      const mainWindow = getMainWindow();
+      const listed =
+        process.platform === 'linux'
+          ? await listPrintersLinux(mainWindow)
+          : await listPrintersWindows(mainWindow);
+      const { pickExactPrinterName } = require('./printerName.cjs');
+      const picked = pickExactPrinterName(listed.printers || [], opts.deviceName);
+      if (!picked.ok || !picked.deviceName) {
+        return { ok: false, error: picked.error, via: 'deviceName' };
+      }
       return await withTimeout(
         sendRaw({
           bytes,
           method: opts.method || 'escpos',
-          deviceName: opts.deviceName,
+          deviceName: picked.deviceName,
           host: opts.host,
           port: opts.port,
         }),

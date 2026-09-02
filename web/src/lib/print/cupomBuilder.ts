@@ -127,7 +127,7 @@ export function buildPhysicalTestCupom(width: CupomWidth = '80mm'): BuiltCupom {
 /** Mesmo gerador usado pela venda — texto curto do motor real do PDV. */
 export function buildEngineTestCupom(width: CupomWidth = '80mm'): BuiltCupom {
   const w = charsForWidth(width);
-  const lines = ['ONÇA', 'TESTE PELO PDV', rule(w), '', 'IMPRESSÃO OK', ''];
+  const lines = ['ONÇA', 'TESTE PDV', rule(w), '', 'IMPRESSORA OK', ''];
   return finalizeCupom(lines.join('\n'), width, { hasItems: false, hasTotal: false, hasPayment: false });
 }
 

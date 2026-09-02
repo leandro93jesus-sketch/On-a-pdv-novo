@@ -17,6 +17,8 @@ import { cupomToPreviewHtml } from './previewHtml.ts';
 import { createMockPrinter, type MockPrinter } from './mockPrinter.ts';
 import { dispatchCupom, prepareCupomJob, type PrintMethod, type PrintTransport } from './printReceipt.ts';
 import {
+  formatPrinterList,
+  PRINTER_NOT_FOUND_MESSAGE,
   resolveConfiguredPrinter,
   type ListedPrinter,
   type PrinterResolveResult,
@@ -96,6 +98,39 @@ export function createPrintService(deps: PrintServiceDeps) {
     const printers = await deps.listPrinters().catch(() => []);
     const width = thermalWidth(opts.paperFormat || settings?.profile?.format);
     const method = ((settings?.method as PrintMethod) || 'escpos') as PrintMethod;
+    const savedName = String(settings?.receipt_printer || '').trim();
+
+    printLog('Impressora salva', savedName || '(nenhuma — usar padrão)');
+    printLog('Impressoras disponíveis', formatPrinterList(printers));
+    printers.forEach((p) => {
+      printLog('Impressora detectada', {
+        name: p.name,
+        displayName: p.displayName,
+        description: p.description,
+        isDefault: p.isDefault,
+      });
+    });
+
+    const resolved = resolveConfiguredPrinter(settings, printers);
+    printLog('Impressora escolhida', resolved.ok ? resolved.deviceName : '(inválida)');
+    printLog('[4] Impressora selecionada', {
+      ok: resolved.ok,
+      deviceName: resolved.deviceName,
+      source: resolved.source,
+      savedName: resolved.savedName,
+      use_windows_default: Boolean(settings?.use_windows_default),
+    });
+    if (!resolved.ok || !resolved.deviceName) {
+      printLog('deviceName enviado', '(nenhum — recusado)');
+      printLog('Resultado', 'erro');
+      return fail(kind, resolved.error || PRINTER_NOT_FOUND_MESSAGE, {
+        method,
+        printers,
+        resolve: resolved,
+        deviceName: undefined,
+        deviceNameSource: resolved.source,
+      });
+    }
 
     let cupom: BuiltCupom;
     if (kind === 'engine-test') {
@@ -117,33 +152,7 @@ export function createPrintService(deps: PrintServiceDeps) {
     const valid = validateCupomText(cupom.text);
     printLog('[3] Conteúdo validado', { ok: valid.ok, chars: valid.ok ? valid.text.length : 0 });
     if (!valid.ok) {
-      return fail(kind, valid.error, { cupomText: String(cupom.text || ''), method });
-    }
-
-    const resolved = resolveConfiguredPrinter(settings, printers);
-    printLog('[4] Impressora selecionada', {
-      deviceName: resolved.deviceName,
-      displayName: resolved.displayName,
-      source: resolved.source,
-      savedName: resolved.savedName,
-      stale: resolved.stale,
-      use_windows_default: Boolean(settings?.use_windows_default),
-      comparison: resolved.comparison,
-    });
-
-    if ((resolved.stale || resolved.corrected) && printers.length > 0 && deps.persistPrinterFix) {
-      try {
-        await deps.persistPrinterFix({
-          receipt_printer: resolved.deviceName || '',
-          use_windows_default: resolved.source === 'windows-default' || resolved.source === 'stale-fallback-default',
-        });
-        printLog('[4] Impressora selecionada', { persisted: true, receipt_printer: resolved.deviceName || '' });
-      } catch (e) {
-        printLog('[4] Impressora selecionada', {
-          persisted: false,
-          error: e instanceof Error ? e.message : String(e),
-        });
-      }
+      return fail(kind, valid.error, { cupomText: String(cupom.text || ''), method, printers, resolve: resolved });
     }
 
     try {
@@ -155,12 +164,24 @@ export function createPrintService(deps: PrintServiceDeps) {
         port: settings?.tcp_port,
         physicalTest: kind === 'engine-test',
       });
+      if (!printers.some((p) => p.name === job.printerName)) {
+        printLog('deviceName enviado', '(nenhum — recusado, nome não está na lista)');
+        printLog('Resultado', 'erro');
+        return fail(kind, PRINTER_NOT_FOUND_MESSAGE, {
+          cupomText: valid.text,
+          method,
+          printers,
+          resolve: resolved,
+          deviceName: undefined,
+        });
+      }
       printLog('FRONTEND: Solicitando impressão', {
         ipc: 'printers:print-cupom',
         deviceName: job.printerName,
         method: job.method,
         bytes: job.bytes.length,
       });
+      printLog('deviceName enviado', job.printerName);
       printLog('[5] Pedido de impressão enviado', {
         ipc: 'printers:print-cupom',
         deviceName: job.printerName,
@@ -169,6 +190,7 @@ export function createPrintService(deps: PrintServiceDeps) {
         printBackground: true,
       });
       const res = await dispatchCupom(job, deps.transport);
+      printLog('Resultado', res.ok ? 'sucesso' : 'erro');
       printLog('[6] Retorno da impressão', {
         ok: res.ok,
         sent: res.sent,

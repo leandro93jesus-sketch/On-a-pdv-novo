@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMockPrintService, PRINT_SERVICE_NAME } from './printService.ts';
-import { resolveConfiguredPrinter } from './printerResolve.ts';
+import { PRINTER_NOT_FOUND_MESSAGE, resolveConfiguredPrinter } from './printerResolve.ts';
 import { resetPhysicalTestGuard } from './printReceipt.ts';
 
 const printers = [
@@ -68,34 +68,49 @@ test('reimpressão marca REIMPRESSÃO no mesmo motor', async () => {
   assert.equal(mock.jobs[0].text, res.cupomText);
 });
 
-test('teste pelo motor gera ONÇA / TESTE PELO PDV / IMPRESSÃO OK', async () => {
+test('teste pelo motor gera ONÇA / TESTE PDV / IMPRESSORA OK', async () => {
   resetPhysicalTestGuard();
   const { service, mock } = createMockPrintService({ printers });
   const res = await service.printEngineTest();
   assert.match(res.cupomText, /ONÇA/);
-  assert.match(res.cupomText, /TESTE PELO PDV/);
-  assert.match(res.cupomText, /IMPRESSÃO OK/);
+  assert.match(res.cupomText, /TESTE PDV/);
+  assert.match(res.cupomText, /IMPRESSORA OK/);
   assert.equal(mock.jobs[0].text, res.cupomText);
 });
 
-test('deviceName usa name interno, não só o nome exibido', () => {
+test('displayName NÃO vira deviceName', () => {
   const resolved = resolveConfiguredPrinter(
     { use_windows_default: false, receipt_printer: 'Impressora Térmica POS-80C' },
     printers
   );
-  assert.equal(resolved.deviceName, 'POS-80C');
-  assert.equal(resolved.source, 'matched-display');
-  assert.equal(resolved.corrected, true);
+  assert.equal(resolved.ok, false);
+  assert.equal(resolved.deviceName, undefined);
+  assert.equal(resolved.error, PRINTER_NOT_FOUND_MESSAGE);
 });
 
-test('impressora salva inexistente cai na padrão real', () => {
-  const resolved = resolveConfiguredPrinter(
-    { use_windows_default: false, receipt_printer: 'EPSON TM-T20 USB antiga' },
-    printers
-  );
-  assert.equal(resolved.deviceName, 'POS-80C');
-  assert.equal(resolved.stale, true);
-  assert.equal(resolved.source, 'stale-fallback-default');
+test('nome salvo inválido NÃO é enviado à impressão', async () => {
+  resetPhysicalTestGuard();
+  const { service, mock } = createMockPrintService({
+    printers,
+    settings: { use_windows_default: false, receipt_printer: 'POS 80' },
+  });
+  const res = await service.printSale(sampleSale());
+  assert.equal(res.ok, false);
+  assert.equal(res.error, PRINTER_NOT_FOUND_MESSAGE);
+  assert.equal(res.deviceName, undefined);
+  assert.equal(mock.jobs.length, 0);
+});
+
+test('printer.name exato é o deviceName enviado', async () => {
+  resetPhysicalTestGuard();
+  const { service, mock } = createMockPrintService({
+    printers,
+    settings: { use_windows_default: false, receipt_printer: 'POS-80C' },
+  });
+  const res = await service.printSale(sampleSale());
+  assert.equal(res.ok, true);
+  assert.equal(res.deviceName, 'POS-80C');
+  assert.equal(mock.jobs[0].printerName, 'POS-80C');
 });
 
 test('use_windows_default ignora nome lembrado/salvo e usa isDefault', () => {

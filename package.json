@@ -16,7 +16,7 @@
     "build": "npm run build -w web",
     "start:server": "npm run start -w server",
     "test": "npm run test -w server && npm run test:web",
-    "test:web": "node --experimental-strip-types --test web/src/modules/vendas/saleDraftStore.test.mjs web/src/lib/print/cupomPrint.test.mjs web/src/lib/print/printService.test.mjs",
+    "test:web": "node --experimental-strip-types --test web/src/modules/vendas/saleDraftStore.test.mjs web/src/lib/print/cupomPrint.test.mjs web/src/lib/print/printService.test.mjs && node --test electron/printerName.test.cjs",
     "lint": "npm run lint -w web",
     "migrate": "npm run migrate -w server",
     "seed": "npm run seed -w server",

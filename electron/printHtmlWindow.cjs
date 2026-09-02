@@ -2,6 +2,7 @@
  * Imprime HTML isolado (só o cupom). Nunca a janela principal do PDV.
  */
 const { BrowserWindow } = require('electron');
+const { pickExactPrinterName } = require('./printerName.cjs');
 
 function pageSizeFor(width) {
   if (width === '58mm') return { width: 58000, height: 297000 };
@@ -43,12 +44,23 @@ function printDedicatedHtml(html, opts = {}) {
       finish({ ok: false, error: 'Falha ao carregar o cupom.', via: 'html-window' });
     });
     win.webContents.once('did-finish-load', () => {
-      setTimeout(() => {
+      setTimeout(async () => {
         try {
+          const printers = await win.webContents.getPrintersAsync();
+          const picked = pickExactPrinterName(printers, opts.deviceName);
+          if (!picked.ok || !picked.deviceName) {
+            clearTimeout(timer);
+            finish({
+              ok: false,
+              error: picked.error,
+              via: 'deviceName',
+            });
+            return;
+          }
           const printOpts = {
             silent: opts.silent !== false,
             printBackground: opts.printBackground !== false,
-            deviceName: opts.deviceName || undefined,
+            deviceName: picked.deviceName,
             copies: Math.max(1, Number(opts.copies || 1)),
             margins: { marginType: 'none' },
             ...(pageSizeFor(opts.width) ? { pageSize: pageSizeFor(opts.width) } : {}),
@@ -56,10 +68,11 @@ function printDedicatedHtml(html, opts = {}) {
           console.log('MAIN: webContents.print()', {
             silent: printOpts.silent,
             printBackground: printOpts.printBackground,
-            deviceName: printOpts.deviceName || null,
+            deviceName: printOpts.deviceName,
             width: opts.width || null,
           });
           win.webContents.print(printOpts, (success, failureReason) => {
+            console.log('MAIN: Resultado', success ? 'sucesso' : 'erro');
             console.log('MAIN: Resultado webContents.print', { success, failureReason: failureReason || null });
             clearTimeout(timer);
             if (!success) {

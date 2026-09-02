@@ -1,7 +1,10 @@
 /**
- * Resolve o deviceName real contra a lista do sistema.
- * Não confia só no nome salvo nas configurações.
+ * deviceName = SOMENTE printer.name exato do Electron.
+ * Nunca displayName, descrição, apelido ou nome antigo.
  */
+
+export const PRINTER_NOT_FOUND_MESSAGE =
+  'A impressora configurada não foi encontrada. Selecione novamente a impressora.';
 
 export interface ListedPrinter {
   name: string;
@@ -17,10 +20,12 @@ export interface PrinterSettingsLike {
 }
 
 export interface PrinterResolveResult {
+  ok: boolean;
+  error?: string;
   deviceName: string | undefined;
   displayName?: string;
   listedName?: string;
-  source: 'windows-default' | 'matched-name' | 'matched-display' | 'os-default-fallback' | 'stale-fallback-default' | 'none';
+  source: 'windows-default' | 'matched-name' | 'not-found' | 'no-default' | 'empty-list';
   savedName?: string;
   stale: boolean;
   corrected: boolean;
@@ -33,87 +38,81 @@ export interface PrinterResolveResult {
   }>;
 }
 
-function norm(value: string): string {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ');
+/** Somente igualdade estrita com printer.name. */
+export function findExactPrinterName(
+  printers: ListedPrinter[],
+  wanted?: string | null
+): ListedPrinter | undefined {
+  if (wanted == null) return undefined;
+  return (printers || []).find((p) => p.name === wanted);
 }
 
-export function findListedPrinter(printers: ListedPrinter[], wanted?: string | null): ListedPrinter | undefined {
-  const target = norm(wanted || '');
-  if (!target) return undefined;
-  return (
-    printers.find((p) => norm(p.name) === target) ||
-    printers.find((p) => norm(p.displayName || '') === target) ||
-    printers.find((p) => norm(p.name).includes(target) || norm(p.displayName || '').includes(target))
-  );
+export function formatPrinterList(printers: ListedPrinter[]): string {
+  if (!printers.length) return '(nenhuma)';
+  return printers.map((p) => `- ${p.name}`).join('\n');
 }
 
 export function resolveConfiguredPrinter(
   settings: PrinterSettingsLike | null | undefined,
-  printers: ListedPrinter[],
-  overrideName?: string | null
+  printers: ListedPrinter[]
 ): PrinterResolveResult {
   const list = Array.isArray(printers) ? printers : [];
-  const osDefault = list.find((p) => p.isDefault) || list[0];
-  const savedName = String(overrideName || settings?.receipt_printer || settings?.default_printer || '').trim();
-  const useDefault = Boolean(settings?.use_windows_default) && !overrideName;
+  const savedName = String(settings?.receipt_printer || '').trim();
+  const useDefault = Boolean(settings?.use_windows_default) || !savedName;
   const comparison = list.map((p) => ({
     name: p.name,
     displayName: p.displayName || p.name,
     isDefault: Boolean(p.isDefault),
-    matchesSaved: Boolean(savedName) && (norm(p.name) === norm(savedName) || norm(p.displayName || '') === norm(savedName)),
+    matchesSaved: Boolean(savedName) && p.name === savedName,
   }));
 
-  if (useDefault) {
-    return {
-      deviceName: osDefault?.name,
-      displayName: osDefault?.displayName || osDefault?.name,
-      listedName: osDefault?.name,
-      source: osDefault ? 'windows-default' : 'none',
-      savedName: savedName || undefined,
-      stale: Boolean(savedName) && !findListedPrinter(list, savedName),
-      corrected: Boolean(savedName) && Boolean(osDefault) && norm(savedName) !== norm(osDefault.name),
-      printers: list,
-      comparison,
-    };
+  const empty = (extra: Partial<PrinterResolveResult>): PrinterResolveResult => ({
+    ok: false,
+    error: PRINTER_NOT_FOUND_MESSAGE,
+    deviceName: undefined,
+    savedName: savedName || undefined,
+    stale: Boolean(savedName),
+    corrected: false,
+    printers: list,
+    comparison,
+    source: 'not-found',
+    ...extra,
+  });
+
+  if (!list.length) {
+    return empty({ source: 'empty-list' });
   }
 
-  if (savedName) {
-    const matched = findListedPrinter(list, savedName);
-    if (matched) {
-      const byName = norm(matched.name) === norm(savedName);
-      return {
-        deviceName: matched.name,
-        displayName: matched.displayName || matched.name,
-        listedName: matched.name,
-        source: byName ? 'matched-name' : 'matched-display',
-        savedName,
-        stale: false,
-        corrected: !byName || matched.name !== savedName,
-        printers: list,
-        comparison,
-      };
+  if (!useDefault) {
+    const match = findExactPrinterName(list, savedName);
+    if (!match) {
+      return empty({ source: 'not-found', stale: true });
     }
     return {
-      deviceName: osDefault?.name,
-      displayName: osDefault?.displayName || osDefault?.name,
-      listedName: osDefault?.name,
-      source: osDefault ? 'stale-fallback-default' : 'none',
+      ok: true,
+      deviceName: match.name,
+      displayName: match.displayName || match.name,
+      listedName: match.name,
+      source: 'matched-name',
       savedName,
-      stale: true,
-      corrected: Boolean(osDefault),
+      stale: false,
+      corrected: false,
       printers: list,
       comparison,
     };
   }
 
+  const osDefault = list.find((p) => p.isDefault);
+  if (!osDefault) {
+    return empty({ source: 'no-default', stale: false });
+  }
   return {
-    deviceName: osDefault?.name,
-    displayName: osDefault?.displayName || osDefault?.name,
-    listedName: osDefault?.name,
-    source: osDefault ? 'os-default-fallback' : 'none',
+    ok: true,
+    deviceName: osDefault.name,
+    displayName: osDefault.displayName || osDefault.name,
+    listedName: osDefault.name,
+    source: 'windows-default',
+    savedName: savedName || undefined,
     stale: false,
     corrected: false,
     printers: list,

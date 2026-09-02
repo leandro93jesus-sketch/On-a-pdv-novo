@@ -236,6 +236,20 @@ export default function ConfiguracoesPage() {
       setError('Apenas administradores podem alterar impressoras.');
       return;
     }
+    const names = new Set(osPrinters.map((p) => p.name));
+    const toCheck = printers.use_windows_default
+      ? []
+      : ['receipt_printer', 'reports_printer', 'delivery_printer', 'default_printer'];
+    const invalid = toCheck
+      .map((key) => String((printers as unknown as Record<string, unknown>)[key] || '').trim())
+      .filter((name) => name && osPrinters.length > 0 && !names.has(name));
+    if (invalid.length) {
+      setPrinterOpError(
+        'A impressora configurada não foi encontrada. Selecione novamente a impressora.'
+      );
+      setError('A impressora configurada não foi encontrada. Selecione novamente a impressora.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -712,35 +726,49 @@ export default function ConfiguracoesPage() {
               />
               Usar impressora padrão do Windows
             </label>
-            <label>
-              Impressora de comprovante
+            <label className="span-2">
+              IMPRESSORA
               <select
                 className="field-input"
                 disabled={!isAdmin || printers.use_windows_default}
-                value={printers.receipt_printer}
+                value={
+                  osPrinters.some((p) => p.name === printers.receipt_printer)
+                    ? printers.receipt_printer
+                    : ''
+                }
                 onChange={(e) => setPrinters({ ...printers, receipt_printer: e.target.value })}
               >
-                <option value="">— padrão / não definida —</option>
+                <option value="">— padrão do Windows (printer.name) —</option>
                 {osPrinters.map((p) => (
                   <option key={p.name} value={p.name}>
-                    {p.displayName || p.name}
-                    {p.isDefault ? ' (padrão Windows)' : ''}
+                    {p.name}
+                    {p.displayName && p.displayName !== p.name ? ` — ${p.displayName}` : ''}
+                    {p.isDefault ? ' (padrão)' : ''}
                   </option>
                 ))}
               </select>
+              {printers.receipt_printer &&
+                osPrinters.length > 0 &&
+                !osPrinters.some((p) => p.name === printers.receipt_printer) && (
+                  <span className="muted-line" style={{ color: '#b42318' }}>
+                    Nome salvo inválido: {printers.receipt_printer}. A impressora configurada não
+                    foi encontrada. Selecione novamente a impressora.
+                  </span>
+                )}
             </label>
             <label>
               Impressora de relatórios
               <select
                 className="field-input"
                 disabled={!isAdmin || printers.use_windows_default}
-                value={printers.reports_printer}
+                value={osPrinters.some((p) => p.name === printers.reports_printer) ? printers.reports_printer : ''}
                 onChange={(e) => setPrinters({ ...printers, reports_printer: e.target.value })}
               >
                 <option value="">— padrão / não definida —</option>
                 {osPrinters.map((p) => (
                   <option key={`r-${p.name}`} value={p.name}>
-                    {p.displayName || p.name}
+                    {p.name}
+                    {p.displayName && p.displayName !== p.name ? ` — ${p.displayName}` : ''}
                   </option>
                 ))}
               </select>
@@ -750,13 +778,18 @@ export default function ConfiguracoesPage() {
               <select
                 className="field-input"
                 disabled={!isAdmin || printers.use_windows_default}
-                value={printers.delivery_printer || ''}
+                value={
+                  osPrinters.some((p) => p.name === (printers.delivery_printer || ''))
+                    ? printers.delivery_printer || ''
+                    : ''
+                }
                 onChange={(e) => setPrinters({ ...printers, delivery_printer: e.target.value })}
               >
                 <option value="">— padrão / não definida —</option>
                 {osPrinters.map((p) => (
                   <option key={`e-${p.name}`} value={p.name}>
-                    {p.displayName || p.name}
+                    {p.name}
+                    {p.displayName && p.displayName !== p.name ? ` — ${p.displayName}` : ''}
                   </option>
                 ))}
               </select>
@@ -766,13 +799,14 @@ export default function ConfiguracoesPage() {
               <select
                 className="field-input"
                 disabled={!isAdmin || printers.use_windows_default}
-                value={printers.default_printer}
+                value={osPrinters.some((p) => p.name === printers.default_printer) ? printers.default_printer : ''}
                 onChange={(e) => setPrinters({ ...printers, default_printer: e.target.value })}
               >
                 <option value="">— padrão Windows —</option>
                 {osPrinters.map((p) => (
                   <option key={`d-${p.name}`} value={p.name}>
-                    {p.displayName || p.name}
+                    {p.name}
+                    {p.displayName && p.displayName !== p.name ? ` — ${p.displayName}` : ''}
                   </option>
                 ))}
               </select>
