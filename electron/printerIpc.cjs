@@ -221,39 +221,47 @@ async function listPrintersWindows(mainWindow) {
 }
 
 function electronPrint(mainWindow, opts = {}) {
-  const deviceName = opts.deviceName || undefined;
   const copies = Math.max(1, Number(opts.copies || 1));
   return new Promise((resolve) => {
-    try {
-      mainWindow.webContents.print(
-        {
-          silent: Boolean(deviceName),
-          printBackground: true,
-          deviceName,
-          copies,
-          margins: { marginType: 'default' },
-        },
-        (success, failureReason) => {
-          if (!success) {
-            resolve({
-              ok: false,
-              error:
-                failureReason ||
-                'Impressora indisponível ou impressão cancelada. A venda não é afetada.',
-              via: 'electron',
-            });
-            return;
-          }
-          resolve({ ok: true, via: 'electron' });
+    const { pickExactPrinterName } = require('./printerName.cjs');
+    mainWindow.webContents
+      .getPrintersAsync()
+      .then((printers) => {
+        const picked = pickExactPrinterName(printers || [], opts.deviceName);
+        if (!picked.ok || !picked.deviceName) {
+          resolve({ ok: false, error: picked.error, via: 'deviceName' });
+          return;
         }
-      );
-    } catch (err) {
-      resolve({
-        ok: false,
-        error: err.message || 'Falha ao imprimir. A venda não é afetada.',
-        via: 'electron',
+        mainWindow.webContents.print(
+          {
+            silent: true,
+            printBackground: true,
+            deviceName: picked.deviceName,
+            copies,
+            margins: { marginType: 'default' },
+          },
+          (success, failureReason) => {
+            if (!success) {
+              resolve({
+                ok: false,
+                error:
+                  failureReason ||
+                  'Impressora indisponível ou impressão cancelada. A venda não é afetada.',
+                via: 'electron',
+              });
+              return;
+            }
+            resolve({ ok: true, via: 'electron' });
+          }
+        );
+      })
+      .catch((err) => {
+        resolve({
+          ok: false,
+          error: err.message || 'Falha ao imprimir. A venda não é afetada.',
+          via: 'electron',
+        });
       });
-    }
   });
 }
 
@@ -296,23 +304,124 @@ function registerPrinterIpc(ipcMain, getMainWindow) {
     }
   });
 
-  ipcMain.handle('printers:test', async (_evt, opts = {}) => {
-    const mainWindow = getMainWindow();
+  ipcMain.handle('printers:print-cupom', async (_evt, opts = {}) => {
+    console.log('MAIN: Recebi pedido de impressão');
+    const text = String(opts.text || '').trim();
+    console.log('MAIN: Cupom recebido', { chars: text.length, method: opts.method || 'escpos', deviceName: opts.deviceName || null });
+    if (!text || text.length < 20) {
+      console.log('MAIN: Resultado', { ok: false, via: 'guard', reason: 'cupom vazio' });
+      return {
+        ok: false,
+        error: 'IMPRESSÃO CANCELADA\nO cupom não foi gerado corretamente.',
+        via: 'guard',
+      };
+    }
     try {
-      if (process.platform === 'linux') {
-        return await testPrintLinux(mainWindow, opts || {});
+      const mainWindow = getMainWindow();
+      const listed =
+        process.platform === 'linux'
+          ? await listPrintersLinux(mainWindow)
+          : await listPrintersWindows(mainWindow);
+      console.log(
+        'MAIN: Impressoras',
+        (listed.printers || []).map((p) => ({
+          name: p.name,
+          displayName: p.displayName,
+          isDefault: p.isDefault,
+        }))
+      );
+      const { pickExactPrinterName } = require('./printerName.cjs');
+      console.log('Impressora salva:', opts.deviceName || '(nenhuma — usar padrão)');
+      const picked = pickExactPrinterName(listed.printers || [], opts.deviceName);
+      if (!picked.ok || !picked.deviceName) {
+        console.log('MAIN: Resultado', 'erro');
+        return { ok: false, error: picked.error, via: 'deviceName' };
       }
-      if (!mainWindow || mainWindow.isDestroyed()) {
-        return { ok: false, error: 'Janela indisponível' };
+      const deviceName = picked.deviceName;
+      const method = opts.method || 'escpos';
+      console.log('MAIN: Enviando impressão', { method, deviceName, silent: true });
+      if (method === 'windows') {
+        const { printDedicatedHtml } = require('./printHtmlWindow.cjs');
+        const result = await withTimeout(
+          printDedicatedHtml(opts.html, {
+            deviceName,
+            copies: opts.copies,
+            width: opts.width === 'A4' ? '80mm' : opts.width,
+            silent: true,
+            printBackground: true,
+          }),
+          PRINT_TEST_TIMEOUT_MS,
+          { ok: false, error: 'Timeout na impressão do cupom.', timeout: true, via: 'html-window' }
+        );
+        console.log('MAIN: Resultado', result);
+        return result;
+      }
+      const { sendRaw } = require('./rawPrint.cjs');
+      const bytes = opts.bytes
+        ? Buffer.from(opts.bytes)
+        : Buffer.from(text, 'latin1');
+      const result = await withTimeout(
+        sendRaw({
+          bytes,
+          method,
+          deviceName,
+          host: opts.host,
+          port: opts.port,
+        }),
+        PRINT_TEST_TIMEOUT_MS,
+        { ok: false, error: 'Timeout no envio RAW.', timeout: true, via: 'raw' }
+      );
+      console.log('MAIN: Resultado', result);
+      return result;
+    } catch (err) {
+      const result = { ok: false, error: err.message || 'Falha ao imprimir cupom. A venda não é afetada.' };
+      console.log('MAIN: Resultado', result);
+      return result;
+    }
+  });
+
+  ipcMain.handle('printers:test', async (_evt, opts = {}) => {
+    // NÃO imprime mais a janela principal do PDV (causa da folha em branco).
+    // Teste físico só com cupom mínimo explícito.
+    const text = String(opts.text || '').trim();
+    if (!text || text.length < 20) {
+      return {
+        ok: false,
+        error:
+          'Teste recusado: a janela do PDV não é enviada à impressora. Use VISUALIZAR TESTE ou o cupom mínimo.',
+        via: 'guard',
+      };
+    }
+    try {
+      const { sendRaw } = require('./rawPrint.cjs');
+      const bytes = opts.bytes ? Buffer.from(opts.bytes) : null;
+      if (!bytes || bytes.length < 20) {
+        return {
+          ok: false,
+          error: 'IMPRESSÃO CANCELADA\nO cupom não foi gerado corretamente.',
+          via: 'guard',
+        };
+      }
+      const mainWindow = getMainWindow();
+      const listed =
+        process.platform === 'linux'
+          ? await listPrintersLinux(mainWindow)
+          : await listPrintersWindows(mainWindow);
+      const { pickExactPrinterName } = require('./printerName.cjs');
+      const picked = pickExactPrinterName(listed.printers || [], opts.deviceName);
+      if (!picked.ok || !picked.deviceName) {
+        return { ok: false, error: picked.error, via: 'deviceName' };
       }
       return await withTimeout(
-        electronPrint(mainWindow, opts || {}),
+        sendRaw({
+          bytes,
+          method: opts.method || 'escpos',
+          deviceName: picked.deviceName,
+          host: opts.host,
+          port: opts.port,
+        }),
         PRINT_TEST_TIMEOUT_MS,
-        {
-          ok: false,
-          error: 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA.',
-          timeout: true,
-        }
+        { ok: false, error: 'Timeout no teste de impressão.', timeout: true }
       );
     } catch (err) {
       return { ok: false, error: err.message || 'Falha ao imprimir. A venda não é afetada.' };

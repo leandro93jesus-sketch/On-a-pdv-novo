@@ -14,7 +14,6 @@ import {
   type SaleRelated,
 } from '../../api/client';
 import ReceiptModal from './ReceiptModal';
-import ChoosePrinterModal from '../../components/ChoosePrinterModal';
 import { printSaleReceipt, saveSaleReceiptPdf } from '../../lib/saleDocuments';
 import AdminAuthModal, { CANCEL_REASON_OPTIONS } from './AdminAuthModal';
 import CustomerPicker from './CustomerPicker';
@@ -69,7 +68,6 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<Sale | null>(null);
   const [related, setRelated] = useState<SaleRelated | null>(null);
-  const [reprintSale, setReprintSale] = useState<Sale | null>(null);
   const [quickBusyId, setQuickBusyId] = useState<number | null>(null);
   const [receipt, setReceipt] = useState<Sale | null>(null);
 
@@ -163,6 +161,27 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao gerar PDF');
+    } finally {
+      setQuickBusyId(null);
+    }
+  }
+
+  async function reprintFromHistory(sale: Sale) {
+    setQuickBusyId(sale.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const full = await fetchSale(sale.id);
+      const res = await printSaleReceipt(full, { reprint: true });
+      if (res.ok) {
+        setNotice(
+          `Reimpressão enviada: venda ${full.sale_number}${res.deviceName ? ` → ${res.deviceName}` : ''}.`
+        );
+      } else {
+        setError(res.error || 'Não foi possível reimprimir.');
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao reimprimir');
     } finally {
       setQuickBusyId(null);
     }
@@ -422,7 +441,7 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
                       type="button"
                       className="btn btn-ghost"
                       disabled={quickBusyId === s.id}
-                      onClick={() => setReprintSale(s)}
+                      onClick={() => void reprintFromHistory(s)}
                     >
                       REIMPRIMIR
                     </button>
@@ -712,29 +731,6 @@ export default function SalesHistoryModal({ onClose, embedded }: Props) {
             </div>
           </div>
         </div>
-      )}
-
-      {reprintSale && (
-        <ChoosePrinterModal
-          kind="receipt"
-          title={`Reimprimir comprovante ${reprintSale.sale_number}`}
-          onCancel={() => setReprintSale(null)}
-          onConfirm={(choice) => {
-            const sale = reprintSale;
-            setReprintSale(null);
-            setQuickBusyId(sale.id);
-            void printSaleReceipt(sale, {
-              printerName: choice.printerName || undefined,
-              paperFormat: choice.paperFormat,
-              reprint: true,
-            })
-              .then((res) => {
-                if (res.ok) setNotice(`Reimpressão enviada: venda ${sale.sale_number}.`);
-                else setError(res.error || 'Não foi possível reimprimir.');
-              })
-              .finally(() => setQuickBusyId(null));
-          }}
-        />
       )}
 
       {receipt && (

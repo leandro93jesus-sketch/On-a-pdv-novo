@@ -33,6 +33,9 @@ import {
 import { ModuleToolbar, StatusPill } from '../../components/ModuleChrome';
 import BrandLogo from '../../components/BrandLogo';
 import { withUiTimeout } from '../../lib/desktopAsync';
+import CupomPreviewModal from '../../components/CupomPreviewModal';
+import { getDefaultPrintService } from '../../lib/print/printService';
+import type { CupomWidth } from '../../lib/print/cupomBuilder';
 
 type Tab = 'empresa' | 'impressoras' | 'pdv' | 'usuarios' | 'auditoria' | 'suporte' | 'exportacao' | 'sobre';
 
@@ -83,6 +86,8 @@ export default function ConfiguracoesPage() {
 
   const [auditAction, setAuditAction] = useState('');
   const [auditUser, setAuditUser] = useState('');
+  const [cupomPreview, setCupomPreview] = useState<{ text: string; html: string } | null>(null);
+  const [printLogText, setPrintLogText] = useState<string | null>(null);
 
   async function loadSettings() {
     const bundle = await fetchSettings();
@@ -231,6 +236,20 @@ export default function ConfiguracoesPage() {
       setError('Apenas administradores podem alterar impressoras.');
       return;
     }
+    const names = new Set(osPrinters.map((p) => p.name));
+    const toCheck = printers.use_windows_default
+      ? []
+      : ['receipt_printer', 'reports_printer', 'delivery_printer', 'default_printer'];
+    const invalid = toCheck
+      .map((key) => String((printers as unknown as Record<string, unknown>)[key] || '').trim())
+      .filter((name) => name && osPrinters.length > 0 && !names.has(name));
+    if (invalid.length) {
+      setPrinterOpError(
+        'A impressora configurada não foi encontrada. Selecione novamente a impressora.'
+      );
+      setError('A impressora configurada não foi encontrada. Selecione novamente a impressora.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -339,38 +358,56 @@ export default function ConfiguracoesPage() {
     }
   }
 
-  async function testPrint() {
+  function receiptWidth(): CupomWidth {
+    return printers?.profile.format === '58mm' ? '58mm' : '80mm';
+  }
+
+  function previewPrinterTest() {
     setError(null);
     setNotice(null);
     setPrinterOpError(null);
-    if (!window.oncaDesktop?.testPrint) {
-      setPrinterOpError(
-        'Teste de impressão disponível no aplicativo desktop. A venda não é afetada por falhas de impressora.'
-      );
+    const preview = getDefaultPrintService().previewEngineTest(receiptWidth());
+    setCupomPreview({ text: preview.cupom.text, html: preview.html });
+    setNotice('MOCK do motor do PDV. Este é o cupom que seria enviado. Nenhum papel foi gasto.');
+  }
+
+  async function engineTestViaPrintService(physical: boolean) {
+    setError(null);
+    setNotice(null);
+    setPrinterOpError(null);
+    setPrintLogText(null);
+    if (!physical) {
+      previewPrinterTest();
       return;
     }
-    setPrintersLoading(true);
-    try {
-      const deviceName = printers?.use_windows_default
-        ? undefined
-        : printers?.receipt_printer || printers?.default_printer || undefined;
-      const res = await withUiTimeout(
-        window.oncaDesktop.testPrint({
-          deviceName,
-          copies: printers?.profile.copies || 1,
-        }),
-        15000,
-        { ok: false, error: 'NÃO FOI POSSÍVEL CONSULTAR A IMPRESSORA.', timeout: true }
+    if (!window.confirm('Enviar UM cupom pelo MOTOR REAL DO PDV? Não será repetido automaticamente.')) {
+      return;
+    }
+    if (!window.oncaDesktop?.printCupom) {
+      setPrinterOpError(
+        'Teste físico só no aplicativo desktop. Use VISUALIZAR TESTE neste navegador — não gasta papel.'
       );
+      previewPrinterTest();
+      return;
+    }
+    try {
+      const res = await getDefaultPrintService().printEngineTest({ paperFormat: receiptWidth() });
+      setPrintLogText(res.logText);
+      if (res.cupomText) {
+        setCupomPreview({ text: res.cupomText, html: res.cupomHtml || '' });
+      }
       if (!res.ok) {
-        setPrinterOpError(res.error || 'Impressora indisponível. A venda não é afetada.');
+        setPrinterOpError(res.error || 'Não foi possível enviar o cupom pelo motor do PDV.');
       } else {
-        setNotice('Teste de impressão enviado.');
+        setNotice(
+          `Único teste físico pelo PrintService enviado${res.deviceName ? ` → ${res.deviceName}` : ''}. Não será repetido nesta sessão.`
+        );
+        if (res.resolve?.corrected) {
+          setPrinters(await fetchPrinterSettings().catch(() => printers));
+        }
       }
     } catch (e) {
       setPrinterOpError(e instanceof Error ? e.message : 'Falha no teste de impressão');
-    } finally {
-      setPrintersLoading(false);
     }
   }
 
@@ -646,6 +683,11 @@ export default function ConfiguracoesPage() {
               </div>
             </div>
           )}
+          {printLogText && (
+            <pre className="no-print" style={{ fontSize: 11, whiteSpace: 'pre-wrap', maxHeight: 180, overflow: 'auto' }}>
+              {printLogText}
+            </pre>
+          )}
           {printerOpError && (
             <div className="alert alert-error" style={{ marginBottom: 12 }}>
               {printerOpError}
@@ -684,35 +726,49 @@ export default function ConfiguracoesPage() {
               />
               Usar impressora padrão do Windows
             </label>
-            <label>
-              Impressora de comprovante
+            <label className="span-2">
+              IMPRESSORA
               <select
                 className="field-input"
                 disabled={!isAdmin || printers.use_windows_default}
-                value={printers.receipt_printer}
+                value={
+                  osPrinters.some((p) => p.name === printers.receipt_printer)
+                    ? printers.receipt_printer
+                    : ''
+                }
                 onChange={(e) => setPrinters({ ...printers, receipt_printer: e.target.value })}
               >
-                <option value="">— padrão / não definida —</option>
+                <option value="">— padrão do Windows (printer.name) —</option>
                 {osPrinters.map((p) => (
                   <option key={p.name} value={p.name}>
-                    {p.displayName || p.name}
-                    {p.isDefault ? ' (padrão Windows)' : ''}
+                    {p.name}
+                    {p.displayName && p.displayName !== p.name ? ` — ${p.displayName}` : ''}
+                    {p.isDefault ? ' (padrão)' : ''}
                   </option>
                 ))}
               </select>
+              {printers.receipt_printer &&
+                osPrinters.length > 0 &&
+                !osPrinters.some((p) => p.name === printers.receipt_printer) && (
+                  <span className="muted-line" style={{ color: '#b42318' }}>
+                    Nome salvo inválido: {printers.receipt_printer}. A impressora configurada não
+                    foi encontrada. Selecione novamente a impressora.
+                  </span>
+                )}
             </label>
             <label>
               Impressora de relatórios
               <select
                 className="field-input"
                 disabled={!isAdmin || printers.use_windows_default}
-                value={printers.reports_printer}
+                value={osPrinters.some((p) => p.name === printers.reports_printer) ? printers.reports_printer : ''}
                 onChange={(e) => setPrinters({ ...printers, reports_printer: e.target.value })}
               >
                 <option value="">— padrão / não definida —</option>
                 {osPrinters.map((p) => (
                   <option key={`r-${p.name}`} value={p.name}>
-                    {p.displayName || p.name}
+                    {p.name}
+                    {p.displayName && p.displayName !== p.name ? ` — ${p.displayName}` : ''}
                   </option>
                 ))}
               </select>
@@ -722,13 +778,18 @@ export default function ConfiguracoesPage() {
               <select
                 className="field-input"
                 disabled={!isAdmin || printers.use_windows_default}
-                value={printers.delivery_printer || ''}
+                value={
+                  osPrinters.some((p) => p.name === (printers.delivery_printer || ''))
+                    ? printers.delivery_printer || ''
+                    : ''
+                }
                 onChange={(e) => setPrinters({ ...printers, delivery_printer: e.target.value })}
               >
                 <option value="">— padrão / não definida —</option>
                 {osPrinters.map((p) => (
                   <option key={`e-${p.name}`} value={p.name}>
-                    {p.displayName || p.name}
+                    {p.name}
+                    {p.displayName && p.displayName !== p.name ? ` — ${p.displayName}` : ''}
                   </option>
                 ))}
               </select>
@@ -738,19 +799,20 @@ export default function ConfiguracoesPage() {
               <select
                 className="field-input"
                 disabled={!isAdmin || printers.use_windows_default}
-                value={printers.default_printer}
+                value={osPrinters.some((p) => p.name === printers.default_printer) ? printers.default_printer : ''}
                 onChange={(e) => setPrinters({ ...printers, default_printer: e.target.value })}
               >
                 <option value="">— padrão Windows —</option>
                 {osPrinters.map((p) => (
                   <option key={`d-${p.name}`} value={p.name}>
-                    {p.displayName || p.name}
+                    {p.name}
+                    {p.displayName && p.displayName !== p.name ? ` — ${p.displayName}` : ''}
                   </option>
                 ))}
               </select>
             </label>
             <label>
-              Formato
+              Largura
               <select
                 className="field-input"
                 disabled={!isAdmin}
@@ -762,10 +824,56 @@ export default function ConfiguracoesPage() {
                   })
                 }
               >
-                <option value="A4">A4</option>
-                <option value="80mm">80 mm</option>
                 <option value="58mm">58 mm</option>
+                <option value="80mm">80 mm</option>
+                <option value="A4">A4 (relatórios)</option>
               </select>
+            </label>
+            <label>
+              Método
+              <select
+                className="field-input"
+                disabled={!isAdmin}
+                value={printers.method || 'escpos'}
+                onChange={(e) => setPrinters({ ...printers, method: e.target.value })}
+              >
+                <option value="windows">Impressora Windows</option>
+                <option value="escpos">ESC/POS</option>
+                <option value="tcp">Rede TCP/IP</option>
+              </select>
+            </label>
+            {(printers.method || 'escpos') === 'tcp' && (
+              <>
+                <label>
+                  IP da impressora
+                  <input
+                    className="field-input"
+                    disabled={!isAdmin}
+                    value={printers.tcp_host || ''}
+                    onChange={(e) => setPrinters({ ...printers, tcp_host: e.target.value })}
+                    placeholder="192.168.0.50"
+                  />
+                </label>
+                <label>
+                  Porta
+                  <input
+                    className="field-input"
+                    type="number"
+                    disabled={!isAdmin}
+                    value={printers.tcp_port || 9100}
+                    onChange={(e) => setPrinters({ ...printers, tcp_port: Number(e.target.value) || 9100 })}
+                  />
+                </label>
+              </>
+            )}
+            <label className="check-inline span-2">
+              <input
+                type="checkbox"
+                disabled={!isAdmin}
+                checked={printers.cut !== false}
+                onChange={(e) => setPrinters({ ...printers, cut: e.target.checked })}
+              />
+              Cortar papel
             </label>
             <label>
               Cópias
@@ -829,9 +937,17 @@ export default function ConfiguracoesPage() {
               type="button"
               className="btn btn-accent"
               disabled={busy}
-              onClick={() => void testPrint()}
+              onClick={() => previewPrinterTest()}
             >
-              Testar impressão
+              VISUALIZAR TESTE
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={busy}
+              onClick={() => void engineTestViaPrintService(true)}
+            >
+              TESTAR IMPRESSÃO PELO MOTOR DO PDV
             </button>
             <button
               type="button"
@@ -1531,6 +1647,14 @@ export default function ConfiguracoesPage() {
             </div>
           </div>
         </div>
+      )}
+      {cupomPreview && (
+        <CupomPreviewModal
+          title="VISUALIZAR TESTE"
+          text={cupomPreview.text}
+          html={cupomPreview.html}
+          onClose={() => setCupomPreview(null)}
+        />
       )}
     </section>
   );

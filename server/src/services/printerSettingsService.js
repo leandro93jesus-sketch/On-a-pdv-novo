@@ -13,10 +13,15 @@ const PRINTER_KEYS = [
   'print_profile_auto',
   'print_profile_mode',
   'printer_per_device_json',
+  'print_method',
+  'print_cut',
+  'print_tcp_host',
+  'print_tcp_port',
 ];
 
 const FORMATS = new Set(['A4', '80mm', '58mm']);
 const MODES = new Set(['manual', 'auto']);
+const METHODS = new Set(['windows', 'escpos', 'tcp']);
 
 function parsePerPrinter() {
   try {
@@ -41,6 +46,10 @@ export function getPrinterSettings() {
       auto_print: getSetting('print_profile_auto', '0') === '1',
       mode: getSetting('print_profile_mode', 'manual') || 'manual',
     },
+    method: getSetting('print_method', 'escpos') || 'escpos',
+    cut: getSetting('print_cut', '1') === '1',
+    tcp_host: getSetting('print_tcp_host', ''),
+    tcp_port: Number(getSetting('print_tcp_port', '9100') || 9100),
     per_printer: parsePerPrinter(),
     note:
       'A listagem de impressoras instaladas e o teste real de impressão dependem do aplicativo desktop (Windows/Linux).',
@@ -101,6 +110,24 @@ export function updatePrinterSettings(payload = {}, userName) {
     }
     set('print_profile_mode', m);
   }
+  if (payload.method != null) {
+    const m = String(payload.method);
+    if (!METHODS.has(m)) {
+      throw new AppError('Método de impressão inválido', { status: 400, code: 'INVALID_PRINT_METHOD' });
+    }
+    set('print_method', m);
+  }
+  if (payload.cut != null) {
+    set('print_cut', payload.cut ? '1' : '0');
+  }
+  if (payload.tcp_host != null) set('print_tcp_host', payload.tcp_host);
+  if (payload.tcp_port != null) {
+    const p = Number(payload.tcp_port);
+    if (!Number.isInteger(p) || p < 1 || p > 65535) {
+      throw new AppError('Porta TCP inválida', { status: 400, code: 'INVALID_TCP_PORT' });
+    }
+    set('print_tcp_port', String(p));
+  }
 
   if (changed.length) {
     writeAudit({
@@ -133,6 +160,10 @@ export function resolvePrinterFor(kind = 'receipt') {
     format,
     auto_print: cfg.profile.auto_print,
     mode: cfg.profile.mode,
+    method: cfg.method,
+    cut: cfg.cut,
+    tcp_host: cfg.tcp_host,
+    tcp_port: cfg.tcp_port,
   };
 }
 
@@ -152,7 +183,13 @@ export function resetPrinterSettings(userName) {
                 ? 'manual'
                 : key === 'printer_per_device_json'
                   ? '{}'
-                  : '';
+                  : key === 'print_method'
+                    ? 'escpos'
+                    : key === 'print_cut'
+                      ? '1'
+                      : key === 'print_tcp_port'
+                        ? '9100'
+                        : '';
     setSetting(key, def);
   }
   writeAudit({

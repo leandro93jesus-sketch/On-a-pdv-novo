@@ -1,14 +1,10 @@
-import {
-  enqueuePrintJobApi,
-  markPrintJobResultApi,
-  logDirectPrintApi,
-} from '../api/client';
+import { enqueuePrintJobApi, markPrintJobResultApi } from '../api/client';
 
 export type PrintKind = 'receipt' | 'report' | 'delivery';
 
 /**
- * Impressão unificada: tenta desktop silent print; senão window.print.
- * Nunca lança erro que cancele venda — retorna { ok, error }.
+ * Relatórios / entregas: diálogo de impressão da tela atual.
+ * Cupom de venda NÃO passa por aqui — use printSaleReceipt (ESC/POS / janela isolada).
  */
 export async function printDocument(opts: {
   kind?: PrintKind;
@@ -37,28 +33,14 @@ export async function printDocument(opts: {
   }
 
   try {
-    if (window.oncaDesktop?.testPrint) {
-      const res = await window.oncaDesktop.testPrint({
-        deviceName: opts.printerName || undefined,
-        copies: opts.copies || 1,
-      });
+    if (kind === 'receipt') {
+      const error = 'IMPRESSÃO CANCELADA\nO cupom não foi gerado corretamente.';
       if (jobId != null) {
-        await markPrintJobResultApi(jobId, {
-          ok: Boolean(res.ok),
-          error: res.error,
-          printer_name: opts.printerName,
-        }).catch(() => undefined);
-      } else {
-        await logDirectPrintApi({
-          document_type: opts.documentType || kind,
-          document_ref: opts.documentRef,
-          printer_name: opts.printerName,
-          paper_format: opts.paperFormat,
-          result: res.ok ? 'ok' : 'erro',
-          error_message: res.error,
-        }).catch(() => undefined);
+        await markPrintJobResultApi(jobId, { ok: false, error, printer_name: opts.printerName }).catch(
+          () => undefined
+        );
       }
-      return { ok: Boolean(res.ok), error: res.error, jobId };
+      return { ok: false, error, jobId };
     }
 
     window.print();

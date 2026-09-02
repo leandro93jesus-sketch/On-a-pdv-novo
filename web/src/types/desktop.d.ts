@@ -25,7 +25,23 @@ export interface OncaDesktopApi {
   testPrint?: (opts?: {
     deviceName?: string;
     copies?: number;
-  }) => Promise<{ ok: boolean; error?: string; timeout?: boolean }>;
+    text?: string;
+    bytes?: number[] | Uint8Array;
+    method?: string;
+    host?: string;
+    port?: number;
+  }) => Promise<{ ok: boolean; error?: string; timeout?: boolean; via?: string }>;
+  printCupom?: (opts: {
+    text: string;
+    html?: string;
+    bytes?: number[] | Uint8Array;
+    method?: string;
+    deviceName?: string;
+    copies?: number;
+    width?: string;
+    host?: string;
+    port?: number;
+  }) => Promise<{ ok: boolean; error?: string; timeout?: boolean; via?: string }>;
   listBluetoothDevices?: () => Promise<{
     devices: DesktopBluetoothDevice[];
     error?: string;
