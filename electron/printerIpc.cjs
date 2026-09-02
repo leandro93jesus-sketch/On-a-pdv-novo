@@ -297,8 +297,11 @@ function registerPrinterIpc(ipcMain, getMainWindow) {
   });
 
   ipcMain.handle('printers:print-cupom', async (_evt, opts = {}) => {
+    console.log('MAIN: Recebi pedido de impressão');
     const text = String(opts.text || '').trim();
+    console.log('MAIN: Cupom recebido', { chars: text.length, method: opts.method || 'escpos', deviceName: opts.deviceName || null });
     if (!text || text.length < 20) {
+      console.log('MAIN: Resultado', { ok: false, via: 'guard', reason: 'cupom vazio' });
       return {
         ok: false,
         error: 'IMPRESSÃO CANCELADA\nO cupom não foi gerado corretamente.',
@@ -306,36 +309,71 @@ function registerPrinterIpc(ipcMain, getMainWindow) {
       };
     }
     try {
+      const mainWindow = getMainWindow();
+      const listed =
+        process.platform === 'linux'
+          ? await listPrintersLinux(mainWindow)
+          : await listPrintersWindows(mainWindow);
+      console.log(
+        'MAIN: Impressoras',
+        (listed.printers || []).map((p) => ({
+          name: p.name,
+          displayName: p.displayName,
+          isDefault: p.isDefault,
+        }))
+      );
+      const wanted = String(opts.deviceName || '').trim();
+      const match =
+        (listed.printers || []).find((p) => p.name === wanted) ||
+        (listed.printers || []).find((p) => (p.displayName || '') === wanted) ||
+        (listed.printers || []).find((p) => p.isDefault) ||
+        (listed.printers || [])[0];
+      const deviceName = match?.name || wanted || undefined;
+      console.log('MAIN: Impressora encontrada', {
+        requested: wanted || null,
+        deviceName: deviceName || null,
+        displayName: match?.displayName || null,
+        isDefault: Boolean(match?.isDefault),
+      });
       const method = opts.method || 'escpos';
+      console.log('MAIN: Enviando impressão', { method, deviceName: deviceName || null, silent: true });
       if (method === 'windows') {
         const { printDedicatedHtml } = require('./printHtmlWindow.cjs');
-        return await withTimeout(
+        const result = await withTimeout(
           printDedicatedHtml(opts.html, {
-            deviceName: opts.deviceName,
+            deviceName,
             copies: opts.copies,
-            width: opts.width,
+            width: opts.width === 'A4' ? '80mm' : opts.width,
+            silent: true,
+            printBackground: true,
           }),
           PRINT_TEST_TIMEOUT_MS,
           { ok: false, error: 'Timeout na impressão do cupom.', timeout: true, via: 'html-window' }
         );
+        console.log('MAIN: Resultado', result);
+        return result;
       }
       const { sendRaw } = require('./rawPrint.cjs');
       const bytes = opts.bytes
         ? Buffer.from(opts.bytes)
         : Buffer.from(text, 'latin1');
-      return await withTimeout(
+      const result = await withTimeout(
         sendRaw({
           bytes,
           method,
-          deviceName: opts.deviceName,
+          deviceName,
           host: opts.host,
           port: opts.port,
         }),
         PRINT_TEST_TIMEOUT_MS,
         { ok: false, error: 'Timeout no envio RAW.', timeout: true, via: 'raw' }
       );
+      console.log('MAIN: Resultado', result);
+      return result;
     } catch (err) {
-      return { ok: false, error: err.message || 'Falha ao imprimir cupom. A venda não é afetada.' };
+      const result = { ok: false, error: err.message || 'Falha ao imprimir cupom. A venda não é afetada.' };
+      console.log('MAIN: Resultado', result);
+      return result;
     }
   });
 

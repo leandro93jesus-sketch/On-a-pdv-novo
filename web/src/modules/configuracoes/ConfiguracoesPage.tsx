@@ -34,9 +34,8 @@ import { ModuleToolbar, StatusPill } from '../../components/ModuleChrome';
 import BrandLogo from '../../components/BrandLogo';
 import { withUiTimeout } from '../../lib/desktopAsync';
 import CupomPreviewModal from '../../components/CupomPreviewModal';
-import { createDesktopTransport } from '../../lib/print/desktopTransport';
-import { buildPhysicalTestCupom, type CupomWidth } from '../../lib/print/cupomBuilder';
-import { dispatchCupom, prepareCupomJob, previewPhysicalTestCupom } from '../../lib/print/printReceipt';
+import { getDefaultPrintService } from '../../lib/print/printService';
+import type { CupomWidth } from '../../lib/print/cupomBuilder';
 
 type Tab = 'empresa' | 'impressoras' | 'pdv' | 'usuarios' | 'auditoria' | 'suporte' | 'exportacao' | 'sobre';
 
@@ -88,6 +87,7 @@ export default function ConfiguracoesPage() {
   const [auditAction, setAuditAction] = useState('');
   const [auditUser, setAuditUser] = useState('');
   const [cupomPreview, setCupomPreview] = useState<{ text: string; html: string } | null>(null);
+  const [printLogText, setPrintLogText] = useState<string | null>(null);
 
   async function loadSettings() {
     const bundle = await fetchSettings();
@@ -352,16 +352,21 @@ export default function ConfiguracoesPage() {
     setError(null);
     setNotice(null);
     setPrinterOpError(null);
-    const preview = previewPhysicalTestCupom(receiptWidth());
+    const preview = getDefaultPrintService().previewEngineTest(receiptWidth());
     setCupomPreview({ text: preview.cupom.text, html: preview.html });
-    setNotice('Pré-visualização do cupom mínimo. Nenhum papel foi gasto.');
+    setNotice('MOCK do motor do PDV. Este é o cupom que seria enviado. Nenhum papel foi gasto.');
   }
 
-  async function physicalPrinterTestOnce() {
+  async function engineTestViaPrintService(physical: boolean) {
     setError(null);
     setNotice(null);
     setPrinterOpError(null);
-    if (!window.confirm('Enviar UM cupom mínimo (4 linhas) à impressora? Não será repetido automaticamente.')) {
+    setPrintLogText(null);
+    if (!physical) {
+      previewPrinterTest();
+      return;
+    }
+    if (!window.confirm('Enviar UM cupom pelo MOTOR REAL DO PDV? Não será repetido automaticamente.')) {
       return;
     }
     if (!window.oncaDesktop?.printCupom) {
@@ -372,22 +377,20 @@ export default function ConfiguracoesPage() {
       return;
     }
     try {
-      const cupom = buildPhysicalTestCupom(receiptWidth());
-      const job = prepareCupomJob(cupom, {
-        physicalTest: true,
-        method: (printers?.method as 'windows' | 'escpos' | 'tcp') || 'escpos',
-        cut: printers?.cut !== false,
-        printerName: printers?.use_windows_default
-          ? undefined
-          : printers?.receipt_printer || printers?.default_printer || undefined,
-        host: printers?.tcp_host,
-        port: printers?.tcp_port,
-      });
-      const res = await dispatchCupom(job, createDesktopTransport());
+      const res = await getDefaultPrintService().printEngineTest({ paperFormat: receiptWidth() });
+      setPrintLogText(res.logText);
+      if (res.cupomText) {
+        setCupomPreview({ text: res.cupomText, html: res.cupomHtml || '' });
+      }
       if (!res.ok) {
-        setPrinterOpError(res.error || 'Não foi possível enviar o cupom de teste.');
+        setPrinterOpError(res.error || 'Não foi possível enviar o cupom pelo motor do PDV.');
       } else {
-        setNotice('Único teste físico enviado (cupom mínimo). Não será repetido nesta sessão.');
+        setNotice(
+          `Único teste físico pelo PrintService enviado${res.deviceName ? ` → ${res.deviceName}` : ''}. Não será repetido nesta sessão.`
+        );
+        if (res.resolve?.corrected) {
+          setPrinters(await fetchPrinterSettings().catch(() => printers));
+        }
       }
     } catch (e) {
       setPrinterOpError(e instanceof Error ? e.message : 'Falha no teste de impressão');
@@ -666,6 +669,11 @@ export default function ConfiguracoesPage() {
               </div>
             </div>
           )}
+          {printLogText && (
+            <pre className="no-print" style={{ fontSize: 11, whiteSpace: 'pre-wrap', maxHeight: 180, overflow: 'auto' }}>
+              {printLogText}
+            </pre>
+          )}
           {printerOpError && (
             <div className="alert alert-error" style={{ marginBottom: 12 }}>
               {printerOpError}
@@ -901,11 +909,11 @@ export default function ConfiguracoesPage() {
             </button>
             <button
               type="button"
-              className="btn btn-ghost"
+              className="btn btn-primary"
               disabled={busy}
-              onClick={() => void physicalPrinterTestOnce()}
+              onClick={() => void engineTestViaPrintService(true)}
             >
-              TESTAR IMPRESSORA - 1 CUPOM
+              TESTAR IMPRESSÃO PELO MOTOR DO PDV
             </button>
             <button
               type="button"

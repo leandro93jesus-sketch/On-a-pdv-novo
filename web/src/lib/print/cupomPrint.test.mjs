@@ -171,8 +171,8 @@ test('preview virtual não envia bytes', () => {
 test('cupom mínimo do teste físico tem o texto pedido', () => {
   const cupom = buildPhysicalTestCupom('80mm');
   assert.match(cupom.text, /ONÇA/);
-  assert.match(cupom.text, /TESTE DE IMPRESSÃO/);
-  assert.match(cupom.text, /IMPRESSORA OK/);
+  assert.match(cupom.text, /TESTE PELO PDV/);
+  assert.match(cupom.text, /IMPRESSÃO OK/);
   assert.ok(!cupom.text.includes('Produto'));
   assert.equal(validateCupomText(cupom.text).ok, true);
 });
@@ -202,5 +202,5 @@ test('formatMoney e linePair', () => {
 test('preview do teste físico', () => {
   const p = previewPhysicalTestCupom('58mm');
   assert.equal(p.ok, true);
-  assert.match(p.html, /IMPRESSORA OK/);
+  assert.match(p.html, /IMPRESSÃO OK/);
 });

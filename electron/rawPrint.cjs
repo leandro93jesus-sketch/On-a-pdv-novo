@@ -70,6 +70,10 @@ function sendWindowsRaw(deviceName, bytes) {
   const ps = `
 $ErrorActionPreference='Stop'
 $printer = ${JSON.stringify(printer)}
+if ([string]::IsNullOrWhiteSpace($printer)) {
+  $def = Get-CimInstance Win32_Printer | Where-Object { $_.Default -eq $true } | Select-Object -First 1
+  if ($def) { $printer = $def.Name }
+}
 $file = ${JSON.stringify(file)}
 $code = @"
 using System;

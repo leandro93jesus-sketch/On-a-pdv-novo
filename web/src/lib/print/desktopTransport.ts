@@ -11,6 +11,7 @@ export function createDesktopTransport(): PrintTransport {
         return { ok: false, error: check.error, sent: false };
       }
       if (!window.oncaDesktop?.printCupom) {
+        console.log('[PrintService] FRONTEND: IPC printCupom ausente');
         return {
           ok: false,
           error:
@@ -18,6 +19,13 @@ export function createDesktopTransport(): PrintTransport {
           sent: false,
         };
       }
+      console.log('FRONTEND: Solicitando impressão', {
+        ipc: 'printers:print-cupom',
+        deviceName: job.printerName,
+        method: job.method,
+        chars: job.text.length,
+        bytes: job.bytes.length,
+      });
       const res = await window.oncaDesktop.printCupom({
         text: job.text,
         html: job.html,
@@ -28,6 +36,7 @@ export function createDesktopTransport(): PrintTransport {
         host: job.host,
         port: job.port,
       });
+      console.log('FRONTEND: Resultado da impressão', res);
       return { ok: Boolean(res.ok), error: res.error, via: res.via || 'desktop', sent: Boolean(res.ok) };
     },
   };

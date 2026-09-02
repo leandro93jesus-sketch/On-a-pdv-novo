@@ -121,8 +121,13 @@ export function rule(width: number, ch = '-'): string {
 
 /** Cupom mínimo do ÚNICO teste físico — curto de propósito. */
 export function buildPhysicalTestCupom(width: CupomWidth = '80mm'): BuiltCupom {
+  return buildEngineTestCupom(width);
+}
+
+/** Mesmo gerador usado pela venda — texto curto do motor real do PDV. */
+export function buildEngineTestCupom(width: CupomWidth = '80mm'): BuiltCupom {
   const w = charsForWidth(width);
-  const lines = ['ONÇA', 'TESTE DE IMPRESSÃO', rule(w), '', 'IMPRESSORA OK', ''];
+  const lines = ['ONÇA', 'TESTE PELO PDV', rule(w), '', 'IMPRESSÃO OK', ''];
   return finalizeCupom(lines.join('\n'), width, { hasItems: false, hasTotal: false, hasPayment: false });
 }
 

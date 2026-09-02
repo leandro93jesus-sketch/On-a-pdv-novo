@@ -8,7 +8,6 @@ import {
   whatsappShareApi,
 } from '../../api/client';
 import BrandLogo from '../../components/BrandLogo';
-import ChoosePrinterModal, { type ChoosePrinterResult } from '../../components/ChoosePrinterModal';
 import CupomPreviewModal from '../../components/CupomPreviewModal';
 import { printSaleReceipt, previewSaleReceipt, saveSaleReceiptPdf } from '../../lib/saleDocuments';
 import { EMPTY_CUPOM_MESSAGE } from '../../lib/print/cupomValidate';
@@ -35,9 +34,9 @@ export default function ReceiptModal({
   const [waPhone, setWaPhone] = useState(sale.customer?.phone || sale.customer?.whatsapp || '');
   const [showOtherPhone, setShowOtherPhone] = useState(false);
   const [pdfMeta, setPdfMeta] = useState<ReceiptPdfMeta | null>(null);
-  const [choosePrinter, setChoosePrinter] = useState(false);
   const [printNote, setPrintNote] = useState<string | null>(null);
   const [printBusy, setPrintBusy] = useState(false);
+  const [printLogText, setPrintLogText] = useState<string | null>(null);
   const [cupomPreview, setCupomPreview] = useState<{ text: string; html: string } | null>(null);
   const brand = companyName?.trim() || 'ONÇA PRODUTOS DE LIMPEZA';
   const showSuccess = successBanner && !cancelled;
@@ -52,16 +51,13 @@ export default function ReceiptModal({
     return meta;
   }
 
-  async function doPrint(choice: ChoosePrinterResult) {
-    setChoosePrinter(false);
+  async function doPrint() {
     setPrintBusy(true);
     setPrintNote(null);
+    setPrintLogText(null);
     try {
-      const res = await printSaleReceipt(sale, {
-        printerName: choice.printerName || undefined,
-        paperFormat: choice.paperFormat,
-        company: brand,
-      });
+      const res = await printSaleReceipt(sale, { company: brand });
+      setPrintLogText(res.logText);
       if (!res.ok) {
         const empty = (res.error || '').includes('IMPRESSÃO CANCELADA');
         setPrintNote(
@@ -305,6 +301,11 @@ export default function ReceiptModal({
             </div>
           </div>
         )}
+        {printLogText && (
+          <pre className="no-print" style={{ fontSize: 11, whiteSpace: 'pre-wrap', maxHeight: 160, overflow: 'auto' }}>
+            {printLogText}
+          </pre>
+        )}
         {printNote && (
           <div className="alert alert-error no-print">
             {printNote}
@@ -313,7 +314,7 @@ export default function ReceiptModal({
                 type="button"
                 className="btn btn-accent"
                 disabled={printBusy}
-                onClick={() => setChoosePrinter(true)}
+                onClick={() => void doPrint()}
               >
                 Tentar novamente
               </button>
@@ -346,7 +347,7 @@ export default function ReceiptModal({
             type="button"
             className="btn btn-ghost"
             disabled={printBusy}
-            onClick={() => setChoosePrinter(true)}
+            onClick={() => void doPrint()}
           >
             Imprimir
           </button>
@@ -379,14 +380,6 @@ export default function ReceiptModal({
           text={cupomPreview.text}
           html={cupomPreview.html}
           onClose={() => setCupomPreview(null)}
-        />
-      )}
-      {choosePrinter && (
-        <ChoosePrinterModal
-          kind="receipt"
-          title="Escolher impressora"
-          onCancel={() => setChoosePrinter(false)}
-          onConfirm={(r) => void doPrint(r)}
         />
       )}
     </div>

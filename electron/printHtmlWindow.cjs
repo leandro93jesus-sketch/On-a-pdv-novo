@@ -45,28 +45,33 @@ function printDedicatedHtml(html, opts = {}) {
     win.webContents.once('did-finish-load', () => {
       setTimeout(() => {
         try {
-          win.webContents.print(
-            {
-              silent: Boolean(opts.deviceName),
-              printBackground: false,
-              deviceName: opts.deviceName || undefined,
-              copies: Math.max(1, Number(opts.copies || 1)),
-              margins: { marginType: 'none' },
-              ...(pageSizeFor(opts.width) ? { pageSize: pageSizeFor(opts.width) } : {}),
-            },
-            (success, failureReason) => {
-              clearTimeout(timer);
-              if (!success) {
-                finish({
-                  ok: false,
-                  error: failureReason || 'Impressão cancelada ou impressora indisponível.',
-                  via: 'html-window',
-                });
-                return;
-              }
-              finish({ ok: true, via: 'html-window' });
+          const printOpts = {
+            silent: opts.silent !== false,
+            printBackground: opts.printBackground !== false,
+            deviceName: opts.deviceName || undefined,
+            copies: Math.max(1, Number(opts.copies || 1)),
+            margins: { marginType: 'none' },
+            ...(pageSizeFor(opts.width) ? { pageSize: pageSizeFor(opts.width) } : {}),
+          };
+          console.log('MAIN: webContents.print()', {
+            silent: printOpts.silent,
+            printBackground: printOpts.printBackground,
+            deviceName: printOpts.deviceName || null,
+            width: opts.width || null,
+          });
+          win.webContents.print(printOpts, (success, failureReason) => {
+            console.log('MAIN: Resultado webContents.print', { success, failureReason: failureReason || null });
+            clearTimeout(timer);
+            if (!success) {
+              finish({
+                ok: false,
+                error: failureReason || 'Impressão cancelada ou impressora indisponível.',
+                via: 'html-window',
+              });
+              return;
             }
-          );
+            finish({ ok: true, via: 'html-window', success: true, failureReason: failureReason || null });
+          });
         } catch (err) {
           clearTimeout(timer);
           finish({ ok: false, error: err.message || 'Falha ao imprimir cupom.', via: 'html-window' });
