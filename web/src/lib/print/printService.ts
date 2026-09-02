@@ -131,7 +131,7 @@ export function createPrintService(deps: PrintServiceDeps) {
       comparison: resolved.comparison,
     });
 
-    if ((resolved.stale || resolved.corrected) && deps.persistPrinterFix) {
+    if ((resolved.stale || resolved.corrected) && printers.length > 0 && deps.persistPrinterFix) {
       try {
         await deps.persistPrinterFix({
           receipt_printer: resolved.deviceName || '',
