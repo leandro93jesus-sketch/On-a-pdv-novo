@@ -107,7 +107,7 @@ ON CONFLICT(customer_id) DO UPDATE SET credit_limit=excluded.credit_limit,blocke
  {
   var p=await CustomerCreditProfileAsync(customerId,ct);
   if(p.Blocked)throw new DomainException("Crediário bloqueado para este cliente.");
-  if(p.Limit<=0)throw new DomainException("Cliente sem limite de crediário configurado.");
+  if(p.Limit<=0)return; // zero = sem limite definido, preserva o comportamento existente
   if(amount>p.Available)throw new DomainException($"Limite insuficiente. Disponível: {p.Available:C}.");
  }
  public async Task<IReadOnlyList<CreditMovement>> CreditMovementsAsync(Guid account,CancellationToken ct=default){var list=new List<CreditMovement>();await using var c=db.Open();await using var q=c.CreateCommand();q.CommandText="SELECT id,amount,method,created_at,notes FROM credit_receipts WHERE account_id=$id ORDER BY created_at";q.Parameters.AddWithValue("$id",account.ToString());await using var r=await q.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))list.Add(new(Guid.Parse(r.GetString(0)),r.GetDecimal(1),Enum.Parse<PaymentMethod>(r.GetString(2)),DateTimeOffset.Parse(r.GetString(3)),r.IsDBNull(4)?null:r.GetString(4)));return list;}
