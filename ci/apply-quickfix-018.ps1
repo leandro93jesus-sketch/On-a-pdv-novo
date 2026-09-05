@@ -13,14 +13,8 @@ function Replace-Req([string]$p,[string]$a,[string]$b) {
 }
 
 $contracts=Join-Path $root "src\OncaPDV.Application\Contracts.cs"
-$a=@'
-    public Task<IReadOnlyList<Product>> SearchAsync(string term, CancellationToken ct = default) => products.SearchAsync(term, ct);
-
-    public async Task<ScanResult> ScanAsync(string query, CancellationToken ct = default)
-'@
+$a='    public async Task<ScanResult> ScanAsync(string query, CancellationToken ct = default)'
 $b=@'
-    public Task<IReadOnlyList<Product>> SearchAsync(string term, CancellationToken ct = default) => products.SearchAsync(term, ct);
-
     public async Task AddToCartAsync(Product product, CancellationToken ct = default)
     {
         Cart.Add(product);
