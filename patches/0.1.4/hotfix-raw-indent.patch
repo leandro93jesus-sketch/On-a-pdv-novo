@@ -1,0 +1,20 @@
+--- a/src/OncaPDV.Infrastructure/OperationalServices.cs
++++ b/src/OncaPDV.Infrastructure/OperationalServices.cs
+@@ -26,7 +26,7 @@
+  {
+   var list=new List<SalesHistoryView>();await using var c=db.Open();await using var q=c.CreateCommand();
+   q.CommandText="""
+-SELECT s.id,s.number,s.created_at,COALESCE(c.name,'CONSUMIDOR'),
++  SELECT s.id,s.number,s.created_at,COALESCE(c.name,'CONSUMIDOR'),
+   (SELECT COUNT(*) FROM sale_items i WHERE i.sale_id=s.id),
+   COALESCE((SELECT SUM(quantity) FROM sale_items i WHERE i.sale_id=s.id),0),
+   COALESCE((SELECT SUM(subtotal) FROM sale_items i WHERE i.sale_id=s.id),s.total+s.discount),
+@@ -52,7 +52,7 @@
+  {
+   var list=new List<StockView>();await using var c=db.Open();await using var q=c.CreateCommand();
+   q.CommandText="""
+-SELECT id,name,internal_code,barcode,category,brand,unit,stock,minimum_stock,cost_price,sale_price,
++  SELECT id,name,internal_code,barcode,category,brand,unit,stock,minimum_stock,cost_price,sale_price,
+   stock*cost_price,stock*sale_price,
+   CASE WHEN cost_price>0 THEN ((sale_price-cost_price)/cost_price)*100 ELSE 0 END,
+   CASE WHEN stock<=0 THEN 'SEM ESTOQUE' WHEN stock<=minimum_stock THEN 'ESTOQUE BAIXO' ELSE 'OK' END
