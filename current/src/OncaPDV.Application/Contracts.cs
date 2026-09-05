@@ -135,6 +135,12 @@ public sealed class PosWorkflow(
         await recovery.SaveAsync(Cart, ct);
     }
 
+    public async Task ChangeUnitPriceAsync(Guid productId, decimal unitPrice, CancellationToken ct = default)
+    {
+        Cart.ChangeUnitPrice(productId, unitPrice);
+        await recovery.SaveAsync(Cart, ct);
+    }
+
     public async Task RemoveItemAsync(Guid productId, CancellationToken ct = default)
     {
         Cart.Remove(productId);
