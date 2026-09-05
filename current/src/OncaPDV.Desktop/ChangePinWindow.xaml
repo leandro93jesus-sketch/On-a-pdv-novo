@@ -1,0 +1,18 @@
+<Window x:Class="OncaPDV.Desktop.ChangePinWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Alterar PIN" Width="420" Height="390" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="#F7F9F8">
+    <Grid Margin="24">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel><TextBlock Text="ALTERAR PIN" FontSize="25" FontWeight="Bold" Foreground="#173D29"/><TextBlock Text="Use pelo menos 4 números." Foreground="#6B7972"/></StackPanel>
+        <StackPanel Grid.Row="1" Margin="0,18,0,0">
+            <TextBlock Text="PIN ATUAL"/><PasswordBox x:Name="CurrentPin" FontSize="18" Padding="8" Margin="0,4,0,12"/>
+            <TextBlock Text="NOVO PIN"/><PasswordBox x:Name="NewPin" FontSize="18" Padding="8" Margin="0,4,0,12"/>
+            <TextBlock Text="CONFIRMAR NOVO PIN"/><PasswordBox x:Name="ConfirmPin" FontSize="18" Padding="8" Margin="0,4,0,12"/>
+            <TextBlock x:Name="StatusText" Foreground="#A3392F"/>
+        </StackPanel>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="CANCELAR" IsCancel="True" Padding="15,9" Margin="4"/>
+            <Button Content="SALVAR NOVO PIN" Click="Save_Click" Background="#0B6B3A" Foreground="White" FontWeight="Bold" Padding="15,9" Margin="4"/>
+        </StackPanel>
+    </Grid>
+</Window>
