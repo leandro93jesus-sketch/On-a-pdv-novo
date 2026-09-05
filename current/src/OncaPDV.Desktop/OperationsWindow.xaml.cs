@@ -44,8 +44,11 @@ public partial class OperationsWindow : Window
     {
         try
         {
-            _summary = await _ops.SalesSummaryAsync(_from, _to);
-            var rows = await _ops.SalesHistoryAsync(_from, _to, SalesSearch.Text);
+            var paymentTag = (PaymentFilter.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag?.ToString() ?? "Todos";
+            var statusTag = (SaleStatusFilter.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag?.ToString() ?? "Concluidas";
+            var method = paymentTag == "Todos" ? null : Enum.Parse<PaymentMethod>(paymentTag);
+            _summary = await _ops.SalesSummaryFilteredAsync(_from, _to, statusTag, method);
+            var rows = await _ops.SalesHistoryAsync(_from, _to, SalesSearch.Text, paymentTag, statusTag);
             SalesHistoryGrid.ItemsSource = rows;
 
             SalesCountText.Text = _summary.Quantity.ToString("N0");
@@ -56,7 +59,7 @@ public partial class OperationsWindow : Window
             SalesCashText.Text = _summary.Cash.ToString("C");
             SalesDigitalText.Text = (_summary.Pix + _summary.Debit + _summary.Credit).ToString("C");
             SalesCreditText.Text = _summary.StoreCredit.ToString("C");
-            SalesPeriodText.Text = $"Período: {_from:dd/MM/yyyy} até {_to.AddTicks(-1):dd/MM/yyyy} • PIX {_summary.Pix:C} • Débito {_summary.Debit:C} • Crédito {_summary.Credit:C}";
+            SalesPeriodText.Text = $"Período: {_from:dd/MM/yyyy} até {_to.AddTicks(-1):dd/MM/yyyy} • PIX {_summary.Pix:C} • Débito {_summary.Debit:C} • Crédito {_summary.Credit:C} • filtros aplicados";
             HeaderStatus.Text = $"Histórico detalhado atualizado • {rows.Count} venda(s) exibida(s)";
         }
         catch (Exception ex)
@@ -79,6 +82,7 @@ public partial class OperationsWindow : Window
             StockCostText.Text = rows.Sum(x => x.EstimatedCost).ToString("C");
             StockSaleText.Text = rows.Sum(x => x.EstimatedSale).ToString("C");
             HeaderStatus.Text = $"Estoque atualizado • {rows.Count} produto(s) exibido(s)";
+            SelectedStockText.Text = StockGrid.SelectedItem is StockView selected ? $"{selected.Product} • {selected.Stock:N3} {selected.Unit}" : "Selecione um produto para ajustar ou ver movimentos";
         }
         catch (Exception ex)
         {
@@ -91,6 +95,7 @@ public partial class OperationsWindow : Window
         try
         {
             _cash = await _ops.CashSnapshotAsync(_operator);
+            OpenCashButton.Visibility = Visibility.Collapsed;
             CashOpenedText.Text = $"Aberto em {_cash.OpenedAt.ToLocalTime():dd/MM/yyyy HH:mm} • {_cash.SalesCount} venda(s) neste caixa";
             CashOpeningText.Text = _cash.Opening.ToString("C");
             CashTotalSalesText.Text = _cash.TotalSales.ToString("C");
@@ -109,6 +114,7 @@ public partial class OperationsWindow : Window
             CloseWithdrawalsText.Text = _cash.Withdrawals.ToString("C");
             CloseExpectedText.Text = _cash.ExpectedCash.ToString("C");
             CashMovementsGrid.ItemsSource = await _ops.CashMovementsAsync(_cash.SessionId);
+            CashHistoryGrid.ItemsSource = await _ops.CashSessionHistoryAsync(_operator, 12);
 
             // Fechamento simples: o valor esperado já vem preenchido.
             // O operador só altera se a contagem física da gaveta for diferente.
@@ -118,8 +124,9 @@ public partial class OperationsWindow : Window
         catch (InvalidOperationException)
         {
             _cash = null;
+            OpenCashButton.Visibility = Visibility.Visible;
             var last = await _ops.LastClosedCashBalanceAsync(_operator);
-            CashOpenedText.Text = $"Nenhum caixa aberto. Na próxima venda o caixa abrirá automaticamente com o último saldo fechado: {last:C}.";
+            CashOpenedText.Text = $"Nenhum caixa aberto. Você pode abrir agora com o último saldo fechado ({last:C}) ou deixar a próxima venda abrir automaticamente.";
             CashOpeningText.Text = last.ToString("C");
             CashTotalSalesText.Text = CashSalesText.Text = CashPixText.Text =
                 CashDebitText.Text = CashCreditCardText.Text = CashStoreCreditText.Text =
@@ -129,6 +136,7 @@ public partial class OperationsWindow : Window
             CloseDifferenceText.Text = "R$ 0,00";
             Informed.Text = string.Empty;
             CashMovementsGrid.ItemsSource = null;
+            CashHistoryGrid.ItemsSource = await _ops.CashSessionHistoryAsync(_operator, 12);
         }
         catch (Exception ex)
         {
@@ -179,6 +187,23 @@ public partial class OperationsWindow : Window
 
     private async void SearchSales_Click(object sender, RoutedEventArgs e) => await LoadSales();
 
+    private async void SalesFilter_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (IsLoaded) await LoadSales();
+    }
+
+    private async void ExportSalesCsv_Click(object sender, RoutedEventArgs e)
+    {
+        var rows = SalesHistoryGrid.ItemsSource?.Cast<SalesHistoryView>().ToArray() ?? [];
+        if (rows.Length == 0)
+        {
+            MessageBox.Show("Não há vendas exibidas para exportar.", "Histórico", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var file = await _ops.SalesCsvAsync(rows, _from, _to);
+        MessageBox.Show($"CSV detalhado gerado:\n\n{file}", "Histórico de vendas", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
     private async void SalesSearch_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter) return;
@@ -204,7 +229,28 @@ public partial class OperationsWindow : Window
 
     private async void StockGrid_DoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (StockGrid.SelectedItem is StockView) await EditSelectedStockProductAsync();
+        if (StockGrid.SelectedItem is StockView) await OpenStockControlAsync();
+    }
+
+    private void StockGrid_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        SelectedStockText.Text = StockGrid.SelectedItem is StockView row
+            ? $"{row.Product} • {row.Stock:N3} {row.Unit} • {row.Status}"
+            : "Selecione um produto para ajustar ou ver movimentos";
+    }
+
+    private async void StockControl_Click(object sender, RoutedEventArgs e) => await OpenStockControlAsync();
+
+    private async Task OpenStockControlAsync()
+    {
+        if (StockGrid.SelectedItem is not StockView row)
+        {
+            MessageBox.Show("Selecione um produto no estoque.", "Estoque", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        new StockControlWindow(_ops, row, _operator) { Owner = this }.ShowDialog();
+        await LoadStock();
     }
 
     private async Task EditSelectedStockProductAsync()
@@ -279,6 +325,12 @@ public partial class OperationsWindow : Window
         var sale = await SelectedSaleAsync();
         if (sale is null || row is null) return;
 
+        if (row.Status == "CANCELADA")
+        {
+            MessageBox.Show("Venda cancelada não pode ser reimpressa como comprovante válido.", "Histórico", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
         var result = await PrintSaleAsync(sale, row.Customer, true);
         MessageBox.Show(
             result.Result.Success
@@ -329,6 +381,20 @@ public partial class OperationsWindow : Window
     }
 
     private async void RefreshCash_Click(object sender, RoutedEventArgs e) => await LoadCash();
+
+    private async void OpenCash_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await _ops.OpenCashAsync(_operator);
+            await LoadCash();
+            HeaderStatus.Text = "Caixa aberto com o último saldo fechado.";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Abrir caixa", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
 
     private async void Supply_Click(object sender, RoutedEventArgs e) => await RegisterMovement(CashMovementType.Supply);
     private async void Withdrawal_Click(object sender, RoutedEventArgs e) => await RegisterMovement(CashMovementType.Withdrawal);
