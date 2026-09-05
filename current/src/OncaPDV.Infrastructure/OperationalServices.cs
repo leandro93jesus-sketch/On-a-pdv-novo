@@ -20,7 +20,45 @@ public sealed record CashSessionHistoryView(Guid Id,DateTimeOffset OpenedAt,Date
 public sealed record CashClosing(Guid SessionId,decimal Opening,decimal CashSales,decimal Pix,decimal Debit,decimal Credit,decimal StoreCreditGenerated,decimal CreditReceipts,decimal Withdrawals,decimal Supplies,decimal Expected,decimal Informed,decimal Difference);
 public sealed class OperationalService(OncaDatabase db,AppPaths paths)
 {
- public Task<string?> EnsureDailyBackupAsync(CancellationToken ct=default){paths.EnsureCreated();var prefix=$"onca-pdv-pro-{DateTime.Now:yyyyMMdd}-";var existing=Directory.GetFiles(paths.Backups,prefix+"*.zip").FirstOrDefault();return existing is null?CreateDaily():Task.FromResult<string?>(existing);async Task<string?> CreateDaily()=>await CreateBackupAsync(30,ct);}
+ public async Task<string?> EnsureDailyBackupAsync(CancellationToken ct=default)
+ {
+  paths.EnsureCreated();
+  var settings=await new AutomaticBackupSettingsStore(paths).LoadAsync(ct);
+  if(!settings.Enabled)return null;
+
+  var prefix=$"onca-pdv-pro-{DateTime.Now:yyyyMMdd}-";
+  var existing=Directory.GetFiles(paths.Backups,prefix+"*.zip").OrderByDescending(File.GetCreationTimeUtc).FirstOrDefault();
+  var local=existing??await CreateBackupAsync(settings.Retention,ct);
+  string? external=null;
+  string status="OK";
+  string? error=null;
+
+  if(!string.IsNullOrWhiteSpace(settings.ExternalFolder))
+  {
+   try
+   {
+    Directory.CreateDirectory(settings.ExternalFolder);
+    external=Path.Combine(settings.ExternalFolder,Path.GetFileName(local));
+    if(!File.Exists(external))File.Copy(local,external,false);
+   }
+   catch(Exception ex){status="LOCAL_OK_EXTERNAL_FAILED";error=ex.Message;}
+  }
+
+  await using var dbx=db.Open();await using var log=dbx.CreateCommand();
+  log.CommandText="INSERT INTO backup_runs(id,created_at,backup_path,external_path,status,error) VALUES($id,$at,$path,$external,$status,$error)";
+  log.Parameters.AddWithValue("$id",Guid.NewGuid().ToString());log.Parameters.AddWithValue("$at",DateTimeOffset.Now.ToString("O"));log.Parameters.AddWithValue("$path",local);
+  log.Parameters.AddWithValue("$external",(object?)external??DBNull.Value);log.Parameters.AddWithValue("$status",status);log.Parameters.AddWithValue("$error",(object?)error??DBNull.Value);
+  await log.ExecuteNonQueryAsync(ct);
+  return local;
+ }
+ public async Task<(DateTimeOffset? LastBackup,string Status,string? ExternalPath)> BackupStatusAsync(CancellationToken ct=default)
+ {
+  await using var c=db.Open();await using var q=c.CreateCommand();
+  q.CommandText="SELECT created_at,status,external_path FROM backup_runs ORDER BY created_at DESC LIMIT 1";
+  await using var r=await q.ExecuteReaderAsync(ct);
+  if(!await r.ReadAsync(ct))return(null,"SEM BACKUP REGISTRADO",null);
+  return(DateTimeOffset.Parse(r.GetString(0)),r.GetString(1),r.IsDBNull(2)?null:r.GetString(2));
+ }
  public async Task<IReadOnlyList<CreditView>> CreditsAsync(string status="Todos",Guid? customer=null,CancellationToken ct=default){var list=new List<CreditView>();await using var c=db.Open();await using var q=c.CreateCommand();q.CommandText="""SELECT a.id,a.customer_id,c.name,s.number,a.original_amount,a.balance,a.due_at,a.status FROM credit_accounts a JOIN customers c ON c.id=a.customer_id JOIN sales s ON s.id=a.sale_id WHERE ($customer IS NULL OR a.customer_id=$customer) AND ($status='Todos' OR a.status=$status OR ($status='Overdue' AND a.balance>0 AND a.due_at<$now)) ORDER BY a.due_at DESC LIMIT 500""";q.Parameters.AddWithValue("$customer",(object?)customer?.ToString()??DBNull.Value);q.Parameters.AddWithValue("$status",status);q.Parameters.AddWithValue("$now",DateTimeOffset.Now.ToString("O"));await using var r=await q.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct)){var due=DateTimeOffset.Parse(r.GetString(6));var st=Enum.Parse<CreditStatus>(r.GetString(7));if(st is not CreditStatus.Paid&&due<DateTimeOffset.Now)st=CreditStatus.Overdue;var original=r.GetDecimal(4);var balance=r.GetDecimal(5);list.Add(new(Guid.Parse(r.GetString(0)),Guid.Parse(r.GetString(1)),r.GetString(2),r.GetInt64(3),original,original-balance,balance,due,st));}return list;}
  public async Task<IReadOnlyList<CreditMovement>> CreditMovementsAsync(Guid account,CancellationToken ct=default){var list=new List<CreditMovement>();await using var c=db.Open();await using var q=c.CreateCommand();q.CommandText="SELECT id,amount,method,created_at,notes FROM credit_receipts WHERE account_id=$id ORDER BY created_at";q.Parameters.AddWithValue("$id",account.ToString());await using var r=await q.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))list.Add(new(Guid.Parse(r.GetString(0)),r.GetDecimal(1),Enum.Parse<PaymentMethod>(r.GetString(2)),DateTimeOffset.Parse(r.GetString(3)),r.IsDBNull(4)?null:r.GetString(4)));return list;}
  public async Task<IReadOnlyList<Sale>> CustomerSalesAsync(Guid customer,CancellationToken ct=default){var repo=new SqliteSaleRepository(db,new SystemClock());var ids=new List<Guid>();await using(var c=db.Open()){await using var q=c.CreateCommand();q.CommandText="SELECT id FROM sales WHERE customer_id=$id AND status='Completed' ORDER BY created_at DESC LIMIT 200";q.Parameters.AddWithValue("$id",customer.ToString());await using var r=await q.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))ids.Add(Guid.Parse(r.GetString(0)));}var result=new List<Sale>();foreach(var id in ids){var sale=await repo.GetAsync(id,ct);if(sale is not null)result.Add(sale);}return result;}
