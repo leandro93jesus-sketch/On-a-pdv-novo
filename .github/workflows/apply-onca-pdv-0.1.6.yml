@@ -1,0 +1,32 @@
+name: Apply ONCA PDV 0.1.6 wiring
+
+on:
+  push:
+    branches: [ dev/onca-pdv-0.1.6 ]
+    paths: [ 'APPLY-016-TRIGGER.txt' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev/onca-pdv-0.1.6
+          fetch-depth: 0
+      - name: Apply deterministic changes
+        run: python3 scripts/apply-0.1.6-wiring.py
+      - name: Commit transformed source
+        run: |
+          git config user.name "ChatGPT Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add current
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Wire ONCA PDV 0.1.6 advanced features [skip ci]"
+            git push origin HEAD:dev/onca-pdv-0.1.6
+          fi
