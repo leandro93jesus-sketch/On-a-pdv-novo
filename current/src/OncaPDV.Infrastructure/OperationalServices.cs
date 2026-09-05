@@ -13,6 +13,8 @@ public sealed record CreditMovement(Guid Id,decimal Amount,PaymentMethod Method,
 public sealed record CustomerCreditProfile(Guid CustomerId,string Customer,decimal Limit,decimal OpenBalance,decimal Available,bool Blocked,int OpenAccounts,int OverdueAccounts);
 public sealed record SalesSummary(int Quantity,decimal Gross,decimal Discounts,decimal Net,decimal Cash,decimal Pix,decimal Debit,decimal Credit,decimal StoreCredit,decimal CreditReceipts);
 public sealed record SalesHistoryView(Guid Id,long Number,DateTimeOffset CreatedAt,string Customer,string Products,int ItemLines,decimal ItemQuantity,decimal Gross,decimal Discount,decimal Total,string Payments,decimal CashReceived,decimal Change,string Operator,string Status);
+public sealed record SaleCorrectionItem(Guid ProductId,string Code,string Name,decimal Quantity,decimal UnitPrice){public decimal Subtotal=>decimal.Round(Quantity*UnitPrice,2,MidpointRounding.AwayFromZero);}
+public sealed record SaleCorrectionRequest(IReadOnlyList<SaleCorrectionItem> Items,decimal Discount,string Reason);
 public sealed record StockView(Guid Id,string Product,string Code,string? Barcode,string? Category,string? Brand,string Unit,decimal Stock,decimal Minimum,decimal Cost,decimal Price,decimal EstimatedCost,decimal EstimatedSale,decimal MarginPercent,string Status);
 public sealed record StockMovementView(Guid Id,DateTimeOffset CreatedAt,string Type,decimal Quantity,string Reason,string Origin);
 public sealed record StockPlanningView(Guid ProductId,string Code,string Product,string Supplier,decimal Stock,decimal Minimum,decimal SuggestedBuy,decimal CurrentCost,decimal AverageCost,DateTimeOffset? LastSaleAt,int DaysWithoutSale,string Action);
@@ -162,6 +164,112 @@ ON CONFLICT(customer_id) DO UPDATE SET credit_limit=excluded.credit_limit,blocke
   while(await r.ReadAsync(ct))list.Add(new(Guid.Parse(r.GetString(0)),r.GetInt64(1),DateTimeOffset.Parse(r.GetString(2)),r.GetString(3),r.GetString(4),r.GetInt32(5),r.GetDecimal(6),r.GetDecimal(7),r.GetDecimal(8),r.GetDecimal(9),FriendlyPayments(r.GetString(10)),r.GetDecimal(11),r.GetDecimal(12),r.GetString(13),FriendlySaleStatus(r.GetString(14))));
   return list;
  }
+
+ public async Task CancelCompletedSaleAsync(Guid saleId,Guid userId,string reason,CancellationToken ct=default)
+ {
+  if(string.IsNullOrWhiteSpace(reason))throw new DomainException("Informe o motivo do cancelamento.");
+  await using var c=db.Open();await using var tx=await c.BeginTransactionAsync(ct);
+
+  string status;string sessionId;
+  await using(var read=c.CreateCommand()){read.Transaction=(SqliteTransaction)tx;read.CommandText="SELECT status,cash_session_id FROM sales WHERE id=$id";read.Parameters.AddWithValue("$id",saleId.ToString());await using var r=await read.ExecuteReaderAsync(ct);if(!await r.ReadAsync(ct))throw new DomainException("Venda não encontrada.");status=r.GetString(0);sessionId=r.GetString(1);}
+  if(status!="Completed")throw new DomainException("A venda já está cancelada ou não pode ser cancelada.");
+
+  await using(var receipts=c.CreateCommand()){receipts.Transaction=(SqliteTransaction)tx;receipts.CommandText="SELECT COUNT(*) FROM credit_receipts cr JOIN credit_accounts ca ON ca.id=cr.account_id WHERE ca.sale_id=$sale";receipts.Parameters.AddWithValue("$sale",saleId.ToString());if(Convert.ToInt32(await receipts.ExecuteScalarAsync(ct))>0)throw new DomainException("Esta venda possui recebimentos de crediário. Estorne os recebimentos antes de cancelar.");}
+
+  var items=new List<(Guid Product,decimal Qty)>();
+  await using(var q=c.CreateCommand()){q.Transaction=(SqliteTransaction)tx;q.CommandText="SELECT product_id,quantity FROM sale_items WHERE sale_id=$sale";q.Parameters.AddWithValue("$sale",saleId.ToString());await using var r=await q.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))items.Add((Guid.Parse(r.GetString(0)),r.GetDecimal(1)));}
+
+  foreach(var item in items)
+  {
+   await using(var update=c.CreateCommand()){update.Transaction=(SqliteTransaction)tx;update.CommandText="UPDATE products SET stock=stock+$q WHERE id=$id";update.Parameters.AddWithValue("$q",item.Qty);update.Parameters.AddWithValue("$id",item.Product.ToString());await update.ExecuteNonQueryAsync(ct);}
+   await using(var movement=c.CreateCommand()){movement.Transaction=(SqliteTransaction)tx;movement.CommandText="INSERT INTO stock_movements(id,product_id,type,quantity,origin_id,reason,created_at) VALUES($id,$product,'Cancellation',$q,$sale,$reason,$at)";movement.Parameters.AddWithValue("$id",Guid.NewGuid().ToString());movement.Parameters.AddWithValue("$product",item.Product.ToString());movement.Parameters.AddWithValue("$q",item.Qty);movement.Parameters.AddWithValue("$sale",saleId.ToString());movement.Parameters.AddWithValue("$reason",reason.Trim());movement.Parameters.AddWithValue("$at",DateTimeOffset.Now.ToString("O"));await movement.ExecuteNonQueryAsync(ct);}
+  }
+
+  await using(var cash=c.CreateCommand()){cash.Transaction=(SqliteTransaction)tx;cash.CommandText="DELETE FROM cash_movements WHERE type='Sale' AND origin_id=$sale";cash.Parameters.AddWithValue("$sale",saleId.ToString());await cash.ExecuteNonQueryAsync(ct);}
+  await using(var credit=c.CreateCommand()){credit.Transaction=(SqliteTransaction)tx;credit.CommandText="UPDATE credit_accounts SET balance=0,status='Cancelled' WHERE sale_id=$sale";credit.Parameters.AddWithValue("$sale",saleId.ToString());await credit.ExecuteNonQueryAsync(ct);}
+  await using(var sale=c.CreateCommand()){sale.Transaction=(SqliteTransaction)tx;sale.CommandText="UPDATE sales SET status='Cancelled' WHERE id=$sale";sale.Parameters.AddWithValue("$sale",saleId.ToString());await sale.ExecuteNonQueryAsync(ct);}
+
+  var at=DateTimeOffset.Now.ToString("O");
+  await using(var correction=c.CreateCommand()){correction.Transaction=(SqliteTransaction)tx;correction.CommandText="INSERT INTO sale_corrections(id,sale_id,user_id,action,reason,created_at) VALUES($id,$sale,$user,'CANCEL',$reason,$at)";correction.Parameters.AddWithValue("$id",Guid.NewGuid().ToString());correction.Parameters.AddWithValue("$sale",saleId.ToString());correction.Parameters.AddWithValue("$user",userId.ToString());correction.Parameters.AddWithValue("$reason",reason.Trim());correction.Parameters.AddWithValue("$at",at);await correction.ExecuteNonQueryAsync(ct);}
+  await using(var audit=c.CreateCommand()){audit.Transaction=(SqliteTransaction)tx;audit.CommandText="INSERT INTO audit_log(id,user_id,action,entity,entity_id,reason,created_at) VALUES($id,$user,'SALE_CANCEL','Sale',$sale,$reason,$at)";audit.Parameters.AddWithValue("$id",Guid.NewGuid().ToString());audit.Parameters.AddWithValue("$user",userId.ToString());audit.Parameters.AddWithValue("$sale",saleId.ToString());audit.Parameters.AddWithValue("$reason",reason.Trim());audit.Parameters.AddWithValue("$at",at);await audit.ExecuteNonQueryAsync(ct);}
+  await tx.CommitAsync(ct);
+ }
+
+ public async Task<Sale> CorrectCompletedSaleAsync(Guid saleId,Guid userId,SaleCorrectionRequest request,CancellationToken ct=default)
+ {
+  if(request.Items.Count==0)throw new DomainException("A venda precisa ter pelo menos um item.");
+  if(request.Items.Any(x=>x.Quantity<=0||x.UnitPrice<0))throw new DomainException("Quantidade ou preço inválido.");
+  if(string.IsNullOrWhiteSpace(request.Reason))throw new DomainException("Informe o motivo da correção.");
+
+  var oldSale=await SaleAsync(saleId,ct)??throw new DomainException("Venda não encontrada.");
+  var gross=request.Items.Sum(x=>x.Subtotal);
+  if(request.Discount<0||request.Discount>gross)throw new DomainException("Desconto inválido.");
+  var newTotal=gross-request.Discount;
+
+  await using var c=db.Open();await using var tx=await c.BeginTransactionAsync(ct);
+  string status;string sessionId;Guid? customerId;
+  await using(var read=c.CreateCommand()){read.Transaction=(SqliteTransaction)tx;read.CommandText="SELECT status,cash_session_id,customer_id FROM sales WHERE id=$id";read.Parameters.AddWithValue("$id",saleId.ToString());await using var r=await read.ExecuteReaderAsync(ct);if(!await r.ReadAsync(ct))throw new DomainException("Venda não encontrada.");status=r.GetString(0);sessionId=r.GetString(1);customerId=r.IsDBNull(2)?null:Guid.Parse(r.GetString(2));}
+  if(status!="Completed")throw new DomainException("Somente venda concluída pode ser corrigida.");
+
+  await using(var receipts=c.CreateCommand()){receipts.Transaction=(SqliteTransaction)tx;receipts.CommandText="SELECT COUNT(*) FROM credit_receipts cr JOIN credit_accounts ca ON ca.id=cr.account_id WHERE ca.sale_id=$sale";receipts.Parameters.AddWithValue("$sale",saleId.ToString());if(Convert.ToInt32(await receipts.ExecuteScalarAsync(ct))>0)throw new DomainException("Venda com recebimento de crediário não pode ser corrigida diretamente.");}
+
+  var oldItems=oldSale.Items.GroupBy(x=>x.ProductId).ToDictionary(g=>g.Key,g=>g.Sum(x=>x.Quantity));
+  var newItems=request.Items.GroupBy(x=>x.ProductId).ToDictionary(g=>g.Key,g=>g.Sum(x=>x.Quantity));
+  foreach(var productId in oldItems.Keys.Union(newItems.Keys))
+  {
+   var oldQty=oldItems.GetValueOrDefault(productId);
+   var newQty=newItems.GetValueOrDefault(productId);
+   var stockDelta=oldQty-newQty;
+   if(stockDelta==0)continue;
+   await using var update=c.CreateCommand();update.Transaction=(SqliteTransaction)tx;
+   update.CommandText="UPDATE products SET stock=stock+$delta WHERE id=$id AND stock+$delta>=0";
+   update.Parameters.AddWithValue("$delta",stockDelta);update.Parameters.AddWithValue("$id",productId.ToString());
+   if(await update.ExecuteNonQueryAsync(ct)!=1)throw new DomainException("Estoque insuficiente para aplicar a correção.");
+   await using var movement=c.CreateCommand();movement.Transaction=(SqliteTransaction)tx;
+   movement.CommandText="INSERT INTO stock_movements(id,product_id,type,quantity,origin_id,reason,created_at) VALUES($id,$product,'Adjustment',$delta,$sale,$reason,$at)";
+   movement.Parameters.AddWithValue("$id",Guid.NewGuid().ToString());movement.Parameters.AddWithValue("$product",productId.ToString());movement.Parameters.AddWithValue("$delta",stockDelta);movement.Parameters.AddWithValue("$sale",saleId.ToString());movement.Parameters.AddWithValue("$reason","CORRECAO DE VENDA: "+request.Reason.Trim());movement.Parameters.AddWithValue("$at",DateTimeOffset.Now.ToString("O"));await movement.ExecuteNonQueryAsync(ct);
+  }
+
+  var oldPayments=oldSale.Payments.ToArray();
+  if(oldPayments.Length>1 && newTotal!=oldSale.Total)throw new DomainException("Venda com pagamento misto só pode ser corrigida sem alterar o total. Para mudar o total, cancele e refaça a venda.");
+
+  await using(var del=c.CreateCommand()){del.Transaction=(SqliteTransaction)tx;del.CommandText="DELETE FROM sale_items WHERE sale_id=$sale";del.Parameters.AddWithValue("$sale",saleId.ToString());await del.ExecuteNonQueryAsync(ct);}
+  foreach(var item in request.Items)
+  {
+   await using var ins=c.CreateCommand();ins.Transaction=(SqliteTransaction)tx;
+   ins.CommandText="INSERT INTO sale_items(id,sale_id,product_id,code,name,quantity,unit_price,subtotal) VALUES($id,$sale,$product,$code,$name,$q,$price,$sub)";
+   ins.Parameters.AddWithValue("$id",Guid.NewGuid().ToString());ins.Parameters.AddWithValue("$sale",saleId.ToString());ins.Parameters.AddWithValue("$product",item.ProductId.ToString());ins.Parameters.AddWithValue("$code",item.Code);ins.Parameters.AddWithValue("$name",item.Name);ins.Parameters.AddWithValue("$q",item.Quantity);ins.Parameters.AddWithValue("$price",item.UnitPrice);ins.Parameters.AddWithValue("$sub",item.Subtotal);await ins.ExecuteNonQueryAsync(ct);
+  }
+
+  await using(var saleUpdate=c.CreateCommand()){saleUpdate.Transaction=(SqliteTransaction)tx;saleUpdate.CommandText="UPDATE sales SET discount=$discount,total=$total WHERE id=$sale";saleUpdate.Parameters.AddWithValue("$discount",request.Discount);saleUpdate.Parameters.AddWithValue("$total",newTotal);saleUpdate.Parameters.AddWithValue("$sale",saleId.ToString());await saleUpdate.ExecuteNonQueryAsync(ct);}
+
+  if(oldPayments.Length==1)
+  {
+   var p=oldPayments[0];
+   var received=p.Method==PaymentMethod.Cash?Math.Max(p.Received??p.Amount,newTotal):(decimal?)null;
+   await using(var pay=c.CreateCommand()){pay.Transaction=(SqliteTransaction)tx;pay.CommandText="UPDATE payments SET amount=$amount,received=$received,change_amount=$change WHERE sale_id=$sale";pay.Parameters.AddWithValue("$amount",newTotal);pay.Parameters.AddWithValue("$received",(object?)received??DBNull.Value);pay.Parameters.AddWithValue("$change",p.Method==PaymentMethod.Cash?Math.Max(0,(received??newTotal)-newTotal):0);pay.Parameters.AddWithValue("$sale",saleId.ToString());await pay.ExecuteNonQueryAsync(ct);}
+   await using(var cash=c.CreateCommand()){cash.Transaction=(SqliteTransaction)tx;cash.CommandText="DELETE FROM cash_movements WHERE type='Sale' AND origin_id=$sale";cash.Parameters.AddWithValue("$sale",saleId.ToString());await cash.ExecuteNonQueryAsync(ct);}
+   if(p.Method!=PaymentMethod.StoreCredit)
+   {
+    await using var cash=c.CreateCommand();cash.Transaction=(SqliteTransaction)tx;cash.CommandText="INSERT INTO cash_movements(id,session_id,type,amount,origin_id,reason,created_at) VALUES($id,$session,'Sale',$amount,$sale,$reason,$at)";cash.Parameters.AddWithValue("$id",Guid.NewGuid().ToString());cash.Parameters.AddWithValue("$session",sessionId);cash.Parameters.AddWithValue("$amount",newTotal);cash.Parameters.AddWithValue("$sale",saleId.ToString());cash.Parameters.AddWithValue("$reason",p.Method.ToString());cash.Parameters.AddWithValue("$at",DateTimeOffset.Now.ToString("O"));await cash.ExecuteNonQueryAsync(ct);
+   }
+   else
+   {
+    if(customerId is null)throw new DomainException("Venda de crediário sem cliente.");
+    await using var ca=c.CreateCommand();ca.Transaction=(SqliteTransaction)tx;ca.CommandText="UPDATE credit_accounts SET original_amount=$total,balance=$total,status='Open' WHERE sale_id=$sale";ca.Parameters.AddWithValue("$total",newTotal);ca.Parameters.AddWithValue("$sale",saleId.ToString());await ca.ExecuteNonQueryAsync(ct);
+    await using var ce=c.CreateCommand();ce.Transaction=(SqliteTransaction)tx;ce.CommandText="UPDATE credit_entries SET amount=$total,reason='VENDA CREDIARIO CORRIGIDA' WHERE sale_id=$sale AND type='Debit'";ce.Parameters.AddWithValue("$total",newTotal);ce.Parameters.AddWithValue("$sale",saleId.ToString());await ce.ExecuteNonQueryAsync(ct);
+   }
+  }
+
+  var before=JsonSerializer.Serialize(new{oldSale.Total,oldSale.Discount,Items=oldSale.Items,Payments=oldSale.Payments});
+  var after=JsonSerializer.Serialize(new{Total=newTotal,request.Discount,Items=request.Items});
+  var at=DateTimeOffset.Now.ToString("O");
+  await using(var correction=c.CreateCommand()){correction.Transaction=(SqliteTransaction)tx;correction.CommandText="INSERT INTO sale_corrections(id,sale_id,user_id,action,reason,before_json,after_json,created_at) VALUES($id,$sale,$user,'CORRECT',$reason,$before,$after,$at)";correction.Parameters.AddWithValue("$id",Guid.NewGuid().ToString());correction.Parameters.AddWithValue("$sale",saleId.ToString());correction.Parameters.AddWithValue("$user",userId.ToString());correction.Parameters.AddWithValue("$reason",request.Reason.Trim());correction.Parameters.AddWithValue("$before",before);correction.Parameters.AddWithValue("$after",after);correction.Parameters.AddWithValue("$at",at);await correction.ExecuteNonQueryAsync(ct);}
+  await using(var audit=c.CreateCommand()){audit.Transaction=(SqliteTransaction)tx;audit.CommandText="INSERT INTO audit_log(id,user_id,action,entity,entity_id,before_json,after_json,reason,created_at) VALUES($id,$user,'SALE_CORRECT','Sale',$sale,$before,$after,$reason,$at)";audit.Parameters.AddWithValue("$id",Guid.NewGuid().ToString());audit.Parameters.AddWithValue("$user",userId.ToString());audit.Parameters.AddWithValue("$sale",saleId.ToString());audit.Parameters.AddWithValue("$before",before);audit.Parameters.AddWithValue("$after",after);audit.Parameters.AddWithValue("$reason",request.Reason.Trim());audit.Parameters.AddWithValue("$at",at);await audit.ExecuteNonQueryAsync(ct);}
+  await tx.CommitAsync(ct);
+  return await SaleAsync(saleId,ct)??throw new DomainException("Falha ao recarregar a venda corrigida.");
+ }
+
  public async Task<Sale?> SaleAsync(Guid id,CancellationToken ct=default)=>await new SqliteSaleRepository(db,new SystemClock()).GetAsync(id,ct);
  public async Task<IReadOnlyList<StockView>> StockAsync(bool belowMinimum=false,string search="",string stockStatus="Todos",CancellationToken ct=default)
  {
