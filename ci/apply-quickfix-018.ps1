@@ -26,7 +26,7 @@ $b=@'
         if (price <= 0) throw new DomainException("Informe um preço maior que zero.");
         var baseProduct = await products.FindAsync("DIVERSOS", ct)
             ?? throw new DomainException("Produto DIVERSOS não encontrado.");
-        var label = string.IsNullOrWhiteSpace(description) ? "DIVERSOS" : $"DIVERSOS - {description.Trim()}";
+        var label = string.IsNullOrWhiteSpace(description) ? "DIVERSOS" : description.Trim();
         var item = baseProduct with { Name = label, SalePrice = price, PromotionalPrice = null, PromotionStartsAt = null, PromotionEndsAt = null };
         Cart.Add(item);
         await recovery.SaveAsync(Cart, ct);
@@ -50,7 +50,7 @@ Replace-Req $xaml $a $b
 # DIVERSOS fixo dentro do proprio carrinho: valor + adicionar
 $t=Get-Text $xaml
 $oldRows='                    <Grid.RowDefinitions><RowDefinition Height="54"/><RowDefinition/><RowDefinition Height="46"/></Grid.RowDefinitions>'
-$newRows='                    <Grid.RowDefinitions><RowDefinition Height="54"/><RowDefinition Height="64"/><RowDefinition/><RowDefinition Height="46"/></Grid.RowDefinitions>'
+$newRows='                    <Grid.RowDefinitions><RowDefinition Height="54"/><RowDefinition Height="72"/><RowDefinition/><RowDefinition Height="46"/></Grid.RowDefinitions>'
 if(-not $t.Contains($oldRows)){ throw "Linhas do carrinho nao encontradas" }
 $t=$t.Replace($oldRows,$newRows)
 
@@ -60,17 +60,29 @@ $newGrid=@'
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="170"/>
+                                <ColumnDefinition Width="2*"/>
                                 <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="DIVERSOS" FontSize="18" FontWeight="Bold" Foreground="#7A4D00" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                            <TextBox Grid.Column="1" x:Name="MiscValueBox" FontSize="18" FontWeight="Bold" HorizontalContentAlignment="Right"
-                                     ToolTip="Digite o valor do item DIVERSOS" Margin="0,0,10,0"/>
-                            <Button Grid.Column="2" Style="{StaticResource RoundedButton}" Background="#D28A14" Foreground="White"
-                                    Content="ADICIONAR DIVERSOS" FontWeight="Bold" Padding="16,8" Click="MiscCart_Click"/>
-                            <TextBlock Grid.Column="3" Text="Digite o valor e clique em ADICIONAR" Foreground="#8A6A2E"
-                                       VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            <TextBlock Text="DIVERSOS" FontSize="18" FontWeight="Bold" Foreground="#7A4D00" VerticalAlignment="Center" Margin="0,0,12,0"/>
+
+                            <StackPanel Grid.Column="1" Margin="0,0,10,0">
+                                <TextBlock Text="NOME DO PRODUTO" FontSize="11" FontWeight="Bold" Foreground="#7A4D00"/>
+                                <TextBox x:Name="MiscNameBox" FontSize="17" ToolTip="Digite o nome do produto"/>
+                            </StackPanel>
+
+                            <TextBlock Grid.Column="2" Text="R$" FontSize="17" FontWeight="Bold" Foreground="#7A4D00"
+                                       VerticalAlignment="Center" Margin="0,15,6,0"/>
+
+                            <StackPanel Grid.Column="3" Margin="0,0,10,0">
+                                <TextBlock Text="VALOR" FontSize="11" FontWeight="Bold" Foreground="#7A4D00"/>
+                                <TextBox x:Name="MiscValueBox" FontSize="17" FontWeight="Bold" HorizontalContentAlignment="Right"
+                                         ToolTip="Digite o valor do item DIVERSOS"/>
+                            </StackPanel>
+
+                            <Button Grid.Column="4" Style="{StaticResource RoundedButton}" Background="#D28A14" Foreground="White"
+                                    Content="ADICIONAR" FontWeight="Bold" Padding="18,9" Margin="0,14,0,0" Click="MiscCart_Click"/>
                         </Grid>
                     </Border>
 
@@ -237,10 +249,11 @@ $payRep=@'
             var cashSummary = cash.Length == 0 ? string.Empty : $"\nRecebido em dinheiro: {received:C}\nTroco: {change:C}";
 
             var printNow = MessageBox.Show(
-                $"VENDA CONCLUÍDA\n\nVenda Nº {sale.Number:000000}\nTotal: {sale.Total:C}\nPagamento: {string.Join(" + ", sale.Payments.Select(x => x.Method))}{cashSummary}\n\nDeseja imprimir a nota?",
+                $"VENDA CONCLUÍDA\n\nVenda Nº {sale.Number:000000}\nTotal: {sale.Total:C}\nPagamento: {string.Join(" + ", sale.Payments.Select(x => x.Method))}{cashSummary}\n\nAUTORIZAR IMPRESSÃO DA NOTA?\n\nA nota só será impressa se você escolher SIM.",
                 "ONÇA PDV",
                 MessageBoxButton.YesNo,
-                MessageBoxImage.Question) == MessageBoxResult.Yes;
+                MessageBoxImage.Question,
+                MessageBoxResult.No) == MessageBoxResult.Yes;
 
             if (printNow)
             {
@@ -275,11 +288,20 @@ $b=@'
             return;
         }
 
-        await _workflow.AddMiscAsync(price, "DIVERSOS");
+        var itemName = MiscNameBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(itemName))
+        {
+            MessageBox.Show("Digite o nome do produto.", "ITEM DIVERSOS", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MiscNameBox.Focus();
+            return;
+        }
+
+        await _workflow.AddMiscAsync(price, itemName);
+        MiscNameBox.Clear();
         MiscValueBox.Clear();
         RefreshCart();
-        SetStatus($"DIVERSOS ADICIONADO - {price:C}");
-        MiscValueBox.Focus();
+        SetStatus($"{itemName} ADICIONADO - {price:C}");
+        MiscNameBox.Focus();
     }
 '@
 if(-not $t.Contains($a)){ throw "Add_Click nao encontrado" }
@@ -303,7 +325,7 @@ $t=$t.Replace('if(left is null)throw new DomainException($"Estoque insuficiente 
 Set-Text $pg $t
 
 $proj=Join-Path $root "src\OncaPDV.Desktop\OncaPDV.Desktop.csproj"
-$t=(Get-Text $proj).Replace("<Version>0.1.3</Version>","<Version>0.1.9</Version>")
+$t=(Get-Text $proj).Replace("<Version>0.1.3</Version>","<Version>0.1.10</Version>")
 Set-Text $proj $t
 
-Write-Host "ONCA PDV 0.1.9 QUICKFIX APLICADO - DIVERSOS DENTRO DO CARRINHO"
+Write-Host "ONCA PDV 0.1.10 QUICKFIX APLICADO - NOME + VALOR NO DIVERSOS / IMPRESSAO SOMENTE AUTORIZADA"
