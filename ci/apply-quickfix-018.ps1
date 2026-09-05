@@ -4,12 +4,12 @@ $ErrorActionPreference = "Stop"
 $root = Join-Path $PWD "work\ONCA-PDV-PRO"
 if (-not (Test-Path $root)) { throw "Fonte extraida nao encontrada" }
 
-function R([string]$p) { [IO.File]::ReadAllText($p) }
-function W([string]$p,[string]$t) { [IO.File]::WriteAllText($p,$t,[Text.UTF8Encoding]::new($true)) }
-function RR([string]$p,[string]$a,[string]$b) {
-  $t=R $p
+function Get-Text([string]$p) { [IO.File]::ReadAllText($p) }
+function Set-Text([string]$p,[string]$t) { [IO.File]::WriteAllText($p,$t,[Text.UTF8Encoding]::new($true)) }
+function Replace-Req([string]$p,[string]$a,[string]$b) {
+  $t=Get-Text $p
   if(-not $t.Contains($a)){ throw "Trecho nao encontrado em $p" }
-  W $p ($t.Replace($a,$b))
+  Set-Text $p ($t.Replace($a,$b))
 }
 
 $contracts=Join-Path $root "src\OncaPDV.Application\Contracts.cs"
@@ -40,7 +40,7 @@ $b=@'
 
     public async Task<ScanResult> ScanAsync(string query, CancellationToken ct = default)
 '@
-RR $contracts $a $b
+Replace-Req $contracts $a $b
 
 $xaml=Join-Path $root "src\OncaPDV.Desktop\MainWindow.xaml"
 $a='                <Border Background="#0B6B3A" CornerRadius="12" Padding="20" Margin="0,0,0,12">'
@@ -51,10 +51,10 @@ $b=@'
 
                 <Border Background="#0B6B3A" CornerRadius="12" Padding="20" Margin="0,0,0,12">
 '@
-RR $xaml $a $b
+Replace-Req $xaml $a $b
 
 $main=Join-Path $root "src\OncaPDV.Desktop\MainWindow.xaml.cs"
-$t=R $main
+$t=Get-Text $main
 $t=$t.Replace("using System.Collections.ObjectModel;","using System.Collections.ObjectModel;"+[Environment]::NewLine+"using System.Globalization;"+[Environment]::NewLine+"using Microsoft.VisualBasic;")
 
 $pattern='(?s)    private async Task AddProduct\(\)\s*\{.*?\r?\n    \}\r?\n\r?\n    private async Task OpenProduct'
@@ -276,22 +276,22 @@ $b=@'
 '@
 if(-not $t.Contains($a)){ throw "Atalhos nao encontrados" }
 $t=$t.Replace($a,$b)
-W $main $t
+Set-Text $main $t
 
 $db=Join-Path $root "src\OncaPDV.Infrastructure\Database.cs"
-$t=R $db
+$t=Get-Text $db
 $t=$t.Replace('UPDATE products SET stock=stock-$q WHERE id=$p AND stock >= $q','UPDATE products SET stock=stock-$q WHERE id=$p')
 $t=$t.Replace('if (changed != 1) throw new DomainException($"Estoque insuficiente para {item.Name}.");','if (changed != 1) throw new DomainException($"Produto não encontrado para baixa de estoque: {item.Name}.");')
-W $db $t
+Set-Text $db $t
 
 $pg=Join-Path $root "src\OncaPDV.PostgreSql\CentralDatabase.cs"
-$t=R $pg
+$t=Get-Text $pg
 $t=$t.Replace('UPDATE products SET stock=stock-@quantity WHERE id=@product AND active=true AND stock>=@quantity RETURNING stock','UPDATE products SET stock=stock-@quantity WHERE id=@product AND active=true RETURNING stock')
 $t=$t.Replace('if(left is null)throw new DomainException($"Estoque insuficiente para {item.Name}.");','if(left is null)throw new DomainException($"Produto não encontrado para baixa de estoque: {item.Name}.");')
-W $pg $t
+Set-Text $pg $t
 
 $proj=Join-Path $root "src\OncaPDV.Desktop\OncaPDV.Desktop.csproj"
-$t=(R $proj).Replace("<Version>0.1.3</Version>","<Version>0.1.8</Version>")
-W $proj $t
+$t=(Get-Text $proj).Replace("<Version>0.1.3</Version>","<Version>0.1.8</Version>")
+Set-Text $proj $t
 
 Write-Host "ONCA PDV 0.1.8 QUICKFIX APLICADO"
