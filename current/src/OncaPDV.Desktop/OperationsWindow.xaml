@@ -183,6 +183,8 @@
                             <Button Style="{StaticResource SoftButton}" Content="VER DETALHES" Click="SaleDetails_Click"/>
                             <Button Style="{StaticResource SoftButton}" Content="GERAR PDF" Click="SelectedSalePdf_Click"/>
                             <Button Style="{StaticResource PrimaryButton}" Content="REIMPRIMIR COMPROVANTE" Click="SelectedSaleReprint_Click"/>
+                            <Button Style="{StaticResource SoftButton}" Content="CORRIGIR COM SENHA" Click="CorrectSale_Click" Background="#FFF6E8" Foreground="#A65D00"/>
+                            <Button Style="{StaticResource SoftButton}" Content="CANCELAR COM SENHA" Click="CancelSale_Click" Background="#FFF0F0" Foreground="#B3261E"/>
                             <Button Style="{StaticResource SoftButton}" Content="PDF DO PERÍODO" Click="ReportPdf_Click"/>
                         </StackPanel>
                     </Grid>
