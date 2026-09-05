@@ -33,6 +33,11 @@ public partial class OperationsWindow : Window
         To.SelectedDate = _to.AddDays(-1).Date;
         Loaded += async (_, _) =>
         {
+            OperatorFilter.Items.Clear();
+            OperatorFilter.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = "Todos", Tag = "" });
+            foreach (var user in await new PermissionService(_db).UsersAsync(true))
+                OperatorFilter.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = user.DisplayName, Tag = user.Id.ToString() });
+            OperatorFilter.SelectedIndex = 0;
             await LoadSales();
             await LoadStock();
             await LoadCash();
@@ -47,8 +52,10 @@ public partial class OperationsWindow : Window
             var paymentTag = (PaymentFilter.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag?.ToString() ?? "Todos";
             var statusTag = (SaleStatusFilter.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag?.ToString() ?? "Concluidas";
             PaymentMethod? method = paymentTag == "Todos" ? null : Enum.Parse<PaymentMethod>(paymentTag);
-            _summary = await _ops.SalesSummaryFilteredAsync(_from, _to, statusTag, method);
-            var rows = await _ops.SalesHistoryAsync(_from, _to, SalesSearch.Text, paymentTag, statusTag);
+            var operatorTag = (OperatorFilter.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag?.ToString() ?? "";
+            Guid? operatorId = Guid.TryParse(operatorTag, out var parsedOperator) ? parsedOperator : null;
+            _summary = await _ops.SalesSummaryFilteredAsync(_from, _to, statusTag, method, operatorId);
+            var rows = await _ops.SalesHistoryAsync(_from, _to, SalesSearch.Text, paymentTag, statusTag, operatorTag);
             SalesHistoryGrid.ItemsSource = rows;
 
             SalesCountText.Text = _summary.Quantity.ToString("N0");
