@@ -2,9 +2,9 @@
 
 PDV desktop Windows da **Onça Produtos de Limpeza**, em C# / .NET 10.
 
-## Estado desta entrega (0.1.5)
+## Estado desta entrega (0.1.6)
 
-A versão 0.1.5 consolida o PDV não fiscal e melhora diretamente a operação diária:
+A versão 0.1.6 consolida o PDV não fiscal e melhora diretamente a operação diária:
 
 - venda, carrinho recuperável, clientes, caixa, crediário, compras e fornecedores;
 - produtos com nomes iguais/parecidos permitidos, mantendo código interno e código de barras únicos;
@@ -64,3 +64,17 @@ Dados novos ficam em `%LOCALAPPDATA%\Onca PDV Pro`. A importação do banco anti
 - teste multicaixa real depende de um servidor PostgreSQL acessível;
 - assinatura Authenticode depende de certificado de code signing;
 - a geração do instalador requer Inno Setup 6 no Windows.
+
+
+## ONÇA PDV PRO 0.1.6 — melhorias operacionais
+- Login por usuário/PIN com perfis Administrador, Caixa e Estoque.
+- PIN inicial do administrador deve ser alterado no primeiro acesso.
+- Alteração de preço e desconto no carrinho com autorização de administrador e auditoria.
+- Cancelamento e correção de venda concluída com senha, motivo, reversão de estoque/caixa e trilha de auditoria.
+- Histórico de vendas com filtro por operador e vendas canceladas destacadas.
+- Produto com foto, promoção automática por período, fornecedor, localização/prateleira, margem e etiqueta EAN-13 imprimível.
+- Estoque com reposição sugerida, custo médio de compras e alerta de produtos sem giro.
+- Crediário com limite configurável, bloqueio e saldo disponível, preservando clientes antigos sem limite definido.
+- Ficha do cliente com compras, crediário, PDF e abertura de WhatsApp.
+- Backup automático diário configurável, retenção e cópia opcional para pasta/HD/pendrive externo.
+- Dashboard geral não foi adicionado, conforme solicitado.
