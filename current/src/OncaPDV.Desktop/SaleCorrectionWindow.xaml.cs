@@ -16,10 +16,11 @@ public partial class SaleCorrectionWindow : Window
     private readonly ObservableCollection<Row> _rows = [];
     public SaleCorrectionRequest? Request { get; private set; }
 
-    public SaleCorrectionWindow(Sale sale)
+    public SaleCorrectionWindow(Sale sale, string? initialReason = null)
     {
         _sale = sale;
         InitializeComponent();
+        ReasonBox.Text = initialReason ?? string.Empty;
         TitleText.Text = $"CORRIGIR VENDA Nº {sale.Number:000000}";
         PaymentText.Text = $"Pagamento original: {string.Join(" + ", sale.Payments.Select(x => $"{x.Method} {x.Amount:C}"))}";
         foreach (var item in sale.Items)
