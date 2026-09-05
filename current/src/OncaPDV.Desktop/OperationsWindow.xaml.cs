@@ -46,7 +46,7 @@ public partial class OperationsWindow : Window
         {
             var paymentTag = (PaymentFilter.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag?.ToString() ?? "Todos";
             var statusTag = (SaleStatusFilter.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag?.ToString() ?? "Concluidas";
-            var method = paymentTag == "Todos" ? null : Enum.Parse<PaymentMethod>(paymentTag);
+            PaymentMethod? method = paymentTag == "Todos" ? null : Enum.Parse<PaymentMethod>(paymentTag);
             _summary = await _ops.SalesSummaryFilteredAsync(_from, _to, statusTag, method);
             var rows = await _ops.SalesHistoryAsync(_from, _to, SalesSearch.Text, paymentTag, statusTag);
             SalesHistoryGrid.ItemsSource = rows;
