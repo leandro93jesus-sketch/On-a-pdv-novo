@@ -225,19 +225,9 @@ $b=@'
 if(-not $t.Contains($a)){ throw "Add_Click nao encontrado" }
 $t=$t.Replace($a,$b)
 
-$a=@'
-        if (e.Key == Key.F1) Product_Click(sender, e);
-        else if (e.Key == Key.F2) Pay_Click(sender, e);
-        else if (e.Key == Key.Escape) Cancel_Click(sender, e);
-'@
-$b=@'
-        if (e.Key == Key.F1) Product_Click(sender, e);
-        else if (e.Key == Key.F2) Pay_Click(sender, e);
-        else if (e.Key == Key.F3) Misc_Click(sender, e);
-        else if (e.Key == Key.Escape) Cancel_Click(sender, e);
-'@
-if(-not $t.Contains($a)){ throw "Atalhos nao encontrados" }
-$t=$t.Replace($a,$b)
+$keyNeedle='        else if (e.Key == Key.F2) Pay_Click(sender, e);'
+if(-not $t.Contains($keyNeedle)){ throw "Atalho F2 nao encontrado" }
+$t=$t.Replace($keyNeedle,$keyNeedle+[Environment]::NewLine+'        else if (e.Key == Key.F3) Misc_Click(sender, e);')
 Set-Text $main $t
 
 $db=Join-Path $root "src\OncaPDV.Infrastructure\Database.cs"
