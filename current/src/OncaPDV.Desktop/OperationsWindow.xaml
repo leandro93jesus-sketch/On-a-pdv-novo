@@ -107,7 +107,8 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/><ColumnDefinition Width="145"/><ColumnDefinition Width="145"/>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <Button Style="{StaticResource SoftButton}" Content="HOJE" Click="Today_Click"/>
                             <Button Grid.Column="1" Style="{StaticResource SoftButton}" Content="ONTEM" Click="Yesterday_Click"/>
@@ -116,7 +117,27 @@
                             <StackPanel Grid.Column="4" Margin="4,0"><TextBlock Text="ATÉ" FontSize="11" Foreground="#748179"/><DatePicker x:Name="To" Width="132"/></StackPanel>
                             <Button Grid.Column="5" Style="{StaticResource PrimaryButton}" Content="APLICAR" Click="Period_Click" VerticalAlignment="Bottom"/>
                             <TextBox Grid.Column="6" x:Name="SalesSearch" Margin="12,18,8,3" ToolTip="Venda, cliente, produto, código ou forma de pagamento" KeyDown="SalesSearch_KeyDown"/>
-                            <Button Grid.Column="7" Style="{StaticResource SoftButton}" Content="BUSCAR" Click="SearchSales_Click" VerticalAlignment="Bottom"/>
+                            <StackPanel Grid.Column="7" Margin="4,0">
+                                <TextBlock Text="PAGAMENTO" FontSize="11" Foreground="#748179"/>
+                                <ComboBox x:Name="PaymentFilter" SelectionChanged="SalesFilter_SelectionChanged">
+                                    <ComboBoxItem Content="Todos" Tag="Todos" IsSelected="True"/>
+                                    <ComboBoxItem Content="Dinheiro" Tag="Cash"/>
+                                    <ComboBoxItem Content="PIX" Tag="Pix"/>
+                                    <ComboBoxItem Content="Débito" Tag="Debit"/>
+                                    <ComboBoxItem Content="Crédito" Tag="Credit"/>
+                                    <ComboBoxItem Content="Crediário" Tag="StoreCredit"/>
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel Grid.Column="8" Margin="4,0">
+                                <TextBlock Text="STATUS" FontSize="11" Foreground="#748179"/>
+                                <ComboBox x:Name="SaleStatusFilter" SelectionChanged="SalesFilter_SelectionChanged">
+                                    <ComboBoxItem Content="Concluídas" Tag="Concluidas" IsSelected="True"/>
+                                    <ComboBoxItem Content="Canceladas" Tag="Canceladas"/>
+                                    <ComboBoxItem Content="Todas" Tag="Todos"/>
+                                </ComboBox>
+                            </StackPanel>
+                            <Button Grid.Column="9" Style="{StaticResource SoftButton}" Content="BUSCAR" Click="SearchSales_Click" VerticalAlignment="Bottom"/>
+                            <Button Grid.Column="10" Style="{StaticResource SoftButton}" Content="CSV" Click="ExportSalesCsv_Click" VerticalAlignment="Bottom"/>
                         </Grid>
                     </Border>
 
@@ -146,6 +167,7 @@
                                 <DataGridTextColumn Header="RECEBIDO DIN." Binding="{Binding CashReceived,StringFormat=C}" Width="115"/>
                                 <DataGridTextColumn Header="TROCO" Binding="{Binding Change,StringFormat=C}" Width="95"/>
                                 <DataGridTextColumn Header="OPERADOR" Binding="{Binding Operator}" Width="90"/>
+                                <DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="105"/>
                             </DataGrid.Columns>
                         </DataGrid>
                     </Border>
@@ -173,7 +195,7 @@
 
                     <Border Background="#F8FAF9" BorderBrush="#E2E8E5" BorderThickness="1" CornerRadius="10" Padding="12">
                         <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="190"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="190"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                             <StackPanel>
                                 <TextBlock Text="BUSCAR PRODUTO" FontSize="11" Foreground="#748179"/>
                                 <TextBox x:Name="StockSearch" ToolTip="Nome, código interno, código de barras, categoria ou marca" KeyDown="StockSearch_KeyDown"/>
@@ -188,7 +210,8 @@
                                 </ComboBox>
                             </StackPanel>
                             <Button Grid.Column="2" Style="{StaticResource PrimaryButton}" Content="ATUALIZAR" Click="StockSearch_Click" VerticalAlignment="Bottom" Margin="12,3,3,3"/>
-                            <Button Grid.Column="3" Style="{StaticResource SoftButton}" Content="EDITAR PRODUTO" Click="EditStockProduct_Click" VerticalAlignment="Bottom"/>
+                            <Button Grid.Column="3" Style="{StaticResource SoftButton}" Content="EDITAR CADASTRO" Click="EditStockProduct_Click" VerticalAlignment="Bottom"/>
+                            <Button Grid.Column="4" Style="{StaticResource PrimaryButton}" Content="AJUSTAR / MOVIMENTOS" Click="StockControl_Click" VerticalAlignment="Bottom"/>
                         </Grid>
                     </Border>
 
@@ -202,7 +225,7 @@
                     </UniformGrid>
 
                     <Border Grid.Row="2" Background="White" BorderBrush="#E2E8E5" BorderThickness="1" CornerRadius="10" Padding="8">
-                        <DataGrid x:Name="StockGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" MouseDoubleClick="StockGrid_DoubleClick" FrozenColumnCount="3" HorizontalScrollBarVisibility="Auto">
+                        <DataGrid x:Name="StockGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" MouseDoubleClick="StockGrid_DoubleClick" FrozenColumnCount="3" HorizontalScrollBarVisibility="Auto" SelectionChanged="StockGrid_SelectionChanged">
                             <DataGrid.RowStyle>
                                 <Style TargetType="DataGridRow">
                                     <Setter Property="ToolTip" Value="Duplo clique para editar o produto"/>
@@ -236,7 +259,11 @@
                             </DataGrid.Columns>
                         </DataGrid>
                     </Border>
-                    <TextBlock Grid.Row="3" Text="Duplo clique para editar cadastro, preço, custo, categoria e marca. O estoque é preservado no cadastro e movimentado pelas operações do sistema." Foreground="#69766F" FontSize="12" Margin="3,8,0,0"/>
+                    <Grid Grid.Row="3" Margin="3,8,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="Duplo clique abre o controle de estoque com histórico. Use EDITAR CADASTRO para preço, custo, categoria e marca." Foreground="#69766F" FontSize="12"/>
+                        <TextBlock Grid.Column="1" x:Name="SelectedStockText" Text="Nenhum produto selecionado" Foreground="#0B6B3A" FontWeight="SemiBold"/>
+                    </Grid>
                 </Grid>
             </TabItem>
 
@@ -251,7 +278,10 @@
                                 <TextBlock x:Name="CashOpenedText" Foreground="#6C7972" Margin="0,3,0,0"/>
                                 <TextBlock Text="O saldo real informado no último fechamento vira automaticamente o saldo inicial do próximo caixa." Foreground="#0B6B3A" FontWeight="SemiBold" Margin="0,4,0,0"/>
                             </StackPanel>
-                            <Button Grid.Column="1" Style="{StaticResource SoftButton}" Content="ATUALIZAR" Click="RefreshCash_Click"/>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <Button x:Name="OpenCashButton" Style="{StaticResource PrimaryButton}" Content="ABRIR CAIXA COM ÚLTIMO SALDO" Click="OpenCash_Click" Visibility="Collapsed"/>
+                                <Button Style="{StaticResource SoftButton}" Content="ATUALIZAR" Click="RefreshCash_Click"/>
+                            </StackPanel>
                         </Grid>
 
                         <UniformGrid Columns="6" Margin="0,12">
@@ -334,6 +364,27 @@
                                         <DataGridTextColumn Header="TIPO" Binding="{Binding Type}" Width="135"/>
                                         <DataGridTextColumn Header="MOTIVO" Binding="{Binding Reason}" Width="*"/>
                                         <DataGridTextColumn Header="VALOR" Binding="{Binding Amount,StringFormat=C}" Width="125"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </Border>
+
+                        <Border Background="White" BorderBrush="#E2E8E5" BorderThickness="1" CornerRadius="10" Padding="8" Margin="0,12,0,0">
+                            <Grid>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="190"/></Grid.RowDefinitions>
+                                <Grid Margin="6,4,0,8">
+                                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="ÚLTIMOS FECHAMENTOS" FontWeight="Bold" Foreground="#173D29"/>
+                                    <TextBlock Grid.Column="1" Text="O valor informado vira o próximo saldo inicial." Foreground="#6B7972"/>
+                                </Grid>
+                                <DataGrid Grid.Row="1" x:Name="CashHistoryGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="ABERTURA" Binding="{Binding OpenedAt,StringFormat=dd/MM/yyyy HH:mm}" Width="145"/>
+                                        <DataGridTextColumn Header="FECHAMENTO" Binding="{Binding ClosedAt,StringFormat=dd/MM/yyyy HH:mm}" Width="145"/>
+                                        <DataGridTextColumn Header="INICIAL" Binding="{Binding Opening,StringFormat=C}" Width="115"/>
+                                        <DataGridTextColumn Header="ESPERADO" Binding="{Binding Expected,StringFormat=C}" Width="115"/>
+                                        <DataGridTextColumn Header="INFORMADO" Binding="{Binding Informed,StringFormat=C}" Width="115"/>
+                                        <DataGridTextColumn Header="DIFERENÇA" Binding="{Binding Difference,StringFormat=C}" Width="115"/>
                                     </DataGrid.Columns>
                                 </DataGrid>
                             </Grid>
