@@ -447,12 +447,8 @@ if(-not $editRx.IsMatch($t)){ throw "Handler de edicao do carrinho nao encontrad
 $t=$editRx.Replace($t,$editRep,1)
 
 # RefreshCart passa o indice real da linha para edicao segura
-$oldRefresh=@'
-        _rows.Clear();
-        foreach (var i in _workflow.Cart.Items)
-            _rows.Add(new(i.ProductId, i.Code, i.Name, i.Quantity, i.UnitPrice, i.Subtotal));
-'@
-$newRefresh=@'
+$refreshPattern='(?s)        _rows\.Clear\(\);\s*foreach \(var i in _workflow\.Cart\.Items\)\s*_rows\.Add\(new\(i\.ProductId, i\.Code, i\.Name, i\.Quantity, i\.UnitPrice, i\.Subtotal\)\);'
+$refreshRep=@'
         _rows.Clear();
         for (var index = 0; index < _workflow.Cart.Items.Count; index++)
         {
@@ -460,8 +456,9 @@ $newRefresh=@'
             _rows.Add(new(index, i.ProductId, i.Code, i.Name, i.Quantity, i.UnitPrice, i.Subtotal));
         }
 '@
-if(-not $t.Contains($oldRefresh)){ throw "RefreshCart original nao encontrado" }
-$t=$t.Replace($oldRefresh,$newRefresh)
+$refreshRx=[regex]::new($refreshPattern)
+if(-not $refreshRx.IsMatch($t)){ throw "RefreshCart original nao encontrado" }
+$t=$refreshRx.Replace($t,$refreshRep,1)
 
 $t=$t.Replace('private sealed record CartRow(Guid ProductId, string Code, string Name, decimal Quantity, decimal UnitPrice, decimal Subtotal);',
               'private sealed record CartRow(int LineIndex, Guid ProductId, string Code, string Name, decimal Quantity, decimal UnitPrice, decimal Subtotal);')
