@@ -1,0 +1,373 @@
+<Window x:Class="OncaPDV.Desktop.OperationsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="ONÇA PDV PRO — Caixa, Vendas e Estoque"
+        Width="1320" Height="840" MinWidth="1120" MinHeight="720"
+        WindowStartupLocation="CenterOwner"
+        Background="#F7F9F8"
+        FontFamily="Segoe UI">
+    <Window.Resources>
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="#0B6B3A"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="14,9"/>
+            <Setter Property="Margin" Value="3"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="7" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="SoftButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+            <Setter Property="Background" Value="#EDF2EF"/>
+            <Setter Property="Foreground" Value="#26342E"/>
+        </Style>
+        <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+            <Setter Property="Background" Value="#B3261E"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="BorderBrush" Value="#D8E1DC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="8"/>
+        </Style>
+        <Style TargetType="DatePicker">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="6"/>
+        </Style>
+        <Style TargetType="DataGrid">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="GridLinesVisibility" Value="Horizontal"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="#E7ECE9"/>
+            <Setter Property="RowBackground" Value="White"/>
+            <Setter Property="AlternatingRowBackground" Value="#FBFCFB"/>
+            <Setter Property="HeadersVisibility" Value="Column"/>
+            <Setter Property="CanUserAddRows" Value="False"/>
+            <Setter Property="RowHeight" Value="42"/>
+            <Setter Property="FontSize" Value="14"/>
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="#F2F5F3"/>
+            <Setter Property="Foreground" Value="#33433B"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="9"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="BorderBrush" Value="#E0E7E3"/>
+        </Style>
+        <Style TargetType="TabItem">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="18,10"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid Margin="4,0,4,14">
+            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock Text="GESTÃO DA LOJA" FontSize="28" FontWeight="Bold" Foreground="#173D29"/>
+                <TextBlock Text="Histórico de vendas, estoque, caixa e backup em uma tela organizada." Foreground="#6B7972" Margin="0,3,0,0"/>
+            </StackPanel>
+            <Border Grid.Column="1" Background="#EAF7EE" BorderBrush="#CFE7D6" BorderThickness="1" CornerRadius="9" Padding="13,8" VerticalAlignment="Center">
+                <TextBlock x:Name="HeaderStatus" Text="Sistema pronto" Foreground="#0B6B3A" FontWeight="SemiBold"/>
+            </Border>
+        </Grid>
+
+        <TabControl Grid.Row="1" x:Name="MainTabs" Background="White" BorderBrush="#DDE5E1" BorderThickness="1">
+            <!-- HISTÓRICO -->
+            <TabItem Header="HISTÓRICO DE VENDAS">
+                <Grid Margin="14">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Background="#F8FAF9" BorderBrush="#E2E8E5" BorderThickness="1" CornerRadius="10" Padding="12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Button Style="{StaticResource SoftButton}" Content="HOJE" Click="Today_Click"/>
+                            <Button Grid.Column="1" Style="{StaticResource SoftButton}" Content="ONTEM" Click="Yesterday_Click"/>
+                            <Button Grid.Column="2" Style="{StaticResource SoftButton}" Content="ESTE MÊS" Click="Month_Click"/>
+                            <StackPanel Grid.Column="3" Margin="12,0,4,0"><TextBlock Text="DE" FontSize="11" Foreground="#748179"/><DatePicker x:Name="From" Width="132"/></StackPanel>
+                            <StackPanel Grid.Column="4" Margin="4,0"><TextBlock Text="ATÉ" FontSize="11" Foreground="#748179"/><DatePicker x:Name="To" Width="132"/></StackPanel>
+                            <Button Grid.Column="5" Style="{StaticResource PrimaryButton}" Content="APLICAR" Click="Period_Click" VerticalAlignment="Bottom"/>
+                            <TextBox Grid.Column="6" x:Name="SalesSearch" Margin="12,18,8,3" ToolTip="Venda, cliente, produto, código ou forma de pagamento" KeyDown="SalesSearch_KeyDown"/>
+                            <Button Grid.Column="7" Style="{StaticResource SoftButton}" Content="BUSCAR" Click="SearchSales_Click" VerticalAlignment="Bottom"/>
+                        </Grid>
+                    </Border>
+
+                    <UniformGrid Grid.Row="1" Columns="8" Margin="0,12,0,12">
+                        <Border Background="#F2F8F4" CornerRadius="9" Padding="10" Margin="3"><StackPanel><TextBlock Text="VENDAS" Foreground="#718078"/><TextBlock x:Name="SalesCountText" FontSize="23" FontWeight="Bold" Foreground="#173D29"/></StackPanel></Border>
+                        <Border Background="#F7F8FC" CornerRadius="9" Padding="10" Margin="3"><StackPanel><TextBlock Text="ITENS / QTD." Foreground="#718078"/><TextBlock x:Name="SalesItemsText" FontSize="21" FontWeight="Bold"/></StackPanel></Border>
+                        <Border Background="#F7F8FC" CornerRadius="9" Padding="10" Margin="3"><StackPanel><TextBlock Text="BRUTO" Foreground="#718078"/><TextBlock x:Name="SalesGrossText" FontSize="20" FontWeight="Bold"/></StackPanel></Border>
+                        <Border Background="#FFF4F2" CornerRadius="9" Padding="10" Margin="3"><StackPanel><TextBlock Text="DESCONTOS" Foreground="#9A403A"/><TextBlock x:Name="SalesDiscountText" FontSize="20" FontWeight="Bold" Foreground="#B3261E"/></StackPanel></Border>
+                        <Border Background="#EAF7EE" CornerRadius="9" Padding="10" Margin="3"><StackPanel><TextBlock Text="LÍQUIDO" Foreground="#3C6C4B"/><TextBlock x:Name="SalesNetText" FontSize="21" FontWeight="Bold" Foreground="#0B6B3A"/></StackPanel></Border>
+                        <Border Background="#F7F8FC" CornerRadius="9" Padding="10" Margin="3"><StackPanel><TextBlock Text="DINHEIRO" Foreground="#718078"/><TextBlock x:Name="SalesCashText" FontSize="18" FontWeight="Bold"/></StackPanel></Border>
+                        <Border Background="#F7F8FC" CornerRadius="9" Padding="10" Margin="3"><StackPanel><TextBlock Text="PIX + CARTÕES" Foreground="#718078"/><TextBlock x:Name="SalesDigitalText" FontSize="18" FontWeight="Bold"/></StackPanel></Border>
+                        <Border Background="#FFF8EA" CornerRadius="9" Padding="10" Margin="3"><StackPanel><TextBlock Text="CREDIÁRIO" Foreground="#8B6C23"/><TextBlock x:Name="SalesCreditText" FontSize="18" FontWeight="Bold" Foreground="#8B5E00"/></StackPanel></Border>
+                    </UniformGrid>
+
+                    <Border Grid.Row="2" Background="White" BorderBrush="#E2E8E5" BorderThickness="1" CornerRadius="10" Padding="8">
+                        <DataGrid x:Name="SalesHistoryGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" MouseDoubleClick="SalesHistoryGrid_DoubleClick" FrozenColumnCount="3" HorizontalScrollBarVisibility="Auto">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="VENDA" Binding="{Binding Number,StringFormat=000000}" Width="75"/>
+                                <DataGridTextColumn Header="DATA / HORA" Binding="{Binding CreatedAt,StringFormat=dd/MM/yyyy HH:mm:ss}" Width="145"/>
+                                <DataGridTextColumn Header="CLIENTE" Binding="{Binding Customer}" Width="210"/>
+                                <DataGridTextColumn Header="LINHAS" Binding="{Binding ItemLines}" Width="60"/>
+                                <DataGridTextColumn Header="QTD." Binding="{Binding ItemQuantity,StringFormat=N2}" Width="70"/>
+                                <DataGridTextColumn Header="BRUTO" Binding="{Binding Gross,StringFormat=C}" Width="95"/>
+                                <DataGridTextColumn Header="DESC." Binding="{Binding Discount,StringFormat=C}" Width="85"/>
+                                <DataGridTextColumn Header="TOTAL" Binding="{Binding Total,StringFormat=C}" Width="100"/>
+                                <DataGridTextColumn Header="PAGAMENTOS" Binding="{Binding Payments}" Width="310"/>
+                                <DataGridTextColumn Header="RECEBIDO DIN." Binding="{Binding CashReceived,StringFormat=C}" Width="115"/>
+                                <DataGridTextColumn Header="TROCO" Binding="{Binding Change,StringFormat=C}" Width="95"/>
+                                <DataGridTextColumn Header="OPERADOR" Binding="{Binding Operator}" Width="90"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+
+                    <Grid Grid.Row="3" Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock x:Name="SalesPeriodText" VerticalAlignment="Center" Foreground="#66746D"/>
+                            <TextBlock Text="Dê duplo clique em uma venda para abrir produtos, pagamentos, valor recebido e troco." FontSize="12" Foreground="#87928C" Margin="0,3,0,0"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button Style="{StaticResource SoftButton}" Content="VER DETALHES" Click="SaleDetails_Click"/>
+                            <Button Style="{StaticResource SoftButton}" Content="GERAR PDF" Click="SelectedSalePdf_Click"/>
+                            <Button Style="{StaticResource PrimaryButton}" Content="REIMPRIMIR COMPROVANTE" Click="SelectedSaleReprint_Click"/>
+                            <Button Style="{StaticResource SoftButton}" Content="PDF DO PERÍODO" Click="ReportPdf_Click"/>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- ESTOQUE -->
+            <TabItem Header="ESTOQUE">
+                <Grid Margin="14">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+
+                    <Border Background="#F8FAF9" BorderBrush="#E2E8E5" BorderThickness="1" CornerRadius="10" Padding="12">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="190"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="BUSCAR PRODUTO" FontSize="11" Foreground="#748179"/>
+                                <TextBox x:Name="StockSearch" ToolTip="Nome, código interno, código de barras, categoria ou marca" KeyDown="StockSearch_KeyDown"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                <TextBlock Text="STATUS DO ESTOQUE" FontSize="11" Foreground="#748179"/>
+                                <ComboBox x:Name="StockStatusCombo" SelectionChanged="StockStatus_SelectionChanged">
+                                    <ComboBoxItem Content="Todos" Tag="Todos" IsSelected="True"/>
+                                    <ComboBoxItem Content="Estoque baixo" Tag="Baixo"/>
+                                    <ComboBoxItem Content="Sem estoque" Tag="Sem estoque"/>
+                                    <ComboBoxItem Content="Estoque OK" Tag="Positivo"/>
+                                </ComboBox>
+                            </StackPanel>
+                            <Button Grid.Column="2" Style="{StaticResource PrimaryButton}" Content="ATUALIZAR" Click="StockSearch_Click" VerticalAlignment="Bottom" Margin="12,3,3,3"/>
+                            <Button Grid.Column="3" Style="{StaticResource SoftButton}" Content="EDITAR PRODUTO" Click="EditStockProduct_Click" VerticalAlignment="Bottom"/>
+                        </Grid>
+                    </Border>
+
+                    <UniformGrid Grid.Row="1" Columns="6" Margin="0,12">
+                        <Border Background="#F2F8F4" CornerRadius="9" Padding="11" Margin="3"><StackPanel><TextBlock Text="PRODUTOS" Foreground="#718078"/><TextBlock x:Name="StockProductsText" FontSize="23" FontWeight="Bold"/></StackPanel></Border>
+                        <Border Background="#FFF8EA" CornerRadius="9" Padding="11" Margin="3"><StackPanel><TextBlock Text="ESTOQUE BAIXO" Foreground="#8B6C23"/><TextBlock x:Name="StockLowText" FontSize="23" FontWeight="Bold" Foreground="#9B6500"/></StackPanel></Border>
+                        <Border Background="#FFF4F2" CornerRadius="9" Padding="11" Margin="3"><StackPanel><TextBlock Text="SEM ESTOQUE" Foreground="#9A403A"/><TextBlock x:Name="StockOutText" FontSize="23" FontWeight="Bold" Foreground="#B3261E"/></StackPanel></Border>
+                        <Border Background="#F7F8FC" CornerRadius="9" Padding="11" Margin="3"><StackPanel><TextBlock Text="QTD. TOTAL" Foreground="#718078"/><TextBlock x:Name="StockUnitsText" FontSize="20" FontWeight="Bold"/></StackPanel></Border>
+                        <Border Background="#F7F8FC" CornerRadius="9" Padding="11" Margin="3"><StackPanel><TextBlock Text="CUSTO EM ESTOQUE" Foreground="#718078"/><TextBlock x:Name="StockCostText" FontSize="19" FontWeight="Bold"/></StackPanel></Border>
+                        <Border Background="#EAF7EE" CornerRadius="9" Padding="11" Margin="3"><StackPanel><TextBlock Text="VENDA POTENCIAL" Foreground="#3C6C4B"/><TextBlock x:Name="StockSaleText" FontSize="19" FontWeight="Bold" Foreground="#0B6B3A"/></StackPanel></Border>
+                    </UniformGrid>
+
+                    <Border Grid.Row="2" Background="White" BorderBrush="#E2E8E5" BorderThickness="1" CornerRadius="10" Padding="8">
+                        <DataGrid x:Name="StockGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" MouseDoubleClick="StockGrid_DoubleClick" FrozenColumnCount="3" HorizontalScrollBarVisibility="Auto">
+                            <DataGrid.RowStyle>
+                                <Style TargetType="DataGridRow">
+                                    <Setter Property="ToolTip" Value="Duplo clique para editar o produto"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Status}" Value="SEM ESTOQUE">
+                                            <Setter Property="Background" Value="#FFF0EE"/>
+                                            <Setter Property="Foreground" Value="#9F231B"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Status}" Value="ESTOQUE BAIXO">
+                                            <Setter Property="Background" Value="#FFF8E8"/>
+                                            <Setter Property="Foreground" Value="#7A5A0C"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGrid.RowStyle>
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="CÓDIGO" Binding="{Binding Code}" Width="105"/>
+                                <DataGridTextColumn Header="CÓD. BARRAS" Binding="{Binding Barcode}" Width="130"/>
+                                <DataGridTextColumn Header="PRODUTO" Binding="{Binding Product}" Width="250"/>
+                                <DataGridTextColumn Header="MARCA" Binding="{Binding Brand}" Width="120"/>
+                                <DataGridTextColumn Header="CATEGORIA" Binding="{Binding Category}" Width="130"/>
+                                <DataGridTextColumn Header="UN." Binding="{Binding Unit}" Width="50"/>
+                                <DataGridTextColumn Header="ESTOQUE" Binding="{Binding Stock,StringFormat=N2}" Width="82"/>
+                                <DataGridTextColumn Header="MÍNIMO" Binding="{Binding Minimum,StringFormat=N2}" Width="75"/>
+                                <DataGridTextColumn Header="CUSTO" Binding="{Binding Cost,StringFormat=C}" Width="90"/>
+                                <DataGridTextColumn Header="VENDA" Binding="{Binding Price,StringFormat=C}" Width="90"/>
+                                <DataGridTextColumn Header="MARGEM %" Binding="{Binding MarginPercent,StringFormat=N1}" Width="85"/>
+                                <DataGridTextColumn Header="TOTAL CUSTO" Binding="{Binding EstimatedCost,StringFormat=C}" Width="110"/>
+                                <DataGridTextColumn Header="TOTAL VENDA" Binding="{Binding EstimatedSale,StringFormat=C}" Width="110"/>
+                                <DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="115"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+                    <TextBlock Grid.Row="3" Text="Duplo clique para editar cadastro, preço, custo, categoria e marca. O estoque é preservado no cadastro e movimentado pelas operações do sistema." Foreground="#69766F" FontSize="12" Margin="3,8,0,0"/>
+                </Grid>
+            </TabItem>
+
+            <!-- CAIXA -->
+            <TabItem Header="CAIXA">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="14">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="CAIXA DO DIA" FontSize="24" FontWeight="Bold" Foreground="#173D29"/>
+                                <TextBlock x:Name="CashOpenedText" Foreground="#6C7972" Margin="0,3,0,0"/>
+                                <TextBlock Text="O saldo real informado no último fechamento vira automaticamente o saldo inicial do próximo caixa." Foreground="#0B6B3A" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Style="{StaticResource SoftButton}" Content="ATUALIZAR" Click="RefreshCash_Click"/>
+                        </Grid>
+
+                        <UniformGrid Columns="6" Margin="0,12">
+                            <Border Background="#EEF6FF" CornerRadius="10" Padding="12" Margin="3"><StackPanel><TextBlock Text="SALDO INICIAL" Foreground="#466984"/><TextBlock x:Name="CashOpeningText" FontSize="22" FontWeight="Bold" Foreground="#245B9C"/><TextBlock Text="último fechamento" FontSize="11" Foreground="#7890A3"/></StackPanel></Border>
+                            <Border Background="#EAF7EE" CornerRadius="10" Padding="12" Margin="3"><StackPanel><TextBlock Text="VENDAS EM DINHEIRO" Foreground="#3C6C4B"/><TextBlock x:Name="CashSalesText" FontSize="22" FontWeight="Bold" Foreground="#0B6B3A"/></StackPanel></Border>
+                            <Border Background="#F7F8FC" CornerRadius="10" Padding="12" Margin="3"><StackPanel><TextBlock Text="RECEB. CREDIÁRIO" Foreground="#718078"/><TextBlock x:Name="CashCreditReceiptsText" FontSize="20" FontWeight="Bold"/></StackPanel></Border>
+                            <Border Background="#F7F8FC" CornerRadius="10" Padding="12" Margin="3"><StackPanel><TextBlock Text="SUPRIMENTOS" Foreground="#718078"/><TextBlock x:Name="CashSuppliesText" FontSize="20" FontWeight="Bold"/></StackPanel></Border>
+                            <Border Background="#FFF4F2" CornerRadius="10" Padding="12" Margin="3"><StackPanel><TextBlock Text="SANGRIAS" Foreground="#9A403A"/><TextBlock x:Name="CashWithdrawalsText" FontSize="20" FontWeight="Bold" Foreground="#B3261E"/></StackPanel></Border>
+                            <Border Background="#DFF5E6" BorderBrush="#A9DABB" BorderThickness="2" CornerRadius="10" Padding="12" Margin="3"><StackPanel><TextBlock Text="SALDO ESPERADO AGORA" Foreground="#155C31" FontWeight="SemiBold"/><TextBlock x:Name="CashExpectedText" FontSize="25" FontWeight="Bold" Foreground="#06752F"/></StackPanel></Border>
+                        </UniformGrid>
+
+                        <UniformGrid Columns="5" Margin="0,0,0,12">
+                            <Border Background="White" BorderBrush="#E2E8E5" BorderThickness="1" CornerRadius="8" Padding="10" Margin="3"><StackPanel><TextBlock Text="VENDAS TOTAIS" Foreground="#718078"/><TextBlock x:Name="CashTotalSalesText" FontWeight="Bold" FontSize="18"/></StackPanel></Border>
+                            <Border Background="White" BorderBrush="#E2E8E5" BorderThickness="1" CornerRadius="8" Padding="10" Margin="3"><StackPanel><TextBlock Text="PIX" Foreground="#718078"/><TextBlock x:Name="CashPixText" FontWeight="Bold" FontSize="18"/></StackPanel></Border>
+                            <Border Background="White" BorderBrush="#E2E8E5" BorderThickness="1" CornerRadius="8" Padding="10" Margin="3"><StackPanel><TextBlock Text="DÉBITO" Foreground="#718078"/><TextBlock x:Name="CashDebitText" FontWeight="Bold" FontSize="18"/></StackPanel></Border>
+                            <Border Background="White" BorderBrush="#E2E8E5" BorderThickness="1" CornerRadius="8" Padding="10" Margin="3"><StackPanel><TextBlock Text="CRÉDITO" Foreground="#718078"/><TextBlock x:Name="CashCreditCardText" FontWeight="Bold" FontSize="18"/></StackPanel></Border>
+                            <Border Background="#FFF8EA" BorderBrush="#F2E3B8" BorderThickness="1" CornerRadius="8" Padding="10" Margin="3"><StackPanel><TextBlock Text="CREDIÁRIO GERADO" Foreground="#8B6C23"/><TextBlock x:Name="CashStoreCreditText" FontWeight="Bold" FontSize="18" Foreground="#8B5E00"/></StackPanel></Border>
+                        </UniformGrid>
+
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="1.15*"/><ColumnDefinition Width="0.85*"/></Grid.ColumnDefinitions>
+
+                            <Border Background="White" BorderBrush="#E2E8E5" BorderThickness="1" CornerRadius="10" Padding="16" Margin="3,0,8,0">
+                                <StackPanel>
+                                    <TextBlock Text="MOVIMENTAR DINHEIRO DO CAIXA" FontSize="18" FontWeight="Bold" Foreground="#173D29"/>
+                                    <TextBlock Text="Use somente para entrada manual (suprimento) ou retirada (sangria)." Foreground="#6B7972" Margin="0,3,0,12"/>
+                                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                        <StackPanel Margin="0,0,9,0"><TextBlock Text="VALOR" FontWeight="SemiBold"/><TextBox x:Name="MovementValue" FontSize="22" FontWeight="SemiBold"/></StackPanel>
+                                        <StackPanel Grid.Column="1"><TextBlock Text="MOTIVO / OBSERVAÇÃO" FontWeight="SemiBold"/><TextBox x:Name="MovementReason"/></StackPanel>
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                        <Button Style="{StaticResource PrimaryButton}" Content="+ SUPRIMENTO" Click="Supply_Click"/>
+                                        <Button Style="{StaticResource DangerButton}" Content="− SANGRIA" Click="Withdrawal_Click"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="1" Background="#F2F8F4" BorderBrush="#BFDCC8" BorderThickness="2" CornerRadius="12" Padding="16" Margin="8,0,3,0">
+                                <StackPanel>
+                                    <TextBlock Text="FECHAMENTO SIMPLES" FontSize="20" FontWeight="Bold" Foreground="#173D29"/>
+                                    <TextBlock Text="Confira o resumo, conte o dinheiro da gaveta e feche." Foreground="#6B7972" Margin="0,3,0,12"/>
+
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                        <StackPanel><TextBlock Text="SALDO INICIAL" Foreground="#718078"/><TextBlock x:Name="CloseOpeningText" FontSize="18" FontWeight="Bold"/></StackPanel>
+                                        <StackPanel Grid.Column="1"><TextBlock Text="VENDAS DINHEIRO" Foreground="#718078"/><TextBlock x:Name="CloseCashSalesText" FontSize="18" FontWeight="Bold"/></StackPanel>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                        <StackPanel><TextBlock Text="RECEB. CREDIÁRIO + SUPR." Foreground="#718078"/><TextBlock x:Name="CloseEntriesText" FontSize="18" FontWeight="Bold"/></StackPanel>
+                                        <StackPanel Grid.Column="1"><TextBlock Text="SANGRIAS" Foreground="#9A403A"/><TextBlock x:Name="CloseWithdrawalsText" FontSize="18" FontWeight="Bold" Foreground="#B3261E"/></StackPanel>
+                                    </Grid>
+
+                                    <Border Background="#DFF5E6" CornerRadius="9" Padding="12" Margin="0,2,0,10">
+                                        <StackPanel><TextBlock Text="VALOR ESPERADO NA GAVETA" Foreground="#155C31" FontWeight="SemiBold"/><TextBlock x:Name="CloseExpectedText" FontSize="32" FontWeight="Bold" Foreground="#06752F" HorizontalAlignment="Right"/></StackPanel>
+                                    </Border>
+
+                                    <TextBlock Text="DINHEIRO CONTADO / INFORMADO" FontWeight="SemiBold"/>
+                                    <TextBox x:Name="Informed" FontSize="30" FontWeight="Bold" TextChanged="Informed_TextChanged" HorizontalContentAlignment="Right"/>
+                                    <Button Style="{StaticResource SoftButton}" Content="USAR VALOR ESPERADO" Click="UseExpected_Click" Margin="3,6,3,3"/>
+
+                                    <Grid Margin="0,8,0,10"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="DIFERENÇA" FontWeight="SemiBold" Foreground="#718078" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" x:Name="CloseDifferenceText" FontSize="26" FontWeight="Bold" HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <Button Style="{StaticResource DangerButton}" Content="FECHAR CAIXA  •  VALOR JÁ CONFERIDO" Click="Close_Click" Padding="18,13"/>
+                                    <TextBlock Text="O valor informado no fechamento será o saldo inicial automático do próximo caixa." TextWrapping="Wrap" Foreground="#0B6B3A" FontSize="12" FontWeight="SemiBold" Margin="0,7,0,0"/>
+                                    <TextBlock x:Name="ClosingText" TextWrapping="Wrap" Foreground="#5E6D65" Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Border Background="White" BorderBrush="#E2E8E5" BorderThickness="1" CornerRadius="10" Padding="8">
+                            <Grid>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="230"/></Grid.RowDefinitions>
+                                <TextBlock Text="MOVIMENTOS DO CAIXA" FontWeight="Bold" Foreground="#173D29" Margin="6,4,0,8"/>
+                                <DataGrid Grid.Row="1" x:Name="CashMovementsGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="DATA / HORA" Binding="{Binding CreatedAt,StringFormat=dd/MM/yyyy HH:mm:ss}" Width="150"/>
+                                        <DataGridTextColumn Header="TIPO" Binding="{Binding Type}" Width="135"/>
+                                        <DataGridTextColumn Header="MOTIVO" Binding="{Binding Reason}" Width="*"/>
+                                        <DataGridTextColumn Header="VALOR" Binding="{Binding Amount,StringFormat=C}" Width="125"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- BACKUP -->
+            <TabItem Header="BACKUP / RESTAURAÇÃO">
+                <Grid Margin="18">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Border Background="#F2F8F4" BorderBrush="#D2E8D9" BorderThickness="1" CornerRadius="10" Padding="15">
+                        <StackPanel>
+                            <TextBlock Text="PROTEÇÃO DOS DADOS" FontSize="20" FontWeight="Bold" Foreground="#173D29"/>
+                            <TextBlock Text="Faça backup antes de mudanças importantes. A restauração valida checksum e integridade antes de substituir o banco." TextWrapping="Wrap" Foreground="#607068" Margin="0,4,0,10"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource PrimaryButton}" Content="CRIAR BACKUP AGORA" Click="Backup_Click"/>
+                                <Button Style="{StaticResource SoftButton}" Content="IMPORTAR BACKUP DO PDV ANTIGO" Click="LegacyImport_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Row="1" Background="White" BorderBrush="#E2E8E5" BorderThickness="1" CornerRadius="10" Padding="12" Margin="0,12">
+                        <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+                            <TextBlock Text="BACKUPS DISPONÍVEIS" FontWeight="Bold" Foreground="#173D29" Margin="0,0,0,8"/>
+                            <ListBox Grid.Row="1" x:Name="Backups" FontSize="14"/>
+                        </Grid>
+                    </Border>
+                    <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBlock x:Name="BackupStatus" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="#5F6E66"/>
+                        <Button Grid.Column="1" Style="{StaticResource DangerButton}" Content="VALIDAR E RESTAURAR SELECIONADO" Click="Restore_Click"/>
+                    </Grid>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>

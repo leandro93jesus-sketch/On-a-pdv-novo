@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OncaPDV.Application/OncaPDV.Application.csproj" />
+    <Project Path="src/OncaPDV.Desktop/OncaPDV.Desktop.csproj" />
+    <Project Path="src/OncaPDV.Domain/OncaPDV.Domain.csproj" />
+    <Project Path="src/OncaPDV.Fiscal/OncaPDV.Fiscal.csproj" />
+    <Project Path="src/OncaPDV.Infrastructure/OncaPDV.Infrastructure.csproj" />
+    <Project Path="src/OncaPDV.Migration/OncaPDV.Migration.csproj" />
+    <Project Path="src/OncaPDV.PostgreSql/OncaPDV.PostgreSql.csproj" />
+    <Project Path="src/OncaPDV.Printing/OncaPDV.Printing.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OncaPDV.Tests/OncaPDV.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/OncaPDV.GateCheck/OncaPDV.GateCheck.csproj" />
+    <Project Path="tools/OncaPDV.PrintCheck/OncaPDV.PrintCheck.csproj" />
+  </Folder>
+</Solution>
