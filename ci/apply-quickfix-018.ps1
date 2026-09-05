@@ -187,33 +187,8 @@ $rx=[regex]::new($pattern)
 if(-not $rx.IsMatch($t)){ throw "AddProduct nao encontrado" }
 $t=$rx.Replace($t,$rep,1)
 
-$a=@'
-            var sale = await _workflow.CompleteAsync(dialog.Payments, OperatorId);
-            var printed = await _printer.PrintAsync(new(sale));
-            await RefreshSales();
-            RefreshCart();
-
-            var cash = sale.Payments.Where(x => x.Method == PaymentMethod.Cash).ToArray();
-            var received = cash.Sum(x => x.Received ?? x.Amount);
-            var change = cash.Sum(x => x.Change);
-            var cashSummary = cash.Length == 0 ? string.Empty : $"
-Recebido em dinheiro: {received:C}
-Troco: {change:C}";
-
-            MessageBox.Show(
-                $"VENDA CONCLUÍDA
-
-Venda Nº {sale.Number:000000}
-Total: {sale.Total:C}
-Pagamento: {string.Join(" + ", sale.Payments.Select(x => x.Method))}{cashSummary}
-Cupom: {(printed.Success ? "OK" : "FALHOU")}",
-                "ONÇA PDV",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-
-            SetStatus("CAIXA LIVRE — PRÓXIMA VENDA");
-'@
-$b=@'
+$payPattern='(?s)            var sale = await _workflow\.CompleteAsync\(dialog\.Payments, OperatorId\);.*?            SetStatus\("CAIXA LIVRE — PRÓXIMA VENDA"\);'
+$payRep=@'
             var sale = await _workflow.CompleteAsync(dialog.Payments, OperatorId);
             await RefreshSales();
             RefreshCart();
@@ -221,18 +196,10 @@ $b=@'
             var cash = sale.Payments.Where(x => x.Method == PaymentMethod.Cash).ToArray();
             var received = cash.Sum(x => x.Received ?? x.Amount);
             var change = cash.Sum(x => x.Change);
-            var cashSummary = cash.Length == 0 ? string.Empty : $"
-Recebido em dinheiro: {received:C}
-Troco: {change:C}";
+            var cashSummary = cash.Length == 0 ? string.Empty : $"\nRecebido em dinheiro: {received:C}\nTroco: {change:C}";
 
             var printNow = MessageBox.Show(
-                $"VENDA CONCLUÍDA
-
-Venda Nº {sale.Number:000000}
-Total: {sale.Total:C}
-Pagamento: {string.Join(" + ", sale.Payments.Select(x => x.Method))}{cashSummary}
-
-Deseja imprimir a nota?",
+                $"VENDA CONCLUÍDA\n\nVenda Nº {sale.Number:000000}\nTotal: {sale.Total:C}\nPagamento: {string.Join(" + ", sale.Payments.Select(x => x.Method))}{cashSummary}\n\nDeseja imprimir a nota?",
                 "ONÇA PDV",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question) == MessageBoxResult.Yes;
@@ -246,8 +213,9 @@ Deseja imprimir a nota?",
 
             SetStatus("CAIXA LIVRE — PRÓXIMA VENDA");
 '@
-if(-not $t.Contains($a)){ throw "Pagamento nao encontrado" }
-$t=$t.Replace($a,$b)
+$payRx=[regex]::new($payPattern)
+if(-not $payRx.IsMatch($t)){ throw "Pagamento nao encontrado" }
+$t=$payRx.Replace($t,$payRep,1)
 
 $a='    private async void Add_Click(object sender, RoutedEventArgs e) => await AddProduct();'
 $b=@'
