@@ -36,6 +36,52 @@ $b=@'
 '@
 Replace-Req $contracts $a $b
 
+# Carrinho: cada DIVERSOS com nome diferente permanece separado e qualquer linha pode ser editada
+$models=Join-Path $root "src\OncaPDV.Domain\Models.cs"
+$t=Get-Text $models
+$oldMerge='        var existing = _items.FindIndex(x => x.ProductId == product.Id && x.UnitPrice == product.CurrentPrice(DateTimeOffset.Now));'
+$newMerge='        var existing = _items.FindIndex(x => x.ProductId == product.Id && x.UnitPrice == product.CurrentPrice(DateTimeOffset.Now) && x.Name.Equals(product.Name, StringComparison.OrdinalIgnoreCase));'
+if(-not $t.Contains($oldMerge)){ throw "Regra de agrupamento do carrinho nao encontrada" }
+$t=$t.Replace($oldMerge,$newMerge)
+
+$changeQtyNeedle='    public void ChangeQuantity(Guid productId, decimal quantity)'
+$editMethod=@'
+    public void EditItem(int lineIndex, string name, decimal quantity, decimal unitPrice)
+    {
+        if (lineIndex < 0 || lineIndex >= _items.Count) throw new DomainException("Item não encontrado.");
+        if (string.IsNullOrWhiteSpace(name)) throw new DomainException("Informe o nome do produto.");
+        if (quantity <= 0) throw new DomainException("Quantidade deve ser positiva.");
+        if (unitPrice <= 0) throw new DomainException("Valor unitário deve ser maior que zero.");
+
+        var current = _items[lineIndex];
+        _items[lineIndex] = current with
+        {
+            Name = name.Trim(),
+            Quantity = quantity,
+            UnitPrice = decimal.Round(unitPrice, 2, MidpointRounding.AwayFromZero)
+        };
+    }
+
+'@
+if(-not $t.Contains($changeQtyNeedle)){ throw "ChangeQuantity nao encontrado" }
+$t=$t.Replace($changeQtyNeedle,$editMethod+$changeQtyNeedle)
+Set-Text $models $t
+
+# Workflow persiste a edicao da linha do carrinho
+$t=Get-Text $contracts
+$scanNeedle='    public async Task<ScanResult> ScanAsync(string query, CancellationToken ct = default)'
+$editWorkflow=@'
+    public async Task EditCartItemAsync(int lineIndex, string name, decimal quantity, decimal unitPrice, CancellationToken ct = default)
+    {
+        Cart.EditItem(lineIndex, name, quantity, unitPrice);
+        await recovery.SaveAsync(Cart, ct);
+    }
+
+'@
+if(-not $t.Contains($scanNeedle)){ throw "ScanAsync nao encontrado apos patch" }
+$t=$t.Replace($scanNeedle,$editWorkflow+$scanNeedle)
+Set-Text $contracts $t
+
 $xaml=Join-Path $root "src\OncaPDV.Desktop\MainWindow.xaml"
 $a='                <Border Background="#0B6B3A" CornerRadius="12" Padding="20" Margin="0,0,0,12">'
 $b=@'
@@ -95,11 +141,32 @@ $oldFooter='                    <Grid Grid.Row="2" Margin="13,2">'
 $newFooter='                    <Grid Grid.Row="3" Margin="13,2">'
 if(-not $t.Contains($oldFooter)){ throw "Rodape do carrinho nao encontrado" }
 $t=$t.Replace($oldFooter,$newFooter)
+# Consulta de preco sem adicionar ao carrinho
+$searchCols='<Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>'
+$searchColsNew='<Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>'
+if(-not $t.Contains($searchCols)){ throw "Colunas da busca nao encontradas" }
+$t=$t.Replace($searchCols,$searchColsNew)
+
+$productButton='<Button Grid.Column="3" Style="{StaticResource SoftButton}" Content="+ CADASTRAR PRODUTO  [F1]" Click="Product_Click" Margin="4,0,0,0"/>'
+$productButtonsNew=@'
+                    <Button Grid.Column="3" Style="{StaticResource SoftButton}" Content="CONSULTAR PREÇO  [F4]" Click="PriceLookup_Click" Margin="4,0,4,0"/>
+                    <Button Grid.Column="4" Style="{StaticResource SoftButton}" Content="+ CADASTRAR PRODUTO  [F1]" Click="Product_Click" Margin="4,0,0,0"/>
+'@
+if(-not $t.Contains($productButton)){ throw "Botao cadastrar produto nao encontrado" }
+$t=$t.Replace($productButton,$productButtonsNew)
+
+$cartOpen='<DataGrid Grid.Row="2" x:Name="CartGrid" AutoGenerateColumns="False" CellEditEnding="CartGrid_CellEditEnding" Margin="10,0">'
+$cartOpenNew='<DataGrid Grid.Row="2" x:Name="CartGrid" AutoGenerateColumns="False" CellEditEnding="CartGrid_CellEditEnding" PreviewMouseLeftButtonDown="CartGrid_PreviewMouseLeftButtonDown" SelectionUnit="Cell" Margin="10,0">'
+if(-not $t.Contains($cartOpen)){ throw "Abertura CartGrid nao encontrada" }
+$t=$t.Replace($cartOpen,$cartOpenNew)
+
+$t=$t.Replace('<DataGridTextColumn Header="PRODUTO" Binding="{Binding Name}" IsReadOnly="True" Width="*"/>','<DataGridTextColumn Header="PRODUTO" Binding="{Binding Name}" Width="*"/>')
+$t=$t.Replace('<DataGridTextColumn Header="UNITÁRIO (R$)" Binding="{Binding UnitPrice,StringFormat=N2}" IsReadOnly="True" Width="125"/>','<DataGridTextColumn Header="UNITÁRIO (R$)" Binding="{Binding UnitPrice,StringFormat=N2}" Width="125"/>')
 Set-Text $xaml $t
 
 $main=Join-Path $root "src\OncaPDV.Desktop\MainWindow.xaml.cs"
 $t=Get-Text $main
-$t=$t.Replace("using System.Collections.ObjectModel;","using System.Collections.ObjectModel;"+[Environment]::NewLine+"using System.Globalization;"+[Environment]::NewLine+"using Microsoft.VisualBasic;")
+$t=$t.Replace("using System.Collections.ObjectModel;","using System.Collections.ObjectModel;"+[Environment]::NewLine+"using System.Globalization;"+[Environment]::NewLine+"using Microsoft.VisualBasic;"+[Environment]::NewLine+"using System.Windows.Media;")
 
 $pattern='(?s)    private async Task AddProduct\(\)\s*\{.*?\r?\n    \}\r?\n\r?\n    private async Task OpenProduct'
 $rep=@'
@@ -158,7 +225,7 @@ $rep=@'
         SearchBox.Focus();
     }
 
-    private Product? SelectProduct(IReadOnlyList<Product> products)
+    private Product? SelectProduct(IReadOnlyList<Product> products, string actionText = "ADICIONAR SELECIONADO", string heading = "PRODUTOS COM NOME PARECIDO - SELECIONE O CORRETO")
     {
         Product? selected = null;
         var w = new Window
@@ -177,7 +244,7 @@ $rep=@'
 
         var title = new TextBlock
         {
-            Text = "PRODUTOS COM NOME PARECIDO - SELECIONE O CORRETO",
+            Text = heading,
             FontSize = 20,
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0,0,0,10)
@@ -196,7 +263,7 @@ $rep=@'
 
         var buttons = new StackPanel { Orientation=Orientation.Horizontal, HorizontalAlignment=HorizontalAlignment.Right, Margin=new Thickness(0,10,0,0) };
         var cancel = new Button { Content="CANCELAR", Padding=new Thickness(18,8,18,8), Margin=new Thickness(4) };
-        var choose = new Button { Content="ADICIONAR SELECIONADO", Padding=new Thickness(18,8,18,8), Margin=new Thickness(4), FontWeight=FontWeights.Bold };
+        var choose = new Button { Content=actionText, Padding=new Thickness(18,8,18,8), Margin=new Thickness(4), FontWeight=FontWeights.Bold };
         cancel.Click += (_,_) => w.DialogResult=false;
         choose.Click += (_,_) => { if(grid.SelectedItem is Product p){ selected=p; w.DialogResult=true; } };
         grid.MouseDoubleClick += (_,_) => { if(grid.SelectedItem is Product p){ selected=p; w.DialogResult=true; } };
@@ -207,6 +274,52 @@ $rep=@'
         w.Content=layout;
         w.ShowDialog();
         return selected;
+    }
+
+    private async Task LookupPriceAsync()
+    {
+        var query = SearchBox.Text.Trim();
+        if (query.Length == 0)
+        {
+            SetStatus("DIGITE CÓDIGO OU NOME PARA CONSULTAR");
+            SearchBox.Focus();
+            return;
+        }
+
+        var matches = (await _workflow.SearchAsync(query)).Where(x => x.Active).ToList();
+        if (matches.Count == 0)
+        {
+            MessageBox.Show("Produto não encontrado.", "CONSULTA DE PREÇO", MessageBoxButton.OK, MessageBoxImage.Information);
+            SearchBox.SelectAll();
+            return;
+        }
+
+        Product? product;
+        var exact = matches.FirstOrDefault(x =>
+            x.InternalCode.Equals(query, StringComparison.OrdinalIgnoreCase) ||
+            (!string.IsNullOrWhiteSpace(x.Barcode) && x.Barcode.Equals(query, StringComparison.OrdinalIgnoreCase)) ||
+            x.Name.Equals(query, StringComparison.OrdinalIgnoreCase));
+
+        if (exact is not null) product = exact;
+        else if (matches.Count == 1) product = matches[0];
+        else product = SelectProduct(matches, "CONSULTAR PREÇO", "SELECIONE O PRODUTO PARA CONSULTAR");
+
+        if (product is null)
+        {
+            SearchBox.Focus();
+            return;
+        }
+
+        var currentPrice = product.CurrentPrice(DateTimeOffset.Now);
+        MessageBox.Show(
+            $"PRODUTO: {product.Name}\n\nCódigo: {product.InternalCode}\nCódigo de barras: {product.Barcode ?? "-"}\nPreço: {currentPrice:C}\nEstoque: {product.Stock:N2} {product.Unit}",
+            "CONSULTA DE PREÇO — NÃO ADICIONADO AO CARRINHO",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+
+        SetStatus($"CONSULTA: {product.Name} - {currentPrice:C}");
+        SearchBox.SelectAll();
+        SearchBox.Focus();
     }
 
     private async Task AddMiscAsync()
@@ -268,9 +381,95 @@ $payRx=[regex]::new($payPattern)
 if(-not $payRx.IsMatch($t)){ throw "Pagamento nao encontrado" }
 $t=$payRx.Replace($t,$payRep,1)
 
+# Edicao direta no carrinho: nome, quantidade e valor unitario
+$editPattern='(?s)    private async void CartGrid_CellEditEnding\(object sender, DataGridCellEditEndingEventArgs e\)\s*\{.*?\r?\n    \}\r?\n\r?\n    private async Task RefreshSales'
+$editRep=@'
+    private async void CartGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+    {
+        if (e.Row.Item is not CartRow row || e.EditingElement is not TextBox box) return;
+
+        try
+        {
+            var name = row.Name;
+            var quantity = row.Quantity;
+            var unitPrice = row.UnitPrice;
+
+            if (e.Column.DisplayIndex == 1)
+            {
+                name = box.Text.Trim();
+                if (string.IsNullOrWhiteSpace(name)) throw new DomainException("Informe o nome do produto.");
+            }
+            else if (e.Column.DisplayIndex == 2)
+            {
+                var raw = box.Text.Trim();
+                if (!(decimal.TryParse(raw, NumberStyles.Number, CultureInfo.GetCultureInfo("pt-BR"), out quantity) ||
+                      decimal.TryParse(raw.Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out quantity)) ||
+                    quantity <= 0)
+                    throw new DomainException("Quantidade inválida.");
+            }
+            else if (e.Column.DisplayIndex == 3)
+            {
+                var raw = box.Text.Trim();
+                if (!(decimal.TryParse(raw, NumberStyles.Currency, CultureInfo.GetCultureInfo("pt-BR"), out unitPrice) ||
+                      decimal.TryParse(raw.Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out unitPrice)) ||
+                    unitPrice <= 0)
+                    throw new DomainException("Valor unitário inválido.");
+            }
+            else return;
+
+            await _workflow.EditCartItemAsync(row.LineIndex, name, quantity, unitPrice);
+            SetStatus("ITEM DO CARRINHO ATUALIZADO");
+            _ = Dispatcher.BeginInvoke(RefreshCart);
+        }
+        catch (DomainException ex)
+        {
+            MessageBox.Show(ex.Message, "Editar item", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _ = Dispatcher.BeginInvoke(RefreshCart);
+        }
+    }
+
+    private void CartGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var element = e.OriginalSource as DependencyObject;
+        while (element is not null && element is not DataGridCell)
+            element = VisualTreeHelper.GetParent(element);
+
+        if (element is not DataGridCell cell || cell.Column.IsReadOnly) return;
+        cell.Focus();
+        CartGrid.CurrentCell = new DataGridCellInfo(cell);
+        CartGrid.BeginEdit();
+    }
+
+    private async Task RefreshSales
+'@
+$editRx=[regex]::new($editPattern)
+if(-not $editRx.IsMatch($t)){ throw "Handler de edicao do carrinho nao encontrado" }
+$t=$editRx.Replace($t,$editRep,1)
+
+# RefreshCart passa o indice real da linha para edicao segura
+$oldRefresh=@'
+        _rows.Clear();
+        foreach (var i in _workflow.Cart.Items)
+            _rows.Add(new(i.ProductId, i.Code, i.Name, i.Quantity, i.UnitPrice, i.Subtotal));
+'@
+$newRefresh=@'
+        _rows.Clear();
+        for (var index = 0; index < _workflow.Cart.Items.Count; index++)
+        {
+            var i = _workflow.Cart.Items[index];
+            _rows.Add(new(index, i.ProductId, i.Code, i.Name, i.Quantity, i.UnitPrice, i.Subtotal));
+        }
+'@
+if(-not $t.Contains($oldRefresh)){ throw "RefreshCart original nao encontrado" }
+$t=$t.Replace($oldRefresh,$newRefresh)
+
+$t=$t.Replace('private sealed record CartRow(Guid ProductId, string Code, string Name, decimal Quantity, decimal UnitPrice, decimal Subtotal);',
+              'private sealed record CartRow(int LineIndex, Guid ProductId, string Code, string Name, decimal Quantity, decimal UnitPrice, decimal Subtotal);')
+
 $a='    private async void Add_Click(object sender, RoutedEventArgs e) => await AddProduct();'
 $b=@'
     private async void Add_Click(object sender, RoutedEventArgs e) => await AddProduct();
+    private async void PriceLookup_Click(object sender, RoutedEventArgs e) => await LookupPriceAsync();
     private async void Misc_Click(object sender, RoutedEventArgs e) => await AddMiscAsync();
     private async void MiscCart_Click(object sender, RoutedEventArgs e)
     {
@@ -309,7 +508,7 @@ $t=$t.Replace($a,$b)
 
 $keyNeedle='        else if (e.Key == Key.F2) Pay_Click(sender, e);'
 if(-not $t.Contains($keyNeedle)){ throw "Atalho F2 nao encontrado" }
-$t=$t.Replace($keyNeedle,$keyNeedle+[Environment]::NewLine+'        else if (e.Key == Key.F3) Misc_Click(sender, e);')
+$t=$t.Replace($keyNeedle,$keyNeedle+[Environment]::NewLine+'        else if (e.Key == Key.F3) Misc_Click(sender, e);'+[Environment]::NewLine+'        else if (e.Key == Key.F4) PriceLookup_Click(sender, e);')
 Set-Text $main $t
 
 $db=Join-Path $root "src\OncaPDV.Infrastructure\Database.cs"
@@ -325,7 +524,7 @@ $t=$t.Replace('if(left is null)throw new DomainException($"Estoque insuficiente 
 Set-Text $pg $t
 
 $proj=Join-Path $root "src\OncaPDV.Desktop\OncaPDV.Desktop.csproj"
-$t=(Get-Text $proj).Replace("<Version>0.1.3</Version>","<Version>0.1.10</Version>")
+$t=(Get-Text $proj).Replace("<Version>0.1.3</Version>","<Version>0.1.11</Version>")
 Set-Text $proj $t
 
-Write-Host "ONCA PDV 0.1.10 QUICKFIX APLICADO - NOME + VALOR NO DIVERSOS / IMPRESSAO SOMENTE AUTORIZADA"
+Write-Host "ONCA PDV 0.1.11 QUICKFIX APLICADO - CONSULTA PRECO F4 + EDICAO DIRETA CARRINHO"
