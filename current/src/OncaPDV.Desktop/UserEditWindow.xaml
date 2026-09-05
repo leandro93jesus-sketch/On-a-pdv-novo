@@ -1,0 +1,21 @@
+<Window x:Class="OncaPDV.Desktop.UserEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Usuário" Width="500" Height="500" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="#F7F9F8">
+    <Grid Margin="22">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <TextBlock Text="USUÁRIO E PERMISSÕES" FontSize="23" FontWeight="Bold" Foreground="#173D29"/>
+        <StackPanel Grid.Row="1" Margin="0,16,0,0">
+            <TextBlock Text="Nome para exibição"/><TextBox x:Name="DisplayNameBox" FontSize="16" Padding="8" Margin="0,4,0,10"/>
+            <TextBlock Text="Usuário de acesso"/><TextBox x:Name="UsernameBox" FontSize="16" Padding="8" Margin="0,4,0,10"/>
+            <TextBlock Text="Perfil"/><ComboBox x:Name="RoleBox" FontSize="16" Padding="7" Margin="0,4,0,10"/>
+            <TextBlock Text="Novo PIN (deixe em branco para manter)"/><PasswordBox x:Name="PinBox" FontSize="18" Padding="8" Margin="0,4,0,10"/>
+            <CheckBox x:Name="ActiveBox" Content="Usuário ativo" IsChecked="True" Margin="0,6"/>
+            <TextBlock Text="Administrador: acesso total. Caixa: vendas/clientes/crediário/caixa. Estoque: produtos/estoque/compras." TextWrapping="Wrap" Foreground="#64736B" Margin="0,8,0,0"/>
+            <TextBlock x:Name="StatusText" Foreground="#A3392F" Margin="0,8,0,0"/>
+        </StackPanel>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="CANCELAR" IsCancel="True" Padding="14,9" Margin="4"/>
+            <Button Content="SALVAR" Click="Save_Click" Background="#0B6B3A" Foreground="White" FontWeight="Bold" Padding="16,9" Margin="4"/>
+        </StackPanel>
+    </Grid>
+</Window>
