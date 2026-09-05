@@ -52,7 +52,7 @@ jobs:
         working-directory: .\work\ONCA-PDV-PRO
         run: |
           if (Test-Path .\publish) { Remove-Item .\publish -Recurse -Force }
-          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o .\publish
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\publish
           if (-not (Test-Path .\publish\OncaPDV.Desktop.exe)) { throw "OncaPDV.Desktop.exe nao foi gerado." }
           $hash = (Get-FileHash .\publish\OncaPDV.Desktop.exe -Algorithm SHA256).Hash
           "$hash  OncaPDV.Desktop.exe" | Set-Content .\publish\OncaPDV.Desktop.exe.sha256 -Encoding ascii
@@ -61,7 +61,7 @@ jobs:
       - name: Upload final Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ONCA-PDV-PRO-0.1.8-EXE
+          name: ONCA-PDV-PRO-0.1.8-DIRECT-EXE
           if-no-files-found: error
           retention-days: 7
           path: |
