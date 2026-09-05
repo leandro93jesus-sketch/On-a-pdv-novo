@@ -1,4 +1,4 @@
-name: Build ONCA PDV PRO 0.1.9 QUICKFIX
+name: Build ONCA PDV PRO 0.1.10 QUICKFIX
 
 on:
   pull_request:
@@ -28,7 +28,7 @@ jobs:
             throw "Projeto Desktop nao encontrado dentro do ZIP."
           }
 
-      - name: Apply ONCA PDV 0.1.8 quick fixes
+      - name: Apply ONCA PDV 0.1.10 quick fixes
         shell: pwsh
         run: .\ci\apply-quickfix-018.ps1
 
@@ -61,7 +61,7 @@ jobs:
       - name: Upload final Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ONCA-PDV-PRO-0.1.9-DIRECT-EXE
+          name: ONCA-PDV-PRO-0.1.10-DIRECT-EXE
           if-no-files-found: error
           retention-days: 7
           path: |
