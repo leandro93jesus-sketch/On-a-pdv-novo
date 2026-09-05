@@ -1,0 +1,76 @@
+<Window x:Class="OncaPDV.Desktop.ProductLookupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Consulta Rápida de Preço e Estoque"
+        Width="980" Height="650" MinWidth="850" MinHeight="560"
+        WindowStartupLocation="CenterOwner" Background="#F7F9F8" FontFamily="Segoe UI">
+    <Window.Resources>
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="#0B6B3A"/><Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/><Setter Property="FontSize" Value="15"/>
+            <Setter Property="Padding" Value="15,10"/><Setter Property="Margin" Value="3"/><Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="FontSize" Value="18"/><Setter Property="Padding" Value="12,9"/>
+            <Setter Property="BorderBrush" Value="#D8E1DC"/><Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style TargetType="DataGrid">
+            <Setter Property="Background" Value="White"/><Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="GridLinesVisibility" Value="Horizontal"/><Setter Property="HorizontalGridLinesBrush" Value="#E7ECE9"/>
+            <Setter Property="RowHeight" Value="44"/><Setter Property="FontSize" Value="14"/>
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="#F2F5F3"/><Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="9"/><Setter Property="BorderThickness" Value="0,0,0,1"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="18">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+
+        <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock Text="CONSULTA RÁPIDA" FontSize="27" FontWeight="Bold" Foreground="#173D29"/>
+                <TextBlock Text="Consulte preço e estoque sem adicionar o produto à venda." Foreground="#6B7972"/>
+            </StackPanel>
+            <Border Grid.Column="1" Background="#EAF7EE" BorderBrush="#CFE7D6" BorderThickness="1" CornerRadius="9" Padding="12,8" VerticalAlignment="Center">
+                <TextBlock Text="F3 • SOMENTE CONSULTA" FontWeight="SemiBold" Foreground="#0B6B3A"/>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="1" Margin="0,14,0,12">
+            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBox x:Name="SearchInput" KeyDown="SearchInput_KeyDown" ToolTip="Nome, código interno ou código de barras"/>
+            <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Content="BUSCAR" Click="Search_Click" Margin="8,0,0,0"/>
+        </Grid>
+
+        <Border Grid.Row="2" Background="White" BorderBrush="#E2E8E5" BorderThickness="1" CornerRadius="10" Padding="8">
+            <DataGrid x:Name="ResultsGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single">
+                <DataGrid.RowStyle>
+                    <Style TargetType="DataGridRow">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Status}" Value="SEM ESTOQUE"><Setter Property="Background" Value="#FFF0EE"/><Setter Property="Foreground" Value="#9F231B"/></DataTrigger>
+                            <DataTrigger Binding="{Binding Status}" Value="ESTOQUE BAIXO"><Setter Property="Background" Value="#FFF8E8"/><Setter Property="Foreground" Value="#7A5A0C"/></DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </DataGrid.RowStyle>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="CÓDIGO" Binding="{Binding Code}" Width="115"/>
+                    <DataGridTextColumn Header="CÓD. BARRAS" Binding="{Binding Barcode}" Width="145"/>
+                    <DataGridTextColumn Header="PRODUTO" Binding="{Binding Name}" Width="*"/>
+                    <DataGridTextColumn Header="PREÇO" Binding="{Binding Price,StringFormat=C}" Width="110"/>
+                    <DataGridTextColumn Header="ESTOQUE" Binding="{Binding Stock,StringFormat=N3}" Width="100"/>
+                    <DataGridTextColumn Header="UN." Binding="{Binding Unit}" Width="55"/>
+                    <DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="120"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+
+        <Grid Grid.Row="3" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBlock x:Name="StatusText" Foreground="#5E6D65" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Content="FECHAR" IsCancel="True" Background="#5F6B65"/>
+        </Grid>
+    </Grid>
+</Window>
