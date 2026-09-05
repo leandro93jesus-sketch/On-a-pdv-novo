@@ -1,0 +1,42 @@
+--- a/src/OncaPDV.Infrastructure/OperationalServices.cs
++++ b/src/OncaPDV.Infrastructure/OperationalServices.cs
+@@ -25,7 +25,8 @@
+  public async Task<IReadOnlyList<SalesHistoryView>> SalesHistoryAsync(DateTimeOffset from,DateTimeOffset to,string search="",CancellationToken ct=default)
+  {
+   var list=new List<SalesHistoryView>();await using var c=db.Open();await using var q=c.CreateCommand();
+-  q.CommandText="""SELECT s.id,s.number,s.created_at,COALESCE(c.name,'CONSUMIDOR'),
++  q.CommandText="""
++SELECT s.id,s.number,s.created_at,COALESCE(c.name,'CONSUMIDOR'),
+   (SELECT COUNT(*) FROM sale_items i WHERE i.sale_id=s.id),
+   COALESCE((SELECT SUM(quantity) FROM sale_items i WHERE i.sale_id=s.id),0),
+   COALESCE((SELECT SUM(subtotal) FROM sale_items i WHERE i.sale_id=s.id),s.total+s.discount),
+@@ -39,7 +40,8 @@
+     AND ($search='' OR CAST(s.number AS TEXT) LIKE $like OR COALESCE(c.name,'CONSUMIDOR') LIKE $like
+       OR EXISTS(SELECT 1 FROM sale_items si WHERE si.sale_id=s.id AND (si.name LIKE $like OR si.code LIKE $like))
+       OR EXISTS(SELECT 1 FROM payments sp WHERE sp.sale_id=s.id AND sp.method LIKE $like))
+-  ORDER BY s.created_at DESC LIMIT 1500""";
++  ORDER BY s.created_at DESC LIMIT 1500
++  """;
+   q.Parameters.AddWithValue("$from",from.ToString("O"));q.Parameters.AddWithValue("$to",to.ToString("O"));q.Parameters.AddWithValue("$search",search.Trim());q.Parameters.AddWithValue("$like",$"%{search.Trim()}%");
+   await using var r=await q.ExecuteReaderAsync(ct);
+   while(await r.ReadAsync(ct))list.Add(new(Guid.Parse(r.GetString(0)),r.GetInt64(1),DateTimeOffset.Parse(r.GetString(2)),r.GetString(3),r.GetInt32(4),r.GetDecimal(5),r.GetDecimal(6),r.GetDecimal(7),r.GetDecimal(8),FriendlyPayments(r.GetString(9)),r.GetDecimal(10),r.GetDecimal(11),r.GetString(12)));
+@@ -49,7 +51,8 @@
+  public async Task<IReadOnlyList<StockView>> StockAsync(bool belowMinimum=false,string search="",string stockStatus="Todos",CancellationToken ct=default)
+  {
+   var list=new List<StockView>();await using var c=db.Open();await using var q=c.CreateCommand();
+-  q.CommandText="""SELECT id,name,internal_code,barcode,category,brand,unit,stock,minimum_stock,cost_price,sale_price,
++  q.CommandText="""
++SELECT id,name,internal_code,barcode,category,brand,unit,stock,minimum_stock,cost_price,sale_price,
+   stock*cost_price,stock*sale_price,
+   CASE WHEN cost_price>0 THEN ((sale_price-cost_price)/cost_price)*100 ELSE 0 END,
+   CASE WHEN stock<=0 THEN 'SEM ESTOQUE' WHEN stock<=minimum_stock THEN 'ESTOQUE BAIXO' ELSE 'OK' END
+@@ -57,7 +60,8 @@
+   AND ($below=0 OR stock<=minimum_stock)
+   AND ($status='Todos' OR ($status='Baixo' AND stock>0 AND stock<=minimum_stock) OR ($status='Sem estoque' AND stock<=0) OR ($status='Positivo' AND stock>minimum_stock))
+   AND ($search='' OR name LIKE $like OR internal_code LIKE $like OR COALESCE(barcode,'') LIKE $like OR COALESCE(category,'') LIKE $like OR COALESCE(brand,'') LIKE $like)
+-  ORDER BY CASE WHEN stock<=0 THEN 0 WHEN stock<=minimum_stock THEN 1 ELSE 2 END,name LIMIT 2000""";
++  ORDER BY CASE WHEN stock<=0 THEN 0 WHEN stock<=minimum_stock THEN 1 ELSE 2 END,name LIMIT 2000
++  """;
+   q.Parameters.AddWithValue("$below",belowMinimum?1:0);q.Parameters.AddWithValue("$status",stockStatus);q.Parameters.AddWithValue("$search",search.Trim());q.Parameters.AddWithValue("$like",$"%{search.Trim()}%");
+   await using var r=await q.ExecuteReaderAsync(ct);
+   while(await r.ReadAsync(ct))list.Add(new(Guid.Parse(r.GetString(0)),r.GetString(1),r.GetString(2),r.IsDBNull(3)?null:r.GetString(3),r.IsDBNull(4)?null:r.GetString(4),r.IsDBNull(5)?null:r.GetString(5),r.GetString(6),r.GetDecimal(7),r.GetDecimal(8),r.GetDecimal(9),r.GetDecimal(10),r.GetDecimal(11),r.GetDecimal(12),r.GetDecimal(13),r.GetString(14)));

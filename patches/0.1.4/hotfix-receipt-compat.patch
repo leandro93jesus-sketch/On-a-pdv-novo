@@ -1,0 +1,13 @@
+--- a/src/OncaPDV.Printing/Printing.cs
++++ b/src/OncaPDV.Printing/Printing.cs
+@@ -52,8 +52,8 @@
+         Line();Line("PRODUTOS");Line(new string('-',columns));
+         foreach(var i in d.Sale.Items){Line(Clip($"{i.Quantity:0.###} x {i.Name}"));Line($"  Valor unitario: {Money(i.UnitPrice)}");Line($"  Subtotal: {Money(i.Subtotal)}");}
+         Line(new string('-',columns));Line($"TOTAL: {Money(d.Sale.Total)}");Line();Line("Pagamento:");foreach(var p in d.Sale.Payments)Line($"  {PaymentName(p.Method)}: {Money(p.Amount)}");
+-        var cashPayments=d.Sale.Payments.Where(p=>p.Method==PaymentMethod.Cash).ToArray();
+-        if(cashPayments.Length>0){var cashReceived=cashPayments.Sum(p=>p.Received??p.Amount);var change=cashPayments.Sum(p=>p.Change);Line();Line($"DINHEIRO RECEBIDO: {Money(cashReceived)}");Line($"TROCO: {Money(change)}");}
++        var received=d.Sale.Payments.Sum(p=>p.Received??p.Amount);var change=d.Sale.Payments.Sum(p=>p.Change);
++        Line();Line("Recebido:");Line($"  {Money(received)}");Line();Line("Troco:");Line($"  {Money(change)}");
+         Line();Line(new string('-',columns));Line(Center(company?.FooterMessage??"OBRIGADO PELA PREFERENCIA"));
+         var body=_printerEncoding.GetBytes(text.ToString());var bytes=new List<byte>{0x1B,0x40};bytes.AddRange(body);bytes.AddRange([0x1B,0x64,0x04]);if(d.OpenDrawer)bytes.AddRange([0x1B,0x70,0x00,0x19,0xFA]);if(d.Cut)bytes.AddRange([0x1D,0x56,0x01]);
+         return new(bytes.ToArray(),text.ToString(),media);
