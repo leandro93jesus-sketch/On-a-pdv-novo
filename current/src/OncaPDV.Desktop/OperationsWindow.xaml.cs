@@ -274,6 +274,7 @@ public partial class OperationsWindow : Window
         try
         {
             await repo.SaveAsync(dialog.Product);
+            if (dialog.Extra is not null) await new ProductMetadataStore(_db).SaveAsync(dialog.Extra);
             await LoadStock();
             HeaderStatus.Text = $"Produto {dialog.Product.Name} atualizado. Estoque preservado.";
         }
