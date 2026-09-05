@@ -3,7 +3,7 @@ name: Build ONCA PDV PRO 0.1.6
 on:
   push:
     branches:
-      - dev/onca-pdv-0.1.6
+      - dev/onca-pdv-0.1.6-final
     paths:
       - 'current/**'
       - '.github/workflows/build-onca-pdv-0.1.6.yml'
@@ -30,7 +30,7 @@ jobs:
         shell: pwsh
         run: |
           $csproj = Get-Content ".\current\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj" -Raw
-          if ($csproj -notmatch '<Version>0\.1\.5</Version>') { throw "Versao 0.1.6 nao encontrada." }
+          if ($csproj -notmatch '<Version>0\.1\.6</Version>') { throw "Versao 0.1.6 nao encontrada." }
 
       - name: Restore tests
         shell: pwsh
