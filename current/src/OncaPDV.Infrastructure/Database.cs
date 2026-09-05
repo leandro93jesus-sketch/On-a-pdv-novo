@@ -46,8 +46,64 @@ public sealed class OncaDatabase(AppPaths paths)
         MigrateV2(c);
         MigrateV3(c);
         MigrateV4(c);
+        MigrateV5(c);
         SeedDiversos();
     }
+    private static void MigrateV5(SqliteConnection c)
+    {
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = """
+CREATE TABLE IF NOT EXISTS app_users(
+ id TEXT PRIMARY KEY,
+ username TEXT NOT NULL COLLATE NOCASE UNIQUE,
+ display_name TEXT NOT NULL,
+ role TEXT NOT NULL,
+ pin_salt TEXT NOT NULL,
+ pin_hash TEXT NOT NULL,
+ active INTEGER NOT NULL DEFAULT 1,
+ must_change_pin INTEGER NOT NULL DEFAULT 0,
+ created_at TEXT NOT NULL,
+ updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS product_metadata(
+ product_id TEXT PRIMARY KEY,
+ location TEXT,
+ preferred_supplier TEXT,
+ label_notes TEXT,
+ updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS customer_credit_settings(
+ customer_id TEXT PRIMARY KEY,
+ credit_limit NUMERIC NOT NULL DEFAULT 0,
+ blocked INTEGER NOT NULL DEFAULT 0,
+ notes TEXT,
+ updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sale_corrections(
+ id TEXT PRIMARY KEY,
+ sale_id TEXT NOT NULL,
+ user_id TEXT NOT NULL,
+ action TEXT NOT NULL,
+ reason TEXT NOT NULL,
+ before_json TEXT,
+ after_json TEXT,
+ created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS backup_runs(
+ id TEXT PRIMARY KEY,
+ created_at TEXT NOT NULL,
+ backup_path TEXT NOT NULL,
+ external_path TEXT,
+ status TEXT NOT NULL,
+ error TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_sale_corrections_sale ON sale_corrections(sale_id,created_at);
+CREATE INDEX IF NOT EXISTS ix_backup_runs_created ON backup_runs(created_at);
+INSERT OR IGNORE INTO schema_versions VALUES(5,datetime('now'));
+""";
+        cmd.ExecuteNonQuery();
+    }
+
     private static void MigrateV4(SqliteConnection c)
     {
         using var cmd = c.CreateCommand();
