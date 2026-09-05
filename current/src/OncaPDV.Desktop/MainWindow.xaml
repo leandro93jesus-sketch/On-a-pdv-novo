@@ -165,23 +165,24 @@
 
             <Border Background="White" BorderBrush="#DCE5E0" BorderThickness="1" CornerRadius="10" Padding="10" Margin="0,0,0,12">
                 <Grid>
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <TextBlock Text="▥" FontSize="27" Foreground="#0B6B3A" VerticalAlignment="Center" Margin="8,0,10,0"/>
                     <TextBox Grid.Column="1" x:Name="SearchBox" BorderThickness="0" KeyDown="SearchBox_KeyDown" ToolTip="Passe o código de barras ou digite código/nome" VerticalContentAlignment="Center"/>
-                    <Button Grid.Column="2" Style="{StaticResource RoundedButton}" Content="BUSCAR / ADICIONAR  [ENTER]" Click="Add_Click" Margin="8,0,4,0"/>
-                    <Button Grid.Column="3" Style="{StaticResource SoftButton}" Content="+ CADASTRAR PRODUTO  [F1]" Click="Product_Click" Margin="4,0,0,0"/>
+                    <Button Grid.Column="2" Style="{StaticResource RoundedButton}" Content="ADICIONAR  [ENTER]" Click="Add_Click" Margin="8,0,4,0"/>
+                    <Button Grid.Column="3" Style="{StaticResource SoftButton}" Content="CONSULTAR  [F3]" Click="QuickLookup_Click" Margin="4,0"/>
+                    <Button Grid.Column="4" Style="{StaticResource SoftButton}" Content="+ PRODUTO  [F1]" Click="Product_Click" Margin="4,0,0,0"/>
                 </Grid>
             </Border>
 
             <Border Grid.Row="1" Background="White" BorderBrush="#E0E6E3" BorderThickness="1" CornerRadius="11" Margin="0,0,0,12">
                 <Grid>
-                    <Grid.RowDefinitions><RowDefinition Height="54"/><RowDefinition/><RowDefinition Height="46"/></Grid.RowDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="54"/><RowDefinition/><RowDefinition Height="58"/></Grid.RowDefinitions>
                     <Grid Margin="14,0">
                         <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <TextBlock Text="🛒  Carrinho de Vendas" FontSize="21" FontWeight="Bold" Foreground="#1F2B25" VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="1" x:Name="StatusText" Text="CAIXA LIVRE" Foreground="#0B6B3A" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </Grid>
-                    <DataGrid Grid.Row="1" x:Name="CartGrid" AutoGenerateColumns="False" CellEditEnding="CartGrid_CellEditEnding" Margin="10,0">
+                    <DataGrid Grid.Row="1" x:Name="CartGrid" AutoGenerateColumns="False" CellEditEnding="CartGrid_CellEditEnding" PreviewKeyDown="CartGrid_PreviewKeyDown" SelectionMode="Single" Margin="10,0">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="CÓDIGO" Binding="{Binding Code}" IsReadOnly="True" Width="120"/>
                             <DataGridTextColumn Header="PRODUTO" Binding="{Binding Name}" IsReadOnly="True" Width="*"/>
@@ -190,11 +191,17 @@
                             <DataGridTextColumn Header="TOTAL (R$)" Binding="{Binding Subtotal,StringFormat=N2}" IsReadOnly="True" Width="125"/>
                         </DataGrid.Columns>
                     </DataGrid>
-                    <Grid Grid.Row="2" Margin="13,2">
-                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <Button Style="{StaticResource DangerButton}" Content="🗑  Cancelar venda [ESC]" Click="Cancel_Click" HorizontalAlignment="Left"/>
-                        <Button Grid.Column="1" Style="{StaticResource SoftButton}" Content="👤  Cliente" Click="Customer_Click"/>
-                        <Button Grid.Column="2" Style="{StaticResource SoftButton}" Content="🧾  Visualizar cupom" Click="Preview_Click"/>
+                    <Grid Grid.Row="2" Margin="13,4">
+                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock x:Name="CartSummaryText" Text="Carrinho vazio • salvo automaticamente" Foreground="#69766F" FontWeight="SemiBold"/>
+                            <TextBlock Text="Selecione um item: +1 / −1 / remover • DEL remove" FontSize="11" Foreground="#8A9690"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Style="{StaticResource SoftButton}" Content="+1" Width="56" Click="IncreaseSelected_Click"/>
+                        <Button Grid.Column="2" Style="{StaticResource SoftButton}" Content="−1" Width="56" Click="DecreaseSelected_Click"/>
+                        <Button Grid.Column="3" Style="{StaticResource DangerButton}" Content="REMOVER" Click="RemoveSelected_Click"/>
+                        <Button Grid.Column="4" Style="{StaticResource SoftButton}" Content="👤 CLIENTE [F4]" Click="Customer_Click"/>
+                        <Button Grid.Column="5" Style="{StaticResource SoftButton}" Content="🧾 CUPOM" Click="Preview_Click"/>
                     </Grid>
                 </Grid>
             </Border>
@@ -240,6 +247,7 @@
                     <StackPanel>
                         <TextBlock Text="TOTAL DA VENDA" FontSize="15" FontWeight="SemiBold" Foreground="#DDF2E4"/>
                         <TextBlock x:Name="TotalText" Text="R$ 0,00" FontSize="48" FontWeight="Bold" Foreground="White" TextAlignment="Right" Margin="0,2,0,0"/>
+                        <TextBlock x:Name="CartSavedText" Text="Venda atual protegida por recuperação automática" FontSize="12" Foreground="#DDF2E4" TextAlignment="Right" Margin="0,5,0,0"/>
                     </StackPanel>
                 </Border>
 
@@ -247,11 +255,11 @@
                     <StackPanel>
                         <TextBlock Text="Forma de Pagamento" FontSize="18" FontWeight="Bold" Foreground="#243129" Margin="3,0,0,9"/>
                         <UniformGrid Columns="2">
-                            <Button Style="{StaticResource PaymentButton}" Background="#EAF8EF" Foreground="#087233" Content="💵  Dinheiro" Click="PayCash_Click"/>
-                            <Button Style="{StaticResource PaymentButton}" Background="#E8F8F8" Foreground="#0B8D90" Content="◆  PIX" Click="PayPix_Click"/>
-                            <Button Style="{StaticResource PaymentButton}" Background="#EEF6FF" Foreground="#1767B0" Content="▰  Débito" Click="PayDebit_Click"/>
-                            <Button Style="{StaticResource PaymentButton}" Background="#FFF6E8" Foreground="#B56A00" Content="▰  Crédito" Click="PayCredit_Click"/>
-                            <Button Style="{StaticResource PaymentButton}" Background="#F4F1FF" Foreground="#5E4A9A" Content="▤  Crediário" Click="PayStoreCredit_Click"/>
+                            <Button Style="{StaticResource PaymentButton}" Background="#EAF8EF" Foreground="#087233" Content="💵 Dinheiro  [F5]" Click="PayCash_Click"/>
+                            <Button Style="{StaticResource PaymentButton}" Background="#E8F8F8" Foreground="#0B8D90" Content="◆ PIX  [F6]" Click="PayPix_Click"/>
+                            <Button Style="{StaticResource PaymentButton}" Background="#EEF6FF" Foreground="#1767B0" Content="▰ Débito  [F7]" Click="PayDebit_Click"/>
+                            <Button Style="{StaticResource PaymentButton}" Background="#FFF6E8" Foreground="#B56A00" Content="▰ Crédito  [F8]" Click="PayCredit_Click"/>
+                            <Button Style="{StaticResource PaymentButton}" Background="#F4F1FF" Foreground="#5E4A9A" Content="▤ Crediário  [F9]" Click="PayStoreCredit_Click"/>
                             <Button Style="{StaticResource PaymentButton}" Background="#EFF2F1" Foreground="#33433B" Content="⇄  Misto" Click="Pay_Click"/>
                         </UniformGrid>
                         <Button Style="{StaticResource RoundedButton}" Content="FINALIZAR / PAGAMENTO  [F2]" FontSize="18" Margin="3,10,3,3" Click="Pay_Click"/>
@@ -280,7 +288,7 @@
         <Border Grid.Column="1" Grid.ColumnSpan="2" Grid.Row="2" Background="White" BorderBrush="#E1E7E4" BorderThickness="0,1,0,0">
             <Grid Margin="18,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <TextBlock x:Name="RecoveryText" Foreground="#B16E00" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="Caixa: 001  |  Operador: Administrador" Foreground="#67756E" VerticalAlignment="Center" Margin="12,0"/>
+                <TextBlock Grid.Column="1" Text="F1 Produto • F2 Pagamento • F3 Consulta • F4 Cliente • F5–F9 Formas • ESC Cancelar" Foreground="#67756E" VerticalAlignment="Center" Margin="12,0"/>
                 <TextBlock Grid.Column="2" x:Name="DatabaseStatus" Foreground="#67756E" VerticalAlignment="Center"/>
             </Grid>
         </Border>
