@@ -15,6 +15,7 @@ public sealed record SalesSummary(int Quantity,decimal Gross,decimal Discounts,d
 public sealed record SalesHistoryView(Guid Id,long Number,DateTimeOffset CreatedAt,string Customer,string Products,int ItemLines,decimal ItemQuantity,decimal Gross,decimal Discount,decimal Total,string Payments,decimal CashReceived,decimal Change,string Operator,string Status);
 public sealed record StockView(Guid Id,string Product,string Code,string? Barcode,string? Category,string? Brand,string Unit,decimal Stock,decimal Minimum,decimal Cost,decimal Price,decimal EstimatedCost,decimal EstimatedSale,decimal MarginPercent,string Status);
 public sealed record StockMovementView(Guid Id,DateTimeOffset CreatedAt,string Type,decimal Quantity,string Reason,string Origin);
+public sealed record StockPlanningView(Guid ProductId,string Code,string Product,string Supplier,decimal Stock,decimal Minimum,decimal SuggestedBuy,decimal CurrentCost,decimal AverageCost,DateTimeOffset? LastSaleAt,int DaysWithoutSale,string Action);
 public sealed record CashSnapshot(Guid SessionId,DateTimeOffset OpenedAt,decimal Opening,decimal CashSales,decimal Pix,decimal Debit,decimal Credit,decimal StoreCreditGenerated,decimal CreditReceipts,decimal Withdrawals,decimal Supplies,decimal ExpectedCash,decimal TotalSales,int SalesCount);
 public sealed record CashMovementView(Guid Id,DateTimeOffset CreatedAt,string Type,string Reason,decimal Amount);
 public sealed record CashSessionHistoryView(Guid Id,DateTimeOffset OpenedAt,DateTimeOffset ClosedAt,decimal Opening,decimal Expected,decimal Informed,decimal Difference);
@@ -180,6 +181,40 @@ ON CONFLICT(customer_id) DO UPDATE SET credit_limit=excluded.credit_limit,blocke
   await using var r=await q.ExecuteReaderAsync(ct);
   while(await r.ReadAsync(ct))list.Add(new(Guid.Parse(r.GetString(0)),r.GetString(1),r.GetString(2),r.IsDBNull(3)?null:r.GetString(3),r.IsDBNull(4)?null:r.GetString(4),r.IsDBNull(5)?null:r.GetString(5),r.GetString(6),r.GetDecimal(7),r.GetDecimal(8),r.GetDecimal(9),r.GetDecimal(10),r.GetDecimal(11),r.GetDecimal(12),r.GetDecimal(13),r.GetString(14)));
   return list;
+ }
+ public async Task<IReadOnlyList<StockPlanningView>> StockPlanningAsync(int noMovementDays=60,CancellationToken ct=default)
+ {
+  var list=new List<StockPlanningView>();await using var c=db.Open();await using var q=c.CreateCommand();
+  q.CommandText="""
+SELECT p.id,p.internal_code,p.name,COALESCE(pm.preferred_supplier,p.supplier,'SEM FORNECEDOR'),
+ p.stock,p.minimum_stock,p.cost_price,
+ COALESCE((SELECT SUM(pi.quantity*pi.unit_cost)/NULLIF(SUM(pi.quantity),0) FROM purchase_items pi WHERE pi.product_id=p.id),p.cost_price),
+ (SELECT MAX(s.created_at) FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE si.product_id=p.id AND s.status='Completed')
+FROM products p LEFT JOIN product_metadata pm ON pm.product_id=p.id
+WHERE p.active=1
+ORDER BY CASE WHEN p.stock<=p.minimum_stock THEN 0 ELSE 1 END,p.name
+""";
+  await using var r=await q.ExecuteReaderAsync(ct);var now=DateTimeOffset.Now;
+  while(await r.ReadAsync(ct))
+  {
+   DateTimeOffset? last=r.IsDBNull(8)?null:DateTimeOffset.Parse(r.GetString(8));
+   var days=last is null?9999:Math.Max(0,(int)(now-last.Value).TotalDays);
+   var stock=r.GetDecimal(4);var min=r.GetDecimal(5);var suggested=Math.Max(0,(min*2)-stock);
+   var action=stock<=min?"COMPRAR":days>=noMovementDays?"SEM GIRO":"OK";
+   list.Add(new(Guid.Parse(r.GetString(0)),r.GetString(1),r.GetString(2),r.GetString(3),stock,min,suggested,r.GetDecimal(6),r.GetDecimal(7),last,days,action));
+  }
+  return list;
+ }
+ public async Task<string> StockPlanningPdfAsync(IReadOnlyList<StockPlanningView> rows,CancellationToken ct=default)
+ {
+  var useful=rows.Where(x=>x.Action!="OK").ToArray();
+  return await PdfAsync("PLANEJAMENTO DE ESTOQUE",[
+   $"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}",
+   $"Itens para comprar: {useful.Count(x=>x.Action=="COMPRAR")}",
+   $"Itens sem giro: {useful.Count(x=>x.Action=="SEM GIRO")}",
+   "",
+   ..useful.Select(x=>$"{x.Action} | {x.Code} | {x.Product} | Estoque {x.Stock:N3} | Min {x.Minimum:N3} | Comprar {x.SuggestedBuy:N3} | Fornecedor {x.Supplier} | Custo médio {x.AverageCost:C}")
+  ],ct);
  }
  public async Task<IReadOnlyList<StockMovementView>> StockMovementsAsync(Guid productId,int limit=200,CancellationToken ct=default)
  {
