@@ -10,6 +10,7 @@ namespace OncaPDV.Infrastructure;
 
 public sealed record CreditView(Guid Id,Guid CustomerId,string Customer,long SaleNumber,decimal Original,decimal Paid,decimal Balance,DateTimeOffset DueAt,CreditStatus Status);
 public sealed record CreditMovement(Guid Id,decimal Amount,PaymentMethod Method,DateTimeOffset CreatedAt,string? Notes);
+public sealed record CustomerCreditProfile(Guid CustomerId,string Customer,decimal Limit,decimal OpenBalance,decimal Available,bool Blocked,int OpenAccounts,int OverdueAccounts);
 public sealed record SalesSummary(int Quantity,decimal Gross,decimal Discounts,decimal Net,decimal Cash,decimal Pix,decimal Debit,decimal Credit,decimal StoreCredit,decimal CreditReceipts);
 public sealed record SalesHistoryView(Guid Id,long Number,DateTimeOffset CreatedAt,string Customer,string Products,int ItemLines,decimal ItemQuantity,decimal Gross,decimal Discount,decimal Total,string Payments,decimal CashReceived,decimal Change,string Operator,string Status);
 public sealed record StockView(Guid Id,string Product,string Code,string? Barcode,string? Category,string? Brand,string Unit,decimal Stock,decimal Minimum,decimal Cost,decimal Price,decimal EstimatedCost,decimal EstimatedSale,decimal MarginPercent,string Status);
@@ -60,6 +61,44 @@ public sealed class OperationalService(OncaDatabase db,AppPaths paths)
   return(DateTimeOffset.Parse(r.GetString(0)),r.GetString(1),r.IsDBNull(2)?null:r.GetString(2));
  }
  public async Task<IReadOnlyList<CreditView>> CreditsAsync(string status="Todos",Guid? customer=null,CancellationToken ct=default){var list=new List<CreditView>();await using var c=db.Open();await using var q=c.CreateCommand();q.CommandText="""SELECT a.id,a.customer_id,c.name,s.number,a.original_amount,a.balance,a.due_at,a.status FROM credit_accounts a JOIN customers c ON c.id=a.customer_id JOIN sales s ON s.id=a.sale_id WHERE ($customer IS NULL OR a.customer_id=$customer) AND ($status='Todos' OR a.status=$status OR ($status='Overdue' AND a.balance>0 AND a.due_at<$now)) ORDER BY a.due_at DESC LIMIT 500""";q.Parameters.AddWithValue("$customer",(object?)customer?.ToString()??DBNull.Value);q.Parameters.AddWithValue("$status",status);q.Parameters.AddWithValue("$now",DateTimeOffset.Now.ToString("O"));await using var r=await q.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct)){var due=DateTimeOffset.Parse(r.GetString(6));var st=Enum.Parse<CreditStatus>(r.GetString(7));if(st is not CreditStatus.Paid&&due<DateTimeOffset.Now)st=CreditStatus.Overdue;var original=r.GetDecimal(4);var balance=r.GetDecimal(5);list.Add(new(Guid.Parse(r.GetString(0)),Guid.Parse(r.GetString(1)),r.GetString(2),r.GetInt64(3),original,original-balance,balance,due,st));}return list;}
+ public async Task<CustomerCreditProfile> CustomerCreditProfileAsync(Guid customerId,CancellationToken ct=default)
+ {
+  await using var c=db.Open();await using var q=c.CreateCommand();
+  q.CommandText="""
+SELECT c.name,
+ COALESCE(s.credit_limit,0),
+ COALESCE(s.blocked,0),
+ COALESCE((SELECT SUM(a.balance) FROM credit_accounts a WHERE a.customer_id=c.id AND a.status<>'Paid' AND a.status<>'Cancelled'),0),
+ COALESCE((SELECT COUNT(*) FROM credit_accounts a WHERE a.customer_id=c.id AND a.balance>0 AND a.status<>'Cancelled'),0),
+ COALESCE((SELECT COUNT(*) FROM credit_accounts a WHERE a.customer_id=c.id AND a.balance>0 AND a.status<>'Cancelled' AND a.due_at<$now),0)
+FROM customers c LEFT JOIN customer_credit_settings s ON s.customer_id=c.id
+WHERE c.id=$id
+""";
+  q.Parameters.AddWithValue("$id",customerId.ToString());q.Parameters.AddWithValue("$now",DateTimeOffset.Now.ToString("O"));
+  await using var r=await q.ExecuteReaderAsync(ct);
+  if(!await r.ReadAsync(ct))throw new DomainException("Cliente não encontrado.");
+  var limit=r.GetDecimal(1);var balance=r.GetDecimal(3);var blocked=r.GetInt32(2)==1;
+  return new(customerId,r.GetString(0),limit,balance,Math.Max(0,limit-balance),blocked,r.GetInt32(4),r.GetInt32(5));
+ }
+ public async Task SetCustomerCreditLimitAsync(Guid customerId,decimal limit,bool blocked,string? notes,Guid userId,CancellationToken ct=default)
+ {
+  if(limit<0)throw new DomainException("Limite não pode ser negativo.");
+  await using var c=db.Open();await using var tx=await c.BeginTransactionAsync(ct);
+  await using(var q=c.CreateCommand()){q.Transaction=(SqliteTransaction)tx;q.CommandText="""
+INSERT INTO customer_credit_settings(customer_id,credit_limit,blocked,notes,updated_at)
+VALUES($id,$limit,$blocked,$notes,$at)
+ON CONFLICT(customer_id) DO UPDATE SET credit_limit=excluded.credit_limit,blocked=excluded.blocked,notes=excluded.notes,updated_at=excluded.updated_at
+""";q.Parameters.AddWithValue("$id",customerId.ToString());q.Parameters.AddWithValue("$limit",limit);q.Parameters.AddWithValue("$blocked",blocked?1:0);q.Parameters.AddWithValue("$notes",(object?)notes??DBNull.Value);q.Parameters.AddWithValue("$at",DateTimeOffset.Now.ToString("O"));await q.ExecuteNonQueryAsync(ct);}
+  await using(var audit=c.CreateCommand()){audit.Transaction=(SqliteTransaction)tx;audit.CommandText="INSERT INTO audit_log(id,user_id,action,entity,entity_id,after_json,reason,created_at) VALUES($id,$user,'CREDIT_LIMIT','Customer',$customer,$after,'ALTERACAO DE LIMITE',$at)";audit.Parameters.AddWithValue("$id",Guid.NewGuid().ToString());audit.Parameters.AddWithValue("$user",userId.ToString());audit.Parameters.AddWithValue("$customer",customerId.ToString());audit.Parameters.AddWithValue("$after",JsonSerializer.Serialize(new{Limit=limit,Blocked=blocked,Notes=notes}));audit.Parameters.AddWithValue("$at",DateTimeOffset.Now.ToString("O"));await audit.ExecuteNonQueryAsync(ct);}
+  await tx.CommitAsync(ct);
+ }
+ public async Task EnsureCreditAvailableAsync(Guid customerId,decimal amount,CancellationToken ct=default)
+ {
+  var p=await CustomerCreditProfileAsync(customerId,ct);
+  if(p.Blocked)throw new DomainException("Crediário bloqueado para este cliente.");
+  if(p.Limit<=0)throw new DomainException("Cliente sem limite de crediário configurado.");
+  if(amount>p.Available)throw new DomainException($"Limite insuficiente. Disponível: {p.Available:C}.");
+ }
  public async Task<IReadOnlyList<CreditMovement>> CreditMovementsAsync(Guid account,CancellationToken ct=default){var list=new List<CreditMovement>();await using var c=db.Open();await using var q=c.CreateCommand();q.CommandText="SELECT id,amount,method,created_at,notes FROM credit_receipts WHERE account_id=$id ORDER BY created_at";q.Parameters.AddWithValue("$id",account.ToString());await using var r=await q.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))list.Add(new(Guid.Parse(r.GetString(0)),r.GetDecimal(1),Enum.Parse<PaymentMethod>(r.GetString(2)),DateTimeOffset.Parse(r.GetString(3)),r.IsDBNull(4)?null:r.GetString(4)));return list;}
  public async Task<IReadOnlyList<Sale>> CustomerSalesAsync(Guid customer,CancellationToken ct=default){var repo=new SqliteSaleRepository(db,new SystemClock());var ids=new List<Guid>();await using(var c=db.Open()){await using var q=c.CreateCommand();q.CommandText="SELECT id FROM sales WHERE customer_id=$id AND status='Completed' ORDER BY created_at DESC LIMIT 200";q.Parameters.AddWithValue("$id",customer.ToString());await using var r=await q.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))ids.Add(Guid.Parse(r.GetString(0)));}var result=new List<Sale>();foreach(var id in ids){var sale=await repo.GetAsync(id,ct);if(sale is not null)result.Add(sale);}return result;}
  public async Task<SalesSummary> SalesSummaryAsync(DateTimeOffset from,DateTimeOffset to,Guid? customer=null,Guid? op=null,PaymentMethod? method=null,CancellationToken ct=default){await using var c=db.Open();await using var q=c.CreateCommand();q.CommandText="""SELECT COUNT(*),COALESCE(SUM((SELECT SUM(subtotal) FROM sale_items i WHERE i.sale_id=s.id)),0),COALESCE(SUM(s.discount),0),COALESCE(SUM(s.total),0),COALESCE(SUM((SELECT SUM(amount) FROM payments p WHERE p.sale_id=s.id AND p.method='Cash')),0),COALESCE(SUM((SELECT SUM(amount) FROM payments p WHERE p.sale_id=s.id AND p.method='Pix')),0),COALESCE(SUM((SELECT SUM(amount) FROM payments p WHERE p.sale_id=s.id AND p.method='Debit')),0),COALESCE(SUM((SELECT SUM(amount) FROM payments p WHERE p.sale_id=s.id AND p.method='Credit')),0),COALESCE(SUM((SELECT SUM(amount) FROM payments p WHERE p.sale_id=s.id AND p.method='StoreCredit')),0) FROM sales s WHERE s.status='Completed' AND s.created_at >= $from AND s.created_at < $to AND ($customer IS NULL OR s.customer_id=$customer) AND ($op IS NULL OR s.operator_id=$op) AND ($method IS NULL OR EXISTS(SELECT 1 FROM payments pf WHERE pf.sale_id=s.id AND pf.method=$method))""";q.Parameters.AddWithValue("$from",from.ToString("O"));q.Parameters.AddWithValue("$to",to.ToString("O"));q.Parameters.AddWithValue("$customer",(object?)customer?.ToString()??DBNull.Value);q.Parameters.AddWithValue("$op",(object?)op?.ToString()??DBNull.Value);q.Parameters.AddWithValue("$method",(object?)method?.ToString()??DBNull.Value);await using var r=await q.ExecuteReaderAsync(ct);await r.ReadAsync(ct);var receipts=await Scalar(c,"SELECT COALESCE(SUM(amount),0) FROM credit_receipts WHERE created_at >= $from AND created_at < $to",from,to,ct);return new(r.GetInt32(0),r.GetDecimal(1),r.GetDecimal(2),r.GetDecimal(3),r.GetDecimal(4),r.GetDecimal(5),r.GetDecimal(6),r.GetDecimal(7),r.GetDecimal(8),receipts);}
