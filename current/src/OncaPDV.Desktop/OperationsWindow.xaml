@@ -107,7 +107,7 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/><ColumnDefinition Width="145"/><ColumnDefinition Width="145"/>
+                                <ColumnDefinition Width="*"/><ColumnDefinition Width="145"/><ColumnDefinition Width="145"/><ColumnDefinition Width="165"/>
                                 <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <Button Style="{StaticResource SoftButton}" Content="HOJE" Click="Today_Click"/>
@@ -136,8 +136,12 @@
                                     <ComboBoxItem Content="Todas" Tag="Todos"/>
                                 </ComboBox>
                             </StackPanel>
-                            <Button Grid.Column="9" Style="{StaticResource SoftButton}" Content="BUSCAR" Click="SearchSales_Click" VerticalAlignment="Bottom"/>
-                            <Button Grid.Column="10" Style="{StaticResource SoftButton}" Content="CSV" Click="ExportSalesCsv_Click" VerticalAlignment="Bottom"/>
+                            <StackPanel Grid.Column="9" Margin="4,0">
+                                <TextBlock Text="OPERADOR" FontSize="11" Foreground="#748179"/>
+                                <ComboBox x:Name="OperatorFilter" SelectionChanged="SalesFilter_SelectionChanged"/>
+                            </StackPanel>
+                            <Button Grid.Column="10" Style="{StaticResource SoftButton}" Content="BUSCAR" Click="SearchSales_Click" VerticalAlignment="Bottom"/>
+                            <Button Grid.Column="11" Style="{StaticResource SoftButton}" Content="CSV" Click="ExportSalesCsv_Click" VerticalAlignment="Bottom"/>
                         </Grid>
                     </Border>
 
