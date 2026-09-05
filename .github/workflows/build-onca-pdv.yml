@@ -1,4 +1,4 @@
-name: Build ONCA PDV PRO 0.1.8 QUICKFIX
+name: Build ONCA PDV PRO 0.1.9 QUICKFIX
 
 on:
   pull_request:
@@ -61,7 +61,7 @@ jobs:
       - name: Upload final Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ONCA-PDV-PRO-0.1.8-DIRECT-EXE
+          name: ONCA-PDV-PRO-0.1.9-DIRECT-EXE
           if-no-files-found: error
           retention-days: 7
           path: |
