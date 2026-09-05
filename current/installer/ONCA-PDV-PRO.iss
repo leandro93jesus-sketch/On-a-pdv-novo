@@ -1,7 +1,7 @@
 [Setup]
 AppId={{A4714C8A-931D-4E41-90E1-5F720E7129E7}
 AppName=ONCA-PDV-PRO
-AppVersion=0.1.4
+AppVersion=0.1.5
 AppPublisher=ONCA Produtos de Limpeza
 DefaultDirName={autopf}\ONCA-PDV-PRO
 OutputBaseFilename=ONCA-PDV-PRO-Setup
