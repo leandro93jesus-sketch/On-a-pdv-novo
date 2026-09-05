@@ -157,7 +157,8 @@
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="VENDA" Binding="{Binding Number,StringFormat=000000}" Width="75"/>
                                 <DataGridTextColumn Header="DATA / HORA" Binding="{Binding CreatedAt,StringFormat=dd/MM/yyyy HH:mm:ss}" Width="145"/>
-                                <DataGridTextColumn Header="CLIENTE" Binding="{Binding Customer}" Width="210"/>
+                                <DataGridTextColumn Header="CLIENTE" Binding="{Binding Customer}" Width="190"/>
+                                <DataGridTextColumn Header="PRODUTOS" Binding="{Binding Products}" Width="300"/>
                                 <DataGridTextColumn Header="LINHAS" Binding="{Binding ItemLines}" Width="60"/>
                                 <DataGridTextColumn Header="QTD." Binding="{Binding ItemQuantity,StringFormat=N2}" Width="70"/>
                                 <DataGridTextColumn Header="BRUTO" Binding="{Binding Gross,StringFormat=C}" Width="95"/>
