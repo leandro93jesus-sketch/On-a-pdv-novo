@@ -1,0 +1,53 @@
+<Window x:Class="OncaPDV.Desktop.SaleCorrectionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Corrigir Venda" Width="980" Height="700" WindowStartupLocation="CenterOwner" Background="#F7F9F8">
+    <Grid Margin="20">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock x:Name="TitleText" FontSize="26" FontWeight="Bold" Foreground="#173D29"/>
+                <TextBlock x:Name="PaymentText" Foreground="#6B7972" Margin="0,4,0,0"/>
+            </StackPanel>
+            <Border Grid.Column="1" Background="#FFF5E7" BorderBrush="#EDD19B" BorderThickness="1" CornerRadius="9" Padding="12">
+                <TextBlock Text="Correção auditada • estoque ajustado automaticamente" Foreground="#8B6519" FontWeight="SemiBold"/>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="1" Background="White" BorderBrush="#DDE5E1" BorderThickness="1" CornerRadius="10" Padding="8" Margin="0,14,0,12">
+            <DataGrid x:Name="ItemsGrid" AutoGenerateColumns="False" CanUserAddRows="False" CellEditEnding="ItemsGrid_CellEditEnding">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="CÓDIGO" Binding="{Binding Code}" IsReadOnly="True" Width="110"/>
+                    <DataGridTextColumn Header="PRODUTO" Binding="{Binding Name}" IsReadOnly="True" Width="*"/>
+                    <DataGridTextColumn Header="QTD." Binding="{Binding Quantity,UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+                    <DataGridTextColumn Header="UNITÁRIO (R$)" Binding="{Binding UnitPrice,UpdateSourceTrigger=PropertyChanged}" Width="140"/>
+                    <DataGridTextColumn Header="SUBTOTAL" Binding="{Binding Subtotal,StringFormat=C}" IsReadOnly="True" Width="130"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="180"/><ColumnDefinition Width="200"/></Grid.ColumnDefinitions>
+            <StackPanel Margin="0,0,14,0">
+                <TextBlock Text="MOTIVO DA CORREÇÃO *" FontWeight="SemiBold"/>
+                <TextBox x:Name="ReasonBox" MinHeight="65" TextWrapping="Wrap" AcceptsReturn="True" Padding="8" Margin="0,4,0,0"/>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                <TextBlock Text="DESCONTO (R$)" FontWeight="SemiBold"/>
+                <TextBox x:Name="DiscountBox" FontSize="20" Padding="8" TextChanged="Discount_Changed" Margin="0,4,0,0"/>
+            </StackPanel>
+            <Border Grid.Column="2" Background="#EAF7EE" CornerRadius="9" Padding="12">
+                <StackPanel><TextBlock Text="NOVO TOTAL" Foreground="#36704A"/><TextBlock x:Name="TotalText" FontSize="30" FontWeight="Bold" Foreground="#0B6B3A" TextAlignment="Right"/></StackPanel>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="3" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBlock x:Name="StatusText" Foreground="#A3392F" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Content="CANCELAR" IsCancel="True" Padding="14,9" Margin="4"/>
+                <Button Content="APLICAR CORREÇÃO" Click="Apply_Click" Background="#B56A00" Foreground="White" FontWeight="Bold" Padding="16,9" Margin="4"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
