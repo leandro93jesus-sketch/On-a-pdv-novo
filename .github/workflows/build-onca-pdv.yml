@@ -123,19 +123,24 @@ jobs:
           "$hash  ONCA-PDV-PRO-Setup.exe" | Set-Content "$setup.sha256" -Encoding ascii
           Write-Host "SETUP SHA256=$hash"
 
-      - name: Package source 0.1.4
-        shell: pwsh
-        run: |
-          Compress-Archive -Path ".\work\ONCA-PDV-PRO\*" -DestinationPath ".\ONCA-PDV-PRO-SOURCE-0.1.4.zip" -Force
-
-      - name: Upload final Windows artifacts
+      - name: Upload EXE
         uses: actions/upload-artifact@v4
         with:
-          name: ONCA-PDV-PRO-0.1.4-Windows
+          name: ONCA-PDV-PRO-0.1.4-EXE
           if-no-files-found: error
           retention-days: 7
+          compression-level: 9
           path: |
-            work/ONCA-PDV-PRO/publish/**
+            work/ONCA-PDV-PRO/publish/OncaPDV.Desktop.exe
+            work/ONCA-PDV-PRO/publish/OncaPDV.Desktop.exe.sha256
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.4-SETUP
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 9
+          path: |
             work/ONCA-PDV-PRO/installer/Output/ONCA-PDV-PRO-Setup.exe
             work/ONCA-PDV-PRO/installer/Output/ONCA-PDV-PRO-Setup.exe.sha256
-            ONCA-PDV-PRO-SOURCE-0.1.4.zip
