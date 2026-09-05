@@ -49,6 +49,15 @@ public sealed class Cart
         _items[index] = _items[index] with { Quantity = quantity };
     }
 
+    public void ChangeUnitPrice(Guid productId, decimal unitPrice)
+    {
+        if (unitPrice < 0) throw new DomainException("Preço inválido.");
+        var index = _items.FindIndex(x => x.ProductId == productId);
+        if (index < 0) throw new DomainException("Item não encontrado.");
+        _items[index] = _items[index] with { UnitPrice = unitPrice };
+        if (Discount > GrossTotal) Discount = GrossTotal;
+    }
+
     public void Remove(Guid productId)
     {
         var index = _items.FindIndex(x => x.ProductId == productId);
