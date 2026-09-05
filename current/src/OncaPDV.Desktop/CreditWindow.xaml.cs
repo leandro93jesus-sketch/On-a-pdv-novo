@@ -18,7 +18,7 @@ public partial class CreditWindow : Window
     public CreditWindow(OncaDatabase db, Guid operatorId) : this(db, null, operatorId) { }
 
     public CreditWindow(OncaDatabase db, Guid customerId, bool customerFilter)
-        : this(db, customerFilter ? customerId : null, Guid.Parse("10000000-0000-0000-0000-000000000001")) { }
+        : this(db, customerFilter ? customerId : null, (AppSession.CurrentUser?.Id ?? Guid.Parse("10000000-0000-0000-0000-000000000001"))) { }
 
     private CreditWindow(OncaDatabase db, Guid? customer, Guid op)
     {
@@ -87,6 +87,10 @@ public partial class CreditWindow : Window
         SelectedDueText.Text = account.DueAt.ToString("dd/MM/yyyy");
         SelectedStatusText.Text = StatusLabel(account.Status);
         Movements.ItemsSource = await _ops.CreditMovementsAsync(account.Id);
+        var creditProfile = await _ops.CustomerCreditProfileAsync(account.CustomerId);
+        CreditLimitText.Text = creditProfile.Limit.ToString("C");
+        CreditAvailableText.Text = creditProfile.Available.ToString("C");
+        CreditBlockedText.Text = creditProfile.Blocked ? "BLOQUEADO" : string.Empty;
     }
 
     private async void Receive_Click(object sender, RoutedEventArgs e)
@@ -113,6 +117,26 @@ public partial class CreditWindow : Window
             "Crediário",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
+    }
+
+    private async void CreditLimit_Click(object sender, RoutedEventArgs e)
+    {
+        if (Accounts.SelectedItem is not CreditView account)
+        {
+            MessageBox.Show("Selecione uma conta/cliente.", "Crediário", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var auth = new AdminAuthorizationWindow(_db, $"Alterar limite de crediário de {account.Customer}.") { Owner = this };
+        if (auth.ShowDialog() != true) return;
+        var window = new CreditLimitWindow(_ops, account.CustomerId, _operator) { Owner = this };
+        if (window.ShowDialog() == true)
+        {
+            var creditProfile = await _ops.CustomerCreditProfileAsync(account.CustomerId);
+            CreditLimitText.Text = creditProfile.Limit.ToString("C");
+            CreditAvailableText.Text = creditProfile.Available.ToString("C");
+            CreditBlockedText.Text = creditProfile.Blocked ? "BLOQUEADO" : string.Empty;
+        }
     }
 
     private async void Pdf_Click(object sender, RoutedEventArgs e)
