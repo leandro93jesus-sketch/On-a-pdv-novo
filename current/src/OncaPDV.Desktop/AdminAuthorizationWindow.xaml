@@ -1,0 +1,22 @@
+<Window x:Class="OncaPDV.Desktop.AdminAuthorizationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Autorização de administrador" Width="460" Height="400" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="#F7F9F8">
+    <Grid Margin="24">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="AUTORIZAÇÃO NECESSÁRIA" FontSize="23" FontWeight="Bold" Foreground="#8A321E"/>
+            <TextBlock x:Name="ActionText" TextWrapping="Wrap" Foreground="#5F6C65" Margin="0,5,0,0"/>
+        </StackPanel>
+        <StackPanel Grid.Row="1" Margin="0,18,0,0">
+            <TextBlock Text="PIN DE ADMINISTRADOR" FontWeight="SemiBold"/>
+            <PasswordBox x:Name="PinBox" FontSize="22" Padding="9" Margin="0,5,0,12"/>
+            <TextBlock Text="MOTIVO" FontWeight="SemiBold"/>
+            <TextBox x:Name="ReasonBox" MinHeight="65" TextWrapping="Wrap" AcceptsReturn="True" Padding="8" Margin="0,5,0,10"/>
+            <TextBlock x:Name="StatusText" Foreground="#A3392F" TextWrapping="Wrap"/>
+        </StackPanel>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="CANCELAR" IsCancel="True" Padding="14,9" Margin="4"/>
+            <Button Content="AUTORIZAR" Click="Authorize_Click" Background="#0B6B3A" Foreground="White" FontWeight="Bold" Padding="16,9" Margin="4"/>
+        </StackPanel>
+    </Grid>
+</Window>
