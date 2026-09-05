@@ -14,9 +14,35 @@ public partial class App : System.Windows.Application
 {
     protected override void OnStartup(StartupEventArgs e)
     {
-        base.OnStartup(e);var window=new MainWindow();MainWindow=window;
-        if(e.Args.Contains("--smoke-test",StringComparer.OrdinalIgnoreCase))window.ContentRendered+=(_,_)=>{window.Close();Shutdown(0);};
-        window.Show();
+        base.OnStartup(e);
+        var paths=AppPaths.Default();
+        var db=new OncaDatabase(paths);
+        db.Migrate();
+        AppServices.Database=db;
+        AppServices.Paths=paths;
+        var security=new PermissionService(db);
+        security.EnsureSeedAsync().GetAwaiter().GetResult();
+
+        if(e.Args.Contains("--smoke-test",StringComparer.OrdinalIgnoreCase))
+        {
+            AppSession.CurrentUser=new AppUser(Guid.Parse("10000000-0000-0000-0000-000000000001"),"admin","Administrador",UserRole.Admin,true,false);
+            var smoke=new MainWindow();MainWindow=smoke;
+            smoke.ContentRendered+=(_,_)=>{smoke.Close();Shutdown(0);};
+            smoke.Show();
+            return;
+        }
+
+        var login=new LoginWindow(db);
+        if(login.ShowDialog()!=true || login.SelectedUser is null){Shutdown(0);return;}
+        AppSession.CurrentUser=login.SelectedUser;
+
+        if(login.SelectedUser.MustChangePin)
+        {
+            var change=new ChangePinWindow(db,login.SelectedUser);
+            if(change.ShowDialog()!=true){MessageBox.Show("Altere o PIN inicial antes de usar o sistema.","Segurança",MessageBoxButton.OK,MessageBoxImage.Warning);Shutdown(0);return;}
+        }
+
+        var window=new MainWindow();MainWindow=window;window.Show();
     }
     private void App_DispatcherUnhandledException(object sender,DispatcherUnhandledExceptionEventArgs e)
     {
