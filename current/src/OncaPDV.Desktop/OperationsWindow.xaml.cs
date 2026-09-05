@@ -269,11 +269,14 @@ public partial class OperationsWindow : Window
             return;
         }
 
-        var dialog = new ProductWindow(existing: product) { Owner = this };
+        var advanced = new AdvancedOperationsService(_db, _paths);
+        var metadata = await advanced.ProductMetadataAsync(product.Id);
+        var dialog = new ProductWindow(existing: product, shelfLocation: metadata.ShelfLocation) { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Product is null) return;
         try
         {
             await repo.SaveAsync(dialog.Product);
+            await advanced.SaveProductMetadataAsync(dialog.Product.Id, dialog.ShelfLocation);
             await LoadStock();
             HeaderStatus.Text = $"Produto {dialog.Product.Name} atualizado. Estoque preservado.";
         }
