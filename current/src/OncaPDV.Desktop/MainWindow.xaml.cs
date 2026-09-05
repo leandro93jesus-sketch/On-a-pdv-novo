@@ -55,7 +55,7 @@ public partial class MainWindow : Window
         await RefreshSales();
         await new OperationalService(_database, _paths).EnsureDailyBackupAsync();
         DatabaseStatus.Text = $"Banco: {_database.IntegrityCheck()} • abertura {sw.ElapsedMilliseconds} ms • backup diário OK";
-        RecoveryText.Text = recovered ? "CARRINHO RECUPERADO" : string.Empty;
+        RecoveryText.Text = recovered ? "⚠ CARRINHO RECUPERADO DE UMA SESSÃO ANTERIOR" : "✓ Venda atual protegida por recuperação automática";
         SearchBox.Focus();
     }
 
@@ -325,6 +325,14 @@ public partial class MainWindow : Window
         foreach (var i in _workflow.Cart.Items)
             _rows.Add(new(i.ProductId, i.Code, i.Name, i.Quantity, i.UnitPrice, i.Subtotal));
         TotalText.Text = _workflow.Cart.Total.ToString("C");
+        var lines = _workflow.Cart.Items.Count;
+        var quantity = _workflow.Cart.Items.Sum(x => x.Quantity);
+        CartSummaryText.Text = lines == 0
+            ? "Carrinho vazio • salvo automaticamente"
+            : $"{lines} item(ns) • {quantity:N3} unidade(s) • carrinho salvo automaticamente";
+        CartSavedText.Text = lines == 0
+            ? "Pronto para a próxima venda"
+            : $"Subtotal {_workflow.Cart.GrossTotal:C} • recuperação automática ativa";
     }
 
     private void SetStatus(string value) => StatusText.Text = value;
@@ -339,14 +347,89 @@ public partial class MainWindow : Window
     }
 
     private async void Product_Click(object sender, RoutedEventArgs e) => await OpenProduct();
+
+    private void QuickLookup_Click(object sender, RoutedEventArgs e)
+    {
+        new ProductLookupWindow(_workflow, SearchBox.Text) { Owner = this }.ShowDialog();
+        SearchBox.Focus();
+        SearchBox.SelectAll();
+    }
+
+    private CartRow? SelectedCartRow() => CartGrid.SelectedItem as CartRow;
+
+    private async Task ChangeSelectedQuantityAsync(decimal delta)
+    {
+        var row = SelectedCartRow();
+        if (row is null)
+        {
+            SetStatus("SELECIONE UM ITEM DO CARRINHO");
+            return;
+        }
+
+        var next = row.Quantity + delta;
+        if (next <= 0)
+        {
+            await _workflow.RemoveItemAsync(row.ProductId);
+            SetStatus($"ITEM REMOVIDO: {row.Name}");
+        }
+        else
+        {
+            await _workflow.ChangeQuantityAsync(row.ProductId, next);
+            SetStatus($"{row.Name} • QTD {next:N3}");
+        }
+
+        RefreshCart();
+        SearchBox.Focus();
+    }
+
+    private async void IncreaseSelected_Click(object sender, RoutedEventArgs e) => await ChangeSelectedQuantityAsync(1);
+    private async void DecreaseSelected_Click(object sender, RoutedEventArgs e) => await ChangeSelectedQuantityAsync(-1);
+
+    private async void RemoveSelected_Click(object sender, RoutedEventArgs e)
+    {
+        var row = SelectedCartRow();
+        if (row is null)
+        {
+            SetStatus("SELECIONE UM ITEM DO CARRINHO");
+            return;
+        }
+        await _workflow.RemoveItemAsync(row.ProductId);
+        RefreshCart();
+        SetStatus($"ITEM REMOVIDO: {row.Name}");
+        SearchBox.Focus();
+    }
+
+    private async void CartGrid_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Delete) return;
+        e.Handled = true;
+        RemoveSelected_Click(sender, e);
+        await Task.CompletedTask;
+    }
+
     private void Printer_Click(object sender, RoutedEventArgs e) => new PrinterSettingsWindow(_paths) { Owner = this }.ShowDialog();
     private void ReceiptSettings_Click(object sender, RoutedEventArgs e) => new ReceiptSettingsWindow(_paths) { Owner = this }.ShowDialog();
     private void Diagnostic_Click(object sender, RoutedEventArgs e) => new DiagnosticWindow(new DiagnosticService(_database, _paths)) { Owner = this }.ShowDialog();
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.L)
+        {
+            SearchBox.Focus();
+            SearchBox.SelectAll();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.F1) Product_Click(sender, e);
         else if (e.Key == Key.F2) Pay_Click(sender, e);
+        else if (e.Key == Key.F3) QuickLookup_Click(sender, e);
+        else if (e.Key == Key.F4) Customer_Click(sender, e);
+        else if (e.Key == Key.F5) PayCash_Click(sender, e);
+        else if (e.Key == Key.F6) PayPix_Click(sender, e);
+        else if (e.Key == Key.F7) PayDebit_Click(sender, e);
+        else if (e.Key == Key.F8) PayCredit_Click(sender, e);
+        else if (e.Key == Key.F9) PayStoreCredit_Click(sender, e);
         else if (e.Key == Key.Escape) Cancel_Click(sender, e);
     }
 
