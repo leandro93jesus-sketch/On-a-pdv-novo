@@ -47,6 +47,44 @@ $b=@'
 '@
 Replace-Req $xaml $a $b
 
+# DIVERSOS fixo dentro do proprio carrinho: valor + adicionar
+$t=Get-Text $xaml
+$oldRows='                    <Grid.RowDefinitions><RowDefinition Height="54"/><RowDefinition/><RowDefinition Height="46"/></Grid.RowDefinitions>'
+$newRows='                    <Grid.RowDefinitions><RowDefinition Height="54"/><RowDefinition Height="64"/><RowDefinition/><RowDefinition Height="46"/></Grid.RowDefinitions>'
+if(-not $t.Contains($oldRows)){ throw "Linhas do carrinho nao encontradas" }
+$t=$t.Replace($oldRows,$newRows)
+
+$oldGrid='                    <DataGrid Grid.Row="1" x:Name="CartGrid"'
+$newGrid=@'
+                    <Border Grid.Row="1" Background="#FFF4D6" BorderBrush="#D9A62E" BorderThickness="1" CornerRadius="8" Margin="10,2,10,6" Padding="10,7">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="170"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="DIVERSOS" FontSize="18" FontWeight="Bold" Foreground="#7A4D00" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                            <TextBox Grid.Column="1" x:Name="MiscValueBox" FontSize="18" FontWeight="Bold" HorizontalContentAlignment="Right"
+                                     ToolTip="Digite o valor do item DIVERSOS" Margin="0,0,10,0"/>
+                            <Button Grid.Column="2" Style="{StaticResource RoundedButton}" Background="#D28A14" Foreground="White"
+                                    Content="ADICIONAR DIVERSOS" FontWeight="Bold" Padding="16,8" Click="MiscCart_Click"/>
+                            <TextBlock Grid.Column="3" Text="Digite o valor e clique em ADICIONAR" Foreground="#8A6A2E"
+                                       VerticalAlignment="Center" Margin="12,0,0,0"/>
+                        </Grid>
+                    </Border>
+
+                    <DataGrid Grid.Row="2" x:Name="CartGrid"
+'@
+if(-not $t.Contains($oldGrid)){ throw "Grid do carrinho nao encontrado" }
+$t=$t.Replace($oldGrid,$newGrid)
+
+$oldFooter='                    <Grid Grid.Row="2" Margin="13,2">'
+$newFooter='                    <Grid Grid.Row="3" Margin="13,2">'
+if(-not $t.Contains($oldFooter)){ throw "Rodape do carrinho nao encontrado" }
+$t=$t.Replace($oldFooter,$newFooter)
+Set-Text $xaml $t
+
 $main=Join-Path $root "src\OncaPDV.Desktop\MainWindow.xaml.cs"
 $t=Get-Text $main
 $t=$t.Replace("using System.Collections.ObjectModel;","using System.Collections.ObjectModel;"+[Environment]::NewLine+"using System.Globalization;"+[Environment]::NewLine+"using Microsoft.VisualBasic;")
@@ -221,6 +259,28 @@ $a='    private async void Add_Click(object sender, RoutedEventArgs e) => await 
 $b=@'
     private async void Add_Click(object sender, RoutedEventArgs e) => await AddProduct();
     private async void Misc_Click(object sender, RoutedEventArgs e) => await AddMiscAsync();
+    private async void MiscCart_Click(object sender, RoutedEventArgs e)
+    {
+        var raw = MiscValueBox.Text.Trim();
+        decimal price;
+        var ok =
+            decimal.TryParse(raw, NumberStyles.Currency, CultureInfo.GetCultureInfo("pt-BR"), out price) ||
+            decimal.TryParse(raw.Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out price);
+
+        if (!ok || price <= 0)
+        {
+            MessageBox.Show("Digite um valor válido para DIVERSOS.", "ITEM DIVERSOS", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MiscValueBox.Focus();
+            MiscValueBox.SelectAll();
+            return;
+        }
+
+        await _workflow.AddMiscAsync(price, "DIVERSOS");
+        MiscValueBox.Clear();
+        RefreshCart();
+        SetStatus($"DIVERSOS ADICIONADO - {price:C}");
+        MiscValueBox.Focus();
+    }
 '@
 if(-not $t.Contains($a)){ throw "Add_Click nao encontrado" }
 $t=$t.Replace($a,$b)
@@ -243,7 +303,7 @@ $t=$t.Replace('if(left is null)throw new DomainException($"Estoque insuficiente 
 Set-Text $pg $t
 
 $proj=Join-Path $root "src\OncaPDV.Desktop\OncaPDV.Desktop.csproj"
-$t=(Get-Text $proj).Replace("<Version>0.1.3</Version>","<Version>0.1.8</Version>")
+$t=(Get-Text $proj).Replace("<Version>0.1.3</Version>","<Version>0.1.9</Version>")
 Set-Text $proj $t
 
-Write-Host "ONCA PDV 0.1.8 QUICKFIX APLICADO"
+Write-Host "ONCA PDV 0.1.9 QUICKFIX APLICADO - DIVERSOS DENTRO DO CARRINHO"
