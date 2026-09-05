@@ -1,4 +1,4 @@
-name: Build ONCA PDV PRO 0.1.3
+name: Build ONCA PDV PRO 0.1.4
 
 on:
   pull_request:
@@ -10,23 +10,51 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract ONCA PDV source
+      - name: Extract source and apply 0.1.4 patch
         shell: pwsh
         run: |
           $zip = ".\ONCA-PDV-PRO-ATUALIZADO-0.1.3.zip"
-          if (-not (Test-Path $zip)) { throw "ZIP do projeto nao encontrado." }
+          if (-not (Test-Path $zip)) { throw "ZIP base 0.1.3 nao encontrado." }
+
           if (Test-Path ".\work") { Remove-Item ".\work" -Recurse -Force }
           New-Item -ItemType Directory -Path ".\work" | Out-Null
           Expand-Archive -Path $zip -DestinationPath ".\work" -Force
-          if (-not (Test-Path ".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj")) {
-            throw "Projeto Desktop nao encontrado dentro do ZIP."
+
+          $project = ".\work\ONCA-PDV-PRO"
+          if (-not (Test-Path "$project\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj")) {
+            throw "Projeto Desktop nao encontrado no ZIP."
           }
+
+          $parts = Get-ChildItem ".\patches\0.1.4\part*.b64" | Sort-Object Name
+          if ($parts.Count -ne 4) { throw "Patch incompleto: esperadas 4 partes." }
+
+          $base64 = ($parts | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ""
+          $gzipBytes = [Convert]::FromBase64String($base64)
+
+          $inStream = New-Object IO.MemoryStream(,$gzipBytes)
+          $gzip = New-Object IO.Compression.GZipStream($inStream, [IO.Compression.CompressionMode]::Decompress)
+          $outPath = Join-Path $PWD "update-0.1.4.patch"
+          $outStream = [IO.File]::Create($outPath)
+          $gzip.CopyTo($outStream)
+          $outStream.Dispose()
+          $gzip.Dispose()
+          $inStream.Dispose()
+
+          Push-Location $project
+          git init -q
+          git apply --check "$env:GITHUB_WORKSPACE\update-0.1.4.patch"
+          git apply --whitespace=nowarn "$env:GITHUB_WORKSPACE\update-0.1.4.patch"
+          Pop-Location
+
+          $csproj = Get-Content "$project\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj" -Raw
+          if ($csproj -notmatch '<Version>0\.1\.4</Version>') { throw "Versao 0.1.4 nao aplicada." }
+          Write-Host "Patch 0.1.4 aplicado com sucesso."
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -38,7 +66,7 @@ jobs:
         working-directory: .\work\ONCA-PDV-PRO
         run: dotnet restore .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj --configfile .\NuGet.Config
 
-      - name: Test focused suite
+      - name: Run all tests
         shell: pwsh
         working-directory: .\work\ONCA-PDV-PRO
         run: dotnet test .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj -c Release --no-restore --logger "console;verbosity=normal"
@@ -73,27 +101,35 @@ jobs:
         working-directory: .\work\ONCA-PDV-PRO
         run: |
           $candidates = @(
-            "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
-            "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
-            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+            "C:\Program Files\Inno Setup 6\ISCC.exe",
+            "C:\ProgramData\chocolatey\bin\ISCC.exe"
           )
-          $iscc = $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $iscc) { throw "Inno Setup 6 nao encontrado." }
+
           & $iscc .\installer\ONCA-PDV-PRO.iss
           if ($LASTEXITCODE -ne 0) { throw "Falha ao gerar instalador." }
+
           $setup = ".\installer\Output\ONCA-PDV-PRO-Setup.exe"
           if (-not (Test-Path $setup)) { throw "Instalador nao foi gerado." }
           $hash = (Get-FileHash $setup -Algorithm SHA256).Hash
           "$hash  ONCA-PDV-PRO-Setup.exe" | Set-Content "$setup.sha256" -Encoding ascii
           Write-Host "SETUP SHA256=$hash"
 
+      - name: Package source 0.1.4
+        shell: pwsh
+        run: |
+          Compress-Archive -Path ".\work\ONCA-PDV-PRO\*" -DestinationPath ".\ONCA-PDV-PRO-SOURCE-0.1.4.zip" -Force
+
       - name: Upload final Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ONCA-PDV-PRO-0.1.3-Windows
+          name: ONCA-PDV-PRO-0.1.4-Windows
           if-no-files-found: error
           retention-days: 7
           path: |
             work/ONCA-PDV-PRO/publish/**
             work/ONCA-PDV-PRO/installer/Output/ONCA-PDV-PRO-Setup.exe
             work/ONCA-PDV-PRO/installer/Output/ONCA-PDV-PRO-Setup.exe.sha256
+            ONCA-PDV-PRO-SOURCE-0.1.4.zip
