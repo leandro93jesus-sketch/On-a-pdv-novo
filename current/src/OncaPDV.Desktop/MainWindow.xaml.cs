@@ -118,6 +118,7 @@ public partial class MainWindow : Window
         try
         {
             await _workflow.AddProductAsync(dialog.Product!, add);
+            if (dialog.Extra is not null) await new ProductMetadataStore(_database).SaveAsync(dialog.Extra);
             if (add) RefreshCart();
             SetStatus("PRODUTO CADASTRADO");
         }
