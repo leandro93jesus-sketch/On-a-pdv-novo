@@ -16,6 +16,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Reconstruct source bundle
+        shell: pwsh
+        run: |
+          if (Test-Path .\ci\source.part01) {
+            $parts = Get-ChildItem .\ci\source.part* | Sort-Object Name
+            $base64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+            [IO.File]::WriteAllBytes((Join-Path $PWD 'source.tar.gz'), [Convert]::FromBase64String($base64))
+            tar -xzf .\source.tar.gz
+            Remove-Item .\source.tar.gz -Force
+          }
+          if (-not (Test-Path .\OncaPDV.slnx)) { throw "Fonte do ONCA PDV nao foi reconstruida." }
+
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
