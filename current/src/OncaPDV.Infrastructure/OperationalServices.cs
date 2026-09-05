@@ -11,7 +11,7 @@ namespace OncaPDV.Infrastructure;
 public sealed record CreditView(Guid Id,Guid CustomerId,string Customer,long SaleNumber,decimal Original,decimal Paid,decimal Balance,DateTimeOffset DueAt,CreditStatus Status);
 public sealed record CreditMovement(Guid Id,decimal Amount,PaymentMethod Method,DateTimeOffset CreatedAt,string? Notes);
 public sealed record SalesSummary(int Quantity,decimal Gross,decimal Discounts,decimal Net,decimal Cash,decimal Pix,decimal Debit,decimal Credit,decimal StoreCredit,decimal CreditReceipts);
-public sealed record SalesHistoryView(Guid Id,long Number,DateTimeOffset CreatedAt,string Customer,int ItemLines,decimal ItemQuantity,decimal Gross,decimal Discount,decimal Total,string Payments,decimal CashReceived,decimal Change,string Operator,string Status);
+public sealed record SalesHistoryView(Guid Id,long Number,DateTimeOffset CreatedAt,string Customer,string Products,int ItemLines,decimal ItemQuantity,decimal Gross,decimal Discount,decimal Total,string Payments,decimal CashReceived,decimal Change,string Operator,string Status);
 public sealed record StockView(Guid Id,string Product,string Code,string? Barcode,string? Category,string? Brand,string Unit,decimal Stock,decimal Minimum,decimal Cost,decimal Price,decimal EstimatedCost,decimal EstimatedSale,decimal MarginPercent,string Status);
 public sealed record StockMovementView(Guid Id,DateTimeOffset CreatedAt,string Type,decimal Quantity,string Reason,string Origin);
 public sealed record CashSnapshot(Guid SessionId,DateTimeOffset OpenedAt,decimal Opening,decimal CashSales,decimal Pix,decimal Debit,decimal Credit,decimal StoreCreditGenerated,decimal CreditReceipts,decimal Withdrawals,decimal Supplies,decimal ExpectedCash,decimal TotalSales,int SalesCount);
@@ -52,6 +52,7 @@ public sealed class OperationalService(OncaDatabase db,AppPaths paths)
   var list=new List<SalesHistoryView>();await using var c=db.Open();await using var q=c.CreateCommand();
   q.CommandText="""
   SELECT s.id,s.number,s.created_at,COALESCE(c.name,'CONSUMIDOR'),
+  COALESCE((SELECT GROUP_CONCAT(si.name || ' x' || printf('%.3g',si.quantity),' | ') FROM sale_items si WHERE si.sale_id=s.id),''),
   (SELECT COUNT(*) FROM sale_items i WHERE i.sale_id=s.id),
   COALESCE((SELECT SUM(quantity) FROM sale_items i WHERE i.sale_id=s.id),0),
   COALESCE((SELECT SUM(subtotal) FROM sale_items i WHERE i.sale_id=s.id),s.total+s.discount),
@@ -72,7 +73,7 @@ public sealed class OperationalService(OncaDatabase db,AppPaths paths)
   """;
   q.Parameters.AddWithValue("$from",from.ToString("O"));q.Parameters.AddWithValue("$to",to.ToString("O"));q.Parameters.AddWithValue("$search",search.Trim());q.Parameters.AddWithValue("$like",$"%{search.Trim()}%");q.Parameters.AddWithValue("$payment",payment);q.Parameters.AddWithValue("$status",status);
   await using var r=await q.ExecuteReaderAsync(ct);
-  while(await r.ReadAsync(ct))list.Add(new(Guid.Parse(r.GetString(0)),r.GetInt64(1),DateTimeOffset.Parse(r.GetString(2)),r.GetString(3),r.GetInt32(4),r.GetDecimal(5),r.GetDecimal(6),r.GetDecimal(7),r.GetDecimal(8),FriendlyPayments(r.GetString(9)),r.GetDecimal(10),r.GetDecimal(11),r.GetString(12),FriendlySaleStatus(r.GetString(13))));
+  while(await r.ReadAsync(ct))list.Add(new(Guid.Parse(r.GetString(0)),r.GetInt64(1),DateTimeOffset.Parse(r.GetString(2)),r.GetString(3),r.GetString(4),r.GetInt32(5),r.GetDecimal(6),r.GetDecimal(7),r.GetDecimal(8),r.GetDecimal(9),FriendlyPayments(r.GetString(10)),r.GetDecimal(11),r.GetDecimal(12),r.GetString(13),FriendlySaleStatus(r.GetString(14))));
   return list;
  }
  public async Task<Sale?> SaleAsync(Guid id,CancellationToken ct=default)=>await new SqliteSaleRepository(db,new SystemClock()).GetAsync(id,ct);
@@ -185,8 +186,8 @@ public sealed class OperationalService(OncaDatabase db,AppPaths paths)
  {
   paths.EnsureCreated();var file=Path.Combine(paths.Exports,$"historico-vendas-{DateTime.Now:yyyyMMdd-HHmmssfff}.csv");
   static string E(object? value){var s=Convert.ToString(value,CultureInfo.GetCultureInfo("pt-BR"))??string.Empty;return "\""+s.Replace("\"","\"\"")+"\"";}
-  var sb=new StringBuilder();sb.AppendLine("Venda;DataHora;Cliente;Status;Linhas;Quantidade;Bruto;Desconto;Total;Pagamentos;RecebidoDinheiro;Troco;Operador");
-  foreach(var x in rows)sb.AppendLine(string.Join(";",new[]{E(x.Number.ToString("000000")),E(x.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")),E(x.Customer),E(x.Status),E(x.ItemLines),E(x.ItemQuantity.ToString("N2")),E(x.Gross.ToString("N2")),E(x.Discount.ToString("N2")),E(x.Total.ToString("N2")),E(x.Payments),E(x.CashReceived.ToString("N2")),E(x.Change.ToString("N2")),E(x.Operator)}));
+  var sb=new StringBuilder();sb.AppendLine("Venda;DataHora;Cliente;Produtos;Status;Linhas;Quantidade;Bruto;Desconto;Total;Pagamentos;RecebidoDinheiro;Troco;Operador");
+  foreach(var x in rows)sb.AppendLine(string.Join(";",new[]{E(x.Number.ToString("000000")),E(x.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")),E(x.Customer),E(x.Products),E(x.Status),E(x.ItemLines),E(x.ItemQuantity.ToString("N2")),E(x.Gross.ToString("N2")),E(x.Discount.ToString("N2")),E(x.Total.ToString("N2")),E(x.Payments),E(x.CashReceived.ToString("N2")),E(x.Change.ToString("N2")),E(x.Operator)}));
   await File.WriteAllTextAsync(file,"\uFEFF"+sb,Encoding.UTF8,ct);return file;
  }
  public async Task<string> SalePdfAsync(Sale sale,bool secondCopy=false,CancellationToken ct=default)=>await PdfAsync(secondCopy?"SEGUNDA VIA — VENDA":"RECIBO DE VENDA",[$"Venda: {sale.Number:000000}",$"Data: {sale.CreatedAt:dd/MM/yyyy HH:mm}",..sale.Items.Select(x=>$"{x.Name}  {x.Quantity:N2} x {x.UnitPrice:C} = {x.Subtotal:C}"),$"Desconto: {sale.Discount:C}",$"TOTAL: {sale.Total:C}",$"Pagamentos: {string.Join(" | ",sale.Payments.Select(x=>$"{x.Method}: {x.Amount:C}"))}"],ct);
