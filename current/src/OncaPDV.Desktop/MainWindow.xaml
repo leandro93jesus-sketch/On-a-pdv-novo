@@ -122,6 +122,8 @@
                     <Button Style="{StaticResource NavButton}" Content="▥   Histórico / Relatórios" Click="Reports_Click"/>
                     <Button Style="{StaticResource NavButton}" Content="🧾   Dados do comprovante" Click="ReceiptSettings_Click"/>
                     <Button Style="{StaticResource NavButton}" Content="⚙   Impressora" Click="Printer_Click"/>
+                    <Button Style="{StaticResource NavButton}" Content="👤   Usuários / Permissões" Click="Users_Click"/>
+                    <Button Style="{StaticResource NavButton}" Content="💾   Backup automático" Click="BackupSettings_Click"/>
                     <Button Style="{StaticResource NavButton}" Content="✓   Diagnóstico" Click="Diagnostic_Click"/>
                 </StackPanel>
                 <StackPanel Grid.Row="2" Margin="18,8,14,14" VerticalAlignment="Bottom">
@@ -153,7 +155,7 @@
                 <Border Grid.Column="3" Background="#F6F8F7" CornerRadius="9" Padding="12,7" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="👤" FontSize="19" Margin="0,0,8,0"/>
-                        <StackPanel><TextBlock Text="Caixa" FontSize="11" Foreground="#7B8881"/><TextBlock Text="Administrador" FontWeight="Bold" Foreground="#29352F"/></StackPanel>
+                        <StackPanel><TextBlock x:Name="OperatorRoleText" Text="Perfil" FontSize="11" Foreground="#7B8881"/><TextBlock x:Name="OperatorNameText" Text="Administrador" FontWeight="Bold" Foreground="#29352F"/></StackPanel>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -192,7 +194,7 @@
                         </DataGrid.Columns>
                     </DataGrid>
                     <Grid Grid.Row="2" Margin="13,4">
-                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock x:Name="CartSummaryText" Text="Carrinho vazio • salvo automaticamente" Foreground="#69766F" FontWeight="SemiBold"/>
                             <TextBlock Text="Selecione um item: +1 / −1 / remover • DEL remove" FontSize="11" Foreground="#8A9690"/>
@@ -200,8 +202,10 @@
                         <Button Grid.Column="1" Style="{StaticResource SoftButton}" Content="+1" Width="56" Click="IncreaseSelected_Click"/>
                         <Button Grid.Column="2" Style="{StaticResource SoftButton}" Content="−1" Width="56" Click="DecreaseSelected_Click"/>
                         <Button Grid.Column="3" Style="{StaticResource DangerButton}" Content="REMOVER" Click="RemoveSelected_Click"/>
-                        <Button Grid.Column="4" Style="{StaticResource SoftButton}" Content="👤 CLIENTE [F4]" Click="Customer_Click"/>
-                        <Button Grid.Column="5" Style="{StaticResource SoftButton}" Content="🧾 CUPOM" Click="Preview_Click"/>
+                        <Button Grid.Column="4" Style="{StaticResource SoftButton}" Content="PREÇO" Click="ChangePrice_Click"/>
+                        <Button Grid.Column="5" Style="{StaticResource SoftButton}" Content="DESCONTO" Click="Discount_Click"/>
+                        <Button Grid.Column="6" Style="{StaticResource SoftButton}" Content="👤 CLIENTE [F4]" Click="Customer_Click"/>
+                        <Button Grid.Column="7" Style="{StaticResource SoftButton}" Content="🧾 CUPOM" Click="Preview_Click"/>
                     </Grid>
                 </Grid>
             </Border>
@@ -280,6 +284,8 @@
                     <Button Style="{StaticResource SoftButton}" Content="Diagnóstico" Click="Diagnostic_Click"/>
                     <Button Style="{StaticResource SoftButton}" Content="Caixa" Click="Cash_Click"/>
                     <Button Style="{StaticResource SoftButton}" Content="Compras" Click="Purchases_Click"/>
+                    <Button Style="{StaticResource SoftButton}" Content="Usuários" Click="Users_Click"/>
+                    <Button Style="{StaticResource SoftButton}" Content="Backup" Click="BackupSettings_Click"/>
                 </UniformGrid>
             </StackPanel>
         </ScrollViewer>
@@ -288,7 +294,7 @@
         <Border Grid.Column="1" Grid.ColumnSpan="2" Grid.Row="2" Background="White" BorderBrush="#E1E7E4" BorderThickness="0,1,0,0">
             <Grid Margin="18,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <TextBlock x:Name="RecoveryText" Foreground="#B16E00" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="F1 Produto • F2 Pagamento • F3 Consulta • F4 Cliente • F5–F9 Formas • ESC Cancelar" Foreground="#67756E" VerticalAlignment="Center" Margin="12,0"/>
+                <TextBlock Grid.Column="1" Text="F1 Produto • F2 Pagamento • F3 Consulta • F4 Cliente • F5–F9 Formas • Ctrl+P Preço • Ctrl+D Desconto • ESC Cancelar" Foreground="#67756E" VerticalAlignment="Center" Margin="12,0"/>
                 <TextBlock Grid.Column="2" x:Name="DatabaseStatus" Foreground="#67756E" VerticalAlignment="Center"/>
             </Grid>
         </Border>
