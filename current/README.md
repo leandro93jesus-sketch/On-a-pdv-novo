@@ -2,9 +2,9 @@
 
 PDV desktop Windows da **Onça Produtos de Limpeza**, em C# / .NET 10.
 
-## Estado desta entrega (0.1.3)
+## Estado desta entrega (0.1.5)
 
-Esta fonte preserva o trabalho já aprovado e acrescenta o fechamento das pendências mais importantes sem reconstruir o projeto:
+A versão 0.1.5 consolida o PDV não fiscal e melhora diretamente a operação diária:
 
 - venda, carrinho recuperável, clientes, caixa, crediário, compras e fornecedores;
 - produtos com nomes iguais/parecidos permitidos, mantendo código interno e código de barras únicos;
@@ -15,7 +15,12 @@ Esta fonte preserva o trabalho já aprovado e acrescenta o fechamento das pendê
 - compatibilidade preparada para o backup real `onca-pdv-backup-2026-09-04-173615.db` (app legado 1.2.19);
 - layout principal atualizado para o padrão verde/branco definido para o ONÇA PDV PRO;
 - tela de Crediário no mesmo padrão visual;
-- tela de Pagamento com **DINHEIRO RECEBIDO** e **TROCO** em grande destaque.
+- tela de Pagamento com **DINHEIRO RECEBIDO** e **TROCO** em grande destaque;
+- tela de vendas com atalhos F3–F9, consulta rápida sem adicionar ao carrinho e controles +1/−1/remover;
+- recuperação de carrinho com cópia principal + backup automático contra corrupção do snapshot;
+- histórico de vendas com filtros por forma/status e exportação CSV;
+- estoque com ajuste físico auditado e histórico de movimentações por produto;
+- caixa com abertura pelo último saldo fechado e histórico dos últimos fechamentos.
 
 ### Backup real de referência
 
