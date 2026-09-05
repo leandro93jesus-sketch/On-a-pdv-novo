@@ -196,7 +196,7 @@
 
                     <Border Background="#F8FAF9" BorderBrush="#E2E8E5" BorderThickness="1" CornerRadius="10" Padding="12">
                         <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="190"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="190"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                             <StackPanel>
                                 <TextBlock Text="BUSCAR PRODUTO" FontSize="11" Foreground="#748179"/>
                                 <TextBox x:Name="StockSearch" ToolTip="Nome, código interno, código de barras, categoria ou marca" KeyDown="StockSearch_KeyDown"/>
@@ -213,6 +213,7 @@
                             <Button Grid.Column="2" Style="{StaticResource PrimaryButton}" Content="ATUALIZAR" Click="StockSearch_Click" VerticalAlignment="Bottom" Margin="12,3,3,3"/>
                             <Button Grid.Column="3" Style="{StaticResource SoftButton}" Content="EDITAR CADASTRO" Click="EditStockProduct_Click" VerticalAlignment="Bottom"/>
                             <Button Grid.Column="4" Style="{StaticResource PrimaryButton}" Content="AJUSTAR / MOVIMENTOS" Click="StockControl_Click" VerticalAlignment="Bottom"/>
+                            <Button Grid.Column="5" Style="{StaticResource SoftButton}" Content="REPOSIÇÃO / SEM GIRO" Click="StockPlanning_Click" VerticalAlignment="Bottom"/>
                         </Grid>
                     </Border>
 
