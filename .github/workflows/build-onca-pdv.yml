@@ -50,6 +50,8 @@ jobs:
           git init -q
           git apply --check "$env:GITHUB_WORKSPACE\update-0.1.4.patch"
           git apply --whitespace=nowarn "$env:GITHUB_WORKSPACE\update-0.1.4.patch"
+          git apply --check "$env:GITHUB_WORKSPACE\patches\0.1.4\hotfix-raw-strings.patch"
+          git apply --whitespace=nowarn "$env:GITHUB_WORKSPACE\patches\0.1.4\hotfix-raw-strings.patch"
           Pop-Location
 
           $csproj = Get-Content "$project\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj" -Raw
