@@ -1,0 +1,34 @@
+<Window x:Class="OncaPDV.Desktop.BackupSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Backup automático" Width="650" Height="560" WindowStartupLocation="CenterOwner" Background="#F7F9F8">
+    <Grid Margin="22">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="BACKUP AUTOMÁTICO" FontSize="26" FontWeight="Bold" Foreground="#173D29"/>
+            <TextBlock Text="O sistema mantém uma cópia diária e pode duplicá-la para outra pasta, HD externo ou pendrive." Foreground="#6B7972" TextWrapping="Wrap"/>
+        </StackPanel>
+        <StackPanel Grid.Row="1" Margin="0,18,0,0">
+            <CheckBox x:Name="EnabledBox" Content="Ativar backup automático diário" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,16"/>
+            <TextBlock Text="Quantidade de backups locais a manter"/>
+            <TextBox x:Name="RetentionBox" FontSize="16" Padding="8" Width="120" HorizontalAlignment="Left" Margin="0,4,0,15"/>
+            <TextBlock Text="Cópia externa (opcional)"/>
+            <Grid Margin="0,4,0,12">
+                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBox x:Name="ExternalFolderBox" FontSize="15" Padding="8"/>
+                <Button Grid.Column="1" Content="ESCOLHER PASTA" Click="Browse_Click" Padding="12,8" Margin="7,0,0,0"/>
+            </Grid>
+            <Border Background="#EAF7EE" BorderBrush="#CFE6D6" BorderThickness="1" CornerRadius="9" Padding="12">
+                <StackPanel>
+                    <TextBlock Text="STATUS DO ÚLTIMO BACKUP" FontWeight="Bold" Foreground="#0B6B3A"/>
+                    <TextBlock x:Name="LastBackupText" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                </StackPanel>
+            </Border>
+            <Button Content="GERAR BACKUP AGORA" Click="BackupNow_Click" Background="#0B6B3A" Foreground="White" FontWeight="Bold" Padding="15,10" HorizontalAlignment="Left" Margin="0,16,0,0"/>
+            <TextBlock x:Name="StatusText" Foreground="#5F6D65" TextWrapping="Wrap" Margin="0,12,0,0"/>
+        </StackPanel>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="FECHAR" IsCancel="True" Padding="14,9" Margin="4"/>
+            <Button Content="SALVAR" Click="Save_Click" Background="#0B6B3A" Foreground="White" FontWeight="Bold" Padding="16,9" Margin="4"/>
+        </StackPanel>
+    </Grid>
+</Window>
