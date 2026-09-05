@@ -267,11 +267,76 @@ public sealed class SqliteCashSessionRepository(OncaDatabase database,IClock clo
 
 public sealed class JsonCartRecoveryStore(AppPaths paths) : ICartRecoveryStore
 {
-    private string FilePath => Path.Combine(paths.Data,"pending-cart.json");
-    private sealed record Snapshot(Guid? CustomerId,decimal Discount,List<CartItem> Items);
-    public async Task SaveAsync(Cart cart,CancellationToken ct=default){paths.EnsureCreated();var json=JsonSerializer.Serialize(new Snapshot(cart.CustomerId,cart.Discount,cart.Items.ToList()),new JsonSerializerOptions{WriteIndented=true});var temp=FilePath+".tmp";await File.WriteAllTextAsync(temp,json,ct);File.Move(temp,FilePath,true);}
-    public async Task<Cart?> LoadAsync(CancellationToken ct=default){if(!File.Exists(FilePath))return null;var s=JsonSerializer.Deserialize<Snapshot>(await File.ReadAllTextAsync(FilePath,ct));if(s is null)return null;var cart=new Cart{CustomerId=s.CustomerId};foreach(var i in s.Items)cart.Add(new Product(i.ProductId,i.Code,null,i.Name,null,null,null,0,i.UnitPrice,999999,0,"UN",null,null,true),i.Quantity);cart.SetDiscount(s.Discount);return cart;}
-    public Task ClearAsync(CancellationToken ct=default){if(File.Exists(FilePath))File.Delete(FilePath);return Task.CompletedTask;}
+    private string FilePath => Path.Combine(paths.Data, "pending-cart.json");
+    private string BackupPath => Path.Combine(paths.Data, "pending-cart.bak.json");
+    private string TempPath => Path.Combine(paths.Data, "pending-cart.tmp.json");
+
+    private sealed record Snapshot(int Version, DateTimeOffset SavedAt, Guid? CustomerId, decimal Discount, List<CartItem> Items);
+
+    public async Task SaveAsync(Cart cart, CancellationToken ct = default)
+    {
+        paths.EnsureCreated();
+        var snapshot = new Snapshot(2, DateTimeOffset.Now, cart.CustomerId, cart.Discount, cart.Items.ToList());
+        var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions { WriteIndented = true });
+
+        await File.WriteAllTextAsync(TempPath, json, ct);
+        File.Move(TempPath, FilePath, true);
+
+        // Mantém uma segunda cópia para recuperar a venda mesmo se o arquivo
+        // principal for corrompido por uma queda de energia no momento errado.
+        File.Copy(FilePath, BackupPath, true);
+    }
+
+    public async Task<Cart?> LoadAsync(CancellationToken ct = default)
+    {
+        var primary = await TryLoadAsync(FilePath, ct);
+        if (primary is not null) return primary;
+
+        var backup = await TryLoadAsync(BackupPath, ct);
+        if (backup is null) return null;
+
+        // Reconstrói a cópia principal automaticamente a partir do backup válido.
+        await SaveAsync(backup, ct);
+        return backup;
+    }
+
+    private static async Task<Cart?> TryLoadAsync(string file, CancellationToken ct)
+    {
+        if (!File.Exists(file)) return null;
+        try
+        {
+            var json = await File.ReadAllTextAsync(file, ct);
+            var s = JsonSerializer.Deserialize<Snapshot>(json);
+            if (s?.Items is null || s.Items.Count == 0) return null;
+
+            var cart = new Cart { CustomerId = s.CustomerId };
+            foreach (var i in s.Items)
+            {
+                var recovered = new Product(
+                    i.ProductId, i.Code, null, i.Name, null, null, null,
+                    0, i.UnitPrice, 999999, 0, "UN", null, null, true);
+                cart.Add(recovered, i.Quantity);
+            }
+
+            cart.SetDiscount(Math.Min(s.Discount, cart.GrossTotal));
+            return cart;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
+    public Task ClearAsync(CancellationToken ct = default)
+    {
+        foreach (var file in new[] { FilePath, BackupPath, TempPath })
+            if (File.Exists(file)) File.Delete(file);
+        return Task.CompletedTask;
+    }
 }
 
 public sealed class BackupService(OncaDatabase database, AppPaths paths)
