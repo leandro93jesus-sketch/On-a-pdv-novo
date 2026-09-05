@@ -60,6 +60,14 @@ public sealed class OperationalService(OncaDatabase db,AppPaths paths)
   if(!await r.ReadAsync(ct))return(null,"SEM BACKUP REGISTRADO",null);
   return(DateTimeOffset.Parse(r.GetString(0)),r.GetString(1),r.IsDBNull(2)?null:r.GetString(2));
  }
+ public async Task AuditAsync(Guid userId,string action,string entity,string entityId,object? before,object? after,string reason,CancellationToken ct=default)
+ {
+  await using var c=db.Open();await using var q=c.CreateCommand();
+  q.CommandText="INSERT INTO audit_log(id,user_id,action,entity,entity_id,before_json,after_json,reason,created_at) VALUES($id,$user,$action,$entity,$entityId,$before,$after,$reason,$at)";
+  q.Parameters.AddWithValue("$id",Guid.NewGuid().ToString());q.Parameters.AddWithValue("$user",userId.ToString());q.Parameters.AddWithValue("$action",action);q.Parameters.AddWithValue("$entity",entity);q.Parameters.AddWithValue("$entityId",entityId);
+  q.Parameters.AddWithValue("$before",before is null?DBNull.Value:JsonSerializer.Serialize(before));q.Parameters.AddWithValue("$after",after is null?DBNull.Value:JsonSerializer.Serialize(after));q.Parameters.AddWithValue("$reason",reason);q.Parameters.AddWithValue("$at",DateTimeOffset.Now.ToString("O"));
+  await q.ExecuteNonQueryAsync(ct);
+ }
  public async Task<IReadOnlyList<CreditView>> CreditsAsync(string status="Todos",Guid? customer=null,CancellationToken ct=default){var list=new List<CreditView>();await using var c=db.Open();await using var q=c.CreateCommand();q.CommandText="""SELECT a.id,a.customer_id,c.name,s.number,a.original_amount,a.balance,a.due_at,a.status FROM credit_accounts a JOIN customers c ON c.id=a.customer_id JOIN sales s ON s.id=a.sale_id WHERE ($customer IS NULL OR a.customer_id=$customer) AND ($status='Todos' OR a.status=$status OR ($status='Overdue' AND a.balance>0 AND a.due_at<$now)) ORDER BY a.due_at DESC LIMIT 500""";q.Parameters.AddWithValue("$customer",(object?)customer?.ToString()??DBNull.Value);q.Parameters.AddWithValue("$status",status);q.Parameters.AddWithValue("$now",DateTimeOffset.Now.ToString("O"));await using var r=await q.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct)){var due=DateTimeOffset.Parse(r.GetString(6));var st=Enum.Parse<CreditStatus>(r.GetString(7));if(st is not CreditStatus.Paid&&due<DateTimeOffset.Now)st=CreditStatus.Overdue;var original=r.GetDecimal(4);var balance=r.GetDecimal(5);list.Add(new(Guid.Parse(r.GetString(0)),Guid.Parse(r.GetString(1)),r.GetString(2),r.GetInt64(3),original,original-balance,balance,due,st));}return list;}
  public async Task<CustomerCreditProfile> CustomerCreditProfileAsync(Guid customerId,CancellationToken ct=default)
  {
