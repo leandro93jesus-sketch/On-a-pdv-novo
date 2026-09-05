@@ -13,8 +13,10 @@ namespace OncaPDV.Desktop;
 public partial class MainWindow : Window
 {
     private const string TerminalId = "CAIXA-01";
-    private static readonly Guid OperatorId = Guid.Parse("10000000-0000-0000-0000-000000000001");
     private readonly AppPaths _paths = AppPaths.Default();
+    private readonly AppUser _user;
+    private readonly Guid _operatorId;
+    private readonly PermissionService _security;
     private readonly OncaDatabase _database;
     private readonly PosWorkflow _workflow;
     private readonly CustomerService _customers;
@@ -29,6 +31,9 @@ public partial class MainWindow : Window
         AppServices.Database = _database;
         AppServices.Paths = _paths;
         _database.Migrate();
+        _user = AppSession.CurrentUser ?? new AppUser(Guid.Parse("10000000-0000-0000-0000-000000000001"), "admin", "Administrador", UserRole.Admin, true, false);
+        _operatorId = _user.Id;
+        _security = new(_database);
 
         var products = new SqliteProductRepository(_database);
         var sales = new SqliteSaleRepository(_database, new SystemClock());
@@ -53,8 +58,15 @@ public partial class MainWindow : Window
         var recovered = await _workflow.InitializeAsync();
         RefreshCart();
         await RefreshSales();
-        await new OperationalService(_database, _paths).EnsureDailyBackupAsync();
-        DatabaseStatus.Text = $"Banco: {_database.IntegrityCheck()} • abertura {sw.ElapsedMilliseconds} ms • backup diário OK";
+        var ops = new OperationalService(_database, _paths);
+        await ops.EnsureDailyBackupAsync();
+        var backupStatus = await ops.BackupStatusAsync();
+        var backupLabel = backupStatus.LastBackup is null
+            ? "backup: não registrado"
+            : $"backup: {backupStatus.LastBackup.Value.ToLocalTime():dd/MM HH:mm}";
+        DatabaseStatus.Text = $"Banco: {_database.IntegrityCheck()} • abertura {sw.ElapsedMilliseconds} ms • {backupLabel}";
+        OperatorNameText.Text = _user.DisplayName;
+        OperatorRoleText.Text = _user.Role.ToString().ToUpperInvariant();
         RecoveryText.Text = recovered ? "⚠ CARRINHO RECUPERADO DE UMA SESSÃO ANTERIOR" : "✓ Venda atual protegida por recuperação automática";
         SearchBox.Focus();
     }
@@ -95,6 +107,11 @@ public partial class MainWindow : Window
 
     private async Task OpenProduct(string? barcode = null, bool add = false)
     {
+        if (!_security.Has(_user, AppPermission.ManageProducts))
+        {
+            MessageBox.Show("Seu perfil não pode cadastrar produtos. Solicite um administrador ou estoquista.", "Permissão", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         var dialog = new ProductWindow(barcode) { Owner = this };
         if (dialog.ShowDialog() != true) return;
 
@@ -125,7 +142,14 @@ public partial class MainWindow : Window
 
         try
         {
-            var sale = await _workflow.CompleteAsync(dialog.Payments, OperatorId);
+            var storeCredit = dialog.Payments.Where(x => x.Method == PaymentMethod.StoreCredit).Sum(x => x.Amount);
+            if (storeCredit > 0)
+            {
+                if (_workflow.Cart.CustomerId is not Guid customerId)
+                    throw new DomainException("Crediário exige cliente.");
+                await new OperationalService(_database, _paths).EnsureCreditAvailableAsync(customerId, storeCredit);
+            }
+            var sale = await _workflow.CompleteAsync(dialog.Payments, _operatorId);
             var printed = await PrintSaleAsync(sale);
             await RefreshSales();
             RefreshCart();
@@ -199,22 +223,36 @@ public partial class MainWindow : Window
         new CustomerSearchWindow(_customers, true) { Owner = this }.ShowDialog();
 
     private void Credit_Click(object sender, RoutedEventArgs e) =>
-        new CreditWindow(_database, OperatorId) { Owner = this }.ShowDialog();
+        new CreditWindow(_database, _operatorId) { Owner = this }.ShowDialog();
 
-    private void Purchases_Click(object sender, RoutedEventArgs e) =>
+    private void Purchases_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_security.Has(_user, AppPermission.ManagePurchases))
+        {
+            MessageBox.Show("Seu perfil não tem acesso a compras/fornecedores.", "Permissão", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         new PurchasesWindow(_database) { Owner = this }.ShowDialog();
+    }
 
     private void Operations_Click(object sender, RoutedEventArgs e) =>
-        new OperationsWindow(_database, _paths, OperatorId, OperationsSection.Sales) { Owner = this }.ShowDialog();
+        new OperationsWindow(_database, _paths, _operatorId, OperationsSection.Sales) { Owner = this }.ShowDialog();
 
     private void Reports_Click(object sender, RoutedEventArgs e) =>
-        new OperationsWindow(_database, _paths, OperatorId, OperationsSection.Sales) { Owner = this }.ShowDialog();
+        new OperationsWindow(_database, _paths, _operatorId, OperationsSection.Sales) { Owner = this }.ShowDialog();
 
-    private void Stock_Click(object sender, RoutedEventArgs e) =>
-        new OperationsWindow(_database, _paths, OperatorId, OperationsSection.Stock) { Owner = this }.ShowDialog();
+    private void Stock_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_security.Has(_user, AppPermission.AdjustStock))
+        {
+            MessageBox.Show("Seu perfil não tem acesso ao controle de estoque.", "Permissão", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        new OperationsWindow(_database, _paths, _operatorId, OperationsSection.Stock) { Owner = this }.ShowDialog();
+    }
 
     private void Cash_Click(object sender, RoutedEventArgs e) =>
-        new OperationsWindow(_database, _paths, OperatorId, OperationsSection.Cash) { Owner = this }.ShowDialog();
+        new OperationsWindow(_database, _paths, _operatorId, OperationsSection.Cash) { Owner = this }.ShowDialog();
 
     private async void Preview_Click(object sender, RoutedEventArgs e)
     {
@@ -228,7 +266,7 @@ public partial class MainWindow : Window
             Guid.NewGuid(),
             0,
             DateTimeOffset.Now,
-            OperatorId,
+            _operatorId,
             _workflow.Cart.CustomerId,
             _workflow.Cart.Items,
             [new(PaymentMethod.Cash, _workflow.Cart.Total, _workflow.Cart.Total)],
@@ -407,8 +445,86 @@ public partial class MainWindow : Window
         await Task.CompletedTask;
     }
 
-    private void Printer_Click(object sender, RoutedEventArgs e) => new PrinterSettingsWindow(_paths) { Owner = this }.ShowDialog();
-    private void ReceiptSettings_Click(object sender, RoutedEventArgs e) => new ReceiptSettingsWindow(_paths) { Owner = this }.ShowDialog();
+    private void Printer_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_security.Has(_user, AppPermission.ConfigurePrinting))
+        {
+            MessageBox.Show("Somente administrador pode alterar a impressora.", "Permissão", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        new PrinterSettingsWindow(_paths) { Owner = this }.ShowDialog();
+    }
+
+    private void ReceiptSettings_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_security.Has(_user, AppPermission.ConfigurePrinting))
+        {
+            MessageBox.Show("Somente administrador pode alterar os dados do comprovante.", "Permissão", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        new ReceiptSettingsWindow(_paths) { Owner = this }.ShowDialog();
+    }
+
+    private void Users_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_security.Has(_user, AppPermission.ManageUsers))
+        {
+            MessageBox.Show("Somente administrador pode gerenciar usuários.", "Permissão", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        new UserManagementWindow(_database) { Owner = this }.ShowDialog();
+    }
+
+    private void BackupSettings_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_security.Has(_user, AppPermission.ConfigureBackup))
+        {
+            MessageBox.Show("Somente administrador pode alterar o backup automático.", "Permissão", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        new BackupSettingsWindow(_database, _paths) { Owner = this }.ShowDialog();
+    }
+
+    private async Task<string?> AuthorizeProtectedActionAsync(string action)
+    {
+        var auth = new AdminAuthorizationWindow(_database, action) { Owner = this };
+        return auth.ShowDialog() == true ? auth.Reason : null;
+    }
+
+    private async void ChangePrice_Click(object sender, RoutedEventArgs e)
+    {
+        var row = SelectedCartRow();
+        if (row is null) { SetStatus("SELECIONE UM ITEM DO CARRINHO"); return; }
+        var reason = await AuthorizeProtectedActionAsync($"Alterar preço do item {row.Name}.");
+        if (reason is null) return;
+
+        var value = new MoneyEntryWindow("ALTERAR PREÇO", row.Name, row.UnitPrice) { Owner = this };
+        if (value.ShowDialog() != true) return;
+
+        var before = row.UnitPrice;
+        await _workflow.ChangeUnitPriceAsync(row.ProductId, value.Value);
+        await new OperationalService(_database, _paths).AuditAsync(_operatorId, "CART_PRICE_CHANGE", "Product", row.ProductId.ToString(), new { Price = before }, new { Price = value.Value }, reason);
+        RefreshCart();
+        SetStatus($"PREÇO ALTERADO COM AUTORIZAÇÃO • {row.Name}");
+        SearchBox.Focus();
+    }
+
+    private async void Discount_Click(object sender, RoutedEventArgs e)
+    {
+        if (_workflow.Cart.Items.Count == 0) { SetStatus("CARRINHO VAZIO"); return; }
+        var reason = await AuthorizeProtectedActionAsync("Aplicar ou alterar desconto da venda atual.");
+        if (reason is null) return;
+
+        var value = new MoneyEntryWindow("DESCONTO DA VENDA", $"Subtotal: {_workflow.Cart.GrossTotal:C}", _workflow.Cart.Discount) { Owner = this };
+        if (value.ShowDialog() != true) return;
+        var before = _workflow.Cart.Discount;
+        await _workflow.SetDiscountAsync(value.Value);
+        await new OperationalService(_database, _paths).AuditAsync(_operatorId, "CART_DISCOUNT_CHANGE", "Cart", _workflow.Cart.Id.ToString(), new { Discount = before }, new { Discount = value.Value }, reason);
+        RefreshCart();
+        SetStatus($"DESCONTO AUTORIZADO • {value.Value:C}");
+        SearchBox.Focus();
+    }
+
     private void Diagnostic_Click(object sender, RoutedEventArgs e) => new DiagnosticWindow(new DiagnosticService(_database, _paths)) { Owner = this }.ShowDialog();
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
@@ -419,6 +535,14 @@ public partial class MainWindow : Window
             SearchBox.SelectAll();
             e.Handled = true;
             return;
+        }
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.P)
+        {
+            ChangePrice_Click(sender, e); e.Handled = true; return;
+        }
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.D)
+        {
+            Discount_Click(sender, e); e.Handled = true; return;
         }
 
         if (e.Key == Key.F1) Product_Click(sender, e);
