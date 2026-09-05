@@ -160,6 +160,18 @@
                     </StackPanel>
                 </Border>
 
+                <Border Background="#EEF5FF" BorderBrush="#D6E3F4" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,12">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel><TextBlock Text="LIMITE" Foreground="#57708A"/><TextBlock x:Name="CreditLimitText" Text="R$ 0,00" FontSize="20" FontWeight="Bold"/></StackPanel>
+                        <StackPanel Grid.Column="1"><TextBlock Text="DISPONÍVEL" Foreground="#57708A"/><TextBlock x:Name="CreditAvailableText" Text="R$ 0,00" FontSize="20" FontWeight="Bold" Foreground="#1767B0"/></StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock x:Name="CreditBlockedText" Text="" Foreground="#B3261E" FontWeight="Bold" HorizontalAlignment="Right"/>
+                            <Button Style="{StaticResource SoftButton}" Content="ALTERAR LIMITE" Click="CreditLimit_Click" Padding="10,7"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
                 <Border Background="#EEF8F1" BorderBrush="#D5E9DA" BorderThickness="1" CornerRadius="10" Padding="14">
                     <StackPanel>
                         <TextBlock Text="RECEBER PAGAMENTO" FontSize="17" FontWeight="Bold" Foreground="#0A6B38" Margin="2,0,0,6"/>
