@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
@@ -24,6 +25,28 @@ public sealed class OperationalService(OncaDatabase db,AppPaths paths)
  public async Task<IReadOnlyList<CreditMovement>> CreditMovementsAsync(Guid account,CancellationToken ct=default){var list=new List<CreditMovement>();await using var c=db.Open();await using var q=c.CreateCommand();q.CommandText="SELECT id,amount,method,created_at,notes FROM credit_receipts WHERE account_id=$id ORDER BY created_at";q.Parameters.AddWithValue("$id",account.ToString());await using var r=await q.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))list.Add(new(Guid.Parse(r.GetString(0)),r.GetDecimal(1),Enum.Parse<PaymentMethod>(r.GetString(2)),DateTimeOffset.Parse(r.GetString(3)),r.IsDBNull(4)?null:r.GetString(4)));return list;}
  public async Task<IReadOnlyList<Sale>> CustomerSalesAsync(Guid customer,CancellationToken ct=default){var repo=new SqliteSaleRepository(db,new SystemClock());var ids=new List<Guid>();await using(var c=db.Open()){await using var q=c.CreateCommand();q.CommandText="SELECT id FROM sales WHERE customer_id=$id AND status='Completed' ORDER BY created_at DESC LIMIT 200";q.Parameters.AddWithValue("$id",customer.ToString());await using var r=await q.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))ids.Add(Guid.Parse(r.GetString(0)));}var result=new List<Sale>();foreach(var id in ids){var sale=await repo.GetAsync(id,ct);if(sale is not null)result.Add(sale);}return result;}
  public async Task<SalesSummary> SalesSummaryAsync(DateTimeOffset from,DateTimeOffset to,Guid? customer=null,Guid? op=null,PaymentMethod? method=null,CancellationToken ct=default){await using var c=db.Open();await using var q=c.CreateCommand();q.CommandText="""SELECT COUNT(*),COALESCE(SUM((SELECT SUM(subtotal) FROM sale_items i WHERE i.sale_id=s.id)),0),COALESCE(SUM(s.discount),0),COALESCE(SUM(s.total),0),COALESCE(SUM((SELECT SUM(amount) FROM payments p WHERE p.sale_id=s.id AND p.method='Cash')),0),COALESCE(SUM((SELECT SUM(amount) FROM payments p WHERE p.sale_id=s.id AND p.method='Pix')),0),COALESCE(SUM((SELECT SUM(amount) FROM payments p WHERE p.sale_id=s.id AND p.method='Debit')),0),COALESCE(SUM((SELECT SUM(amount) FROM payments p WHERE p.sale_id=s.id AND p.method='Credit')),0),COALESCE(SUM((SELECT SUM(amount) FROM payments p WHERE p.sale_id=s.id AND p.method='StoreCredit')),0) FROM sales s WHERE s.status='Completed' AND s.created_at >= $from AND s.created_at < $to AND ($customer IS NULL OR s.customer_id=$customer) AND ($op IS NULL OR s.operator_id=$op) AND ($method IS NULL OR EXISTS(SELECT 1 FROM payments pf WHERE pf.sale_id=s.id AND pf.method=$method))""";q.Parameters.AddWithValue("$from",from.ToString("O"));q.Parameters.AddWithValue("$to",to.ToString("O"));q.Parameters.AddWithValue("$customer",(object?)customer?.ToString()??DBNull.Value);q.Parameters.AddWithValue("$op",(object?)op?.ToString()??DBNull.Value);q.Parameters.AddWithValue("$method",(object?)method?.ToString()??DBNull.Value);await using var r=await q.ExecuteReaderAsync(ct);await r.ReadAsync(ct);var receipts=await Scalar(c,"SELECT COALESCE(SUM(amount),0) FROM credit_receipts WHERE created_at >= $from AND created_at < $to",from,to,ct);return new(r.GetInt32(0),r.GetDecimal(1),r.GetDecimal(2),r.GetDecimal(3),r.GetDecimal(4),r.GetDecimal(5),r.GetDecimal(6),r.GetDecimal(7),r.GetDecimal(8),receipts);}
+ public async Task<SalesSummary> SalesSummaryFilteredAsync(DateTimeOffset from,DateTimeOffset to,string status="Concluidas",PaymentMethod? method=null,CancellationToken ct=default)
+ {
+  await using var c=db.Open();await using var q=c.CreateCommand();
+  q.CommandText="""
+  SELECT COUNT(*),
+  COALESCE(SUM((SELECT SUM(subtotal) FROM sale_items i WHERE i.sale_id=s.id)),0),
+  COALESCE(SUM(s.discount),0),COALESCE(SUM(s.total),0),
+  COALESCE(SUM((SELECT SUM(amount) FROM payments p WHERE p.sale_id=s.id AND p.method='Cash')),0),
+  COALESCE(SUM((SELECT SUM(amount) FROM payments p WHERE p.sale_id=s.id AND p.method='Pix')),0),
+  COALESCE(SUM((SELECT SUM(amount) FROM payments p WHERE p.sale_id=s.id AND p.method='Debit')),0),
+  COALESCE(SUM((SELECT SUM(amount) FROM payments p WHERE p.sale_id=s.id AND p.method='Credit')),0),
+  COALESCE(SUM((SELECT SUM(amount) FROM payments p WHERE p.sale_id=s.id AND p.method='StoreCredit')),0)
+  FROM sales s
+  WHERE s.created_at >= $from AND s.created_at < $to
+    AND ($status='Todos' OR ($status='Concluidas' AND s.status='Completed') OR ($status='Canceladas' AND s.status='Cancelled'))
+    AND ($method IS NULL OR EXISTS(SELECT 1 FROM payments pf WHERE pf.sale_id=s.id AND pf.method=$method))
+  """;
+  q.Parameters.AddWithValue("$from",from.ToString("O"));q.Parameters.AddWithValue("$to",to.ToString("O"));q.Parameters.AddWithValue("$status",status);q.Parameters.AddWithValue("$method",(object?)method?.ToString()??DBNull.Value);
+  await using var r=await q.ExecuteReaderAsync(ct);await r.ReadAsync(ct);
+  var receipts=status=="Canceladas"?0m:await Scalar(c,"SELECT COALESCE(SUM(amount),0) FROM credit_receipts WHERE created_at >= $from AND created_at < $to",from,to,ct);
+  return new(r.GetInt32(0),r.GetDecimal(1),r.GetDecimal(2),r.GetDecimal(3),r.GetDecimal(4),r.GetDecimal(5),r.GetDecimal(6),r.GetDecimal(7),r.GetDecimal(8),receipts);
+ }
  public async Task<IReadOnlyList<SalesHistoryView>> SalesHistoryAsync(DateTimeOffset from,DateTimeOffset to,string search="",string payment="Todos",string status="Concluidas",CancellationToken ct=default)
  {
   var list=new List<SalesHistoryView>();await using var c=db.Open();await using var q=c.CreateCommand();
