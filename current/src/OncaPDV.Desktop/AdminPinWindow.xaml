@@ -1,0 +1,7 @@
+<Window x:Class="OncaPDV.Desktop.AdminPinWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Autorização" Width="430" Height="290" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="#F7F9F8" FontFamily="Segoe UI">
+<Grid Margin="24"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+<TextBlock Text="AUTORIZAÇÃO DE ADMINISTRADOR" FontSize="21" FontWeight="Bold" Foreground="#173D29"/>
+<TextBlock Grid.Row="1" x:Name="ReasonText" TextWrapping="Wrap" Foreground="#66746D" Margin="0,8,0,14"/>
+<PasswordBox Grid.Row="2" x:Name="Pin" FontSize="24" Padding="12,9" MaxLength="12" KeyDown="Pin_KeyDown"/>
+<Grid Grid.Row="3" Margin="0,18,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="150"/></Grid.ColumnDefinitions><Button Content="CANCELAR" IsCancel="True" Padding="12,9"/><Button Grid.Column="1" Content="AUTORIZAR" Click="Authorize_Click" Background="#0B6B3A" Foreground="White" BorderThickness="0" FontWeight="Bold" Padding="12,9"/></Grid>
+</Grid></Window>
