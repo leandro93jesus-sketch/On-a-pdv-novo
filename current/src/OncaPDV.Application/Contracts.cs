@@ -135,6 +135,20 @@ public sealed class PosWorkflow(
         await recovery.SaveAsync(Cart, ct);
     }
 
+    public async Task RemoveItemAsync(Guid productId, CancellationToken ct = default)
+    {
+        Cart.Remove(productId);
+        await recovery.SaveAsync(Cart, ct);
+    }
+
+    public async Task SetDiscountAsync(decimal discount, CancellationToken ct = default)
+    {
+        Cart.SetDiscount(discount);
+        await recovery.SaveAsync(Cart, ct);
+    }
+
+    public async Task PersistAsync(CancellationToken ct = default) => await recovery.SaveAsync(Cart, ct);
+
     public async Task<Sale> CompleteAsync(IReadOnlyList<Payment> payments, Guid operatorId, CancellationToken ct = default)
     {
         var session = await cashSessions.GetOrOpenAsync(operatorId, 0, ct);
