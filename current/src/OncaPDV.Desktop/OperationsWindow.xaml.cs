@@ -345,6 +345,69 @@ public partial class OperationsWindow : Window
             result.Result.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
     }
 
+    private async void CancelSale_Click(object sender, RoutedEventArgs e)
+    {
+        var row = SelectedSaleRow();
+        if (row is null)
+        {
+            MessageBox.Show("Selecione uma venda.", "Histórico", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (row.Status == "CANCELADA")
+        {
+            MessageBox.Show("Esta venda já está cancelada.", "Histórico", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var auth = new AdminAuthorizationWindow(_db, $"Cancelar definitivamente a venda Nº {row.Number:000000}. O estoque será devolvido e o caixa será recalculado.") { Owner = this };
+        if (auth.ShowDialog() != true) return;
+        if (MessageBox.Show($"Confirmar cancelamento da venda {row.Number:000000}?\n\nMotivo: {auth.Reason}", "Cancelar venda", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+
+        try
+        {
+            await _ops.CancelCompletedSaleAsync(row.Id, _operator, auth.Reason);
+            await LoadSales();
+            await LoadStock();
+            await LoadCash();
+            HeaderStatus.Text = $"Venda {row.Number:000000} cancelada e auditada.";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Cancelar venda", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private async void CorrectSale_Click(object sender, RoutedEventArgs e)
+    {
+        var row = SelectedSaleRow();
+        var sale = await SelectedSaleAsync();
+        if (row is null || sale is null) return;
+        if (row.Status == "CANCELADA")
+        {
+            MessageBox.Show("Venda cancelada não pode ser corrigida.", "Histórico", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var auth = new AdminAuthorizationWindow(_db, $"Corrigir itens, quantidades, preços ou desconto da venda Nº {row.Number:000000}.") { Owner = this };
+        if (auth.ShowDialog() != true) return;
+
+        var correction = new SaleCorrectionWindow(sale, auth.Reason) { Owner = this };
+        if (correction.ShowDialog() != true || correction.Request is null) return;
+
+        try
+        {
+            var updated = await _ops.CorrectCompletedSaleAsync(row.Id, _operator, correction.Request);
+            await LoadSales();
+            await LoadStock();
+            await LoadCash();
+            MessageBox.Show($"VENDA CORRIGIDA\n\nVenda Nº {updated.Number:000000}\nNovo total: {updated.Total:C}\nA alteração foi registrada na auditoria.", "Histórico", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Corrigir venda", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     private async Task<(PrintResult Result, bool Physical, string Mode)> PrintSaleAsync(Sale sale, string? customer, bool reprint)
     {
         var printerProfile = await new TerminalPrinterProfileStore(_paths).LoadAsync(TerminalId);
