@@ -241,6 +241,9 @@ public partial class OperationsWindow : Window
 
     private async void StockControl_Click(object sender, RoutedEventArgs e) => await OpenStockControlAsync();
 
+    private void StockPlanning_Click(object sender, RoutedEventArgs e) =>
+        new StockPlanningWindow(_ops) { Owner = this }.ShowDialog();
+
     private async Task OpenStockControlAsync()
     {
         if (StockGrid.SelectedItem is not StockView row)
