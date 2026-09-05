@@ -1,1 +1,59 @@
-<Window x:Class="OncaPDV.Desktop.CustomerHistoryWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Histórico do cliente" Width="850" Height="560" WindowStartupLocation="CenterOwner"><Grid Margin="16"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock x:Name="TitleText" FontSize="24" FontWeight="Bold"/><DataGrid Grid.Row="1" x:Name="Sales" AutoGenerateColumns="False" IsReadOnly="True"><DataGrid.Columns><DataGridTextColumn Header="Venda" Binding="{Binding Number}"/><DataGridTextColumn Header="Data" Binding="{Binding CreatedAt,StringFormat=dd/MM/yyyy HH:mm}" Width="180"/><DataGridTextColumn Header="Total" Binding="{Binding Total,StringFormat=C}"/></DataGrid.Columns></DataGrid><StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="PDF" Click="Pdf_Click"/><Button Content="SEGUNDA VIA" Click="Second_Click"/></StackPanel></Grid></Window>
+<Window x:Class="OncaPDV.Desktop.CustomerHistoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Ficha do Cliente" Width="1180" Height="760" WindowStartupLocation="CenterOwner" Background="#F7F9F8">
+    <Grid Margin="18">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock x:Name="TitleText" FontSize="28" FontWeight="Bold" Foreground="#173D29"/>
+                <TextBlock x:Name="ContactText" Foreground="#66756D" Margin="0,4,0,0"/>
+            </StackPanel>
+            <Button Grid.Column="1" Content="ABRIR CREDIÁRIO COMPLETO" Click="Credit_Click" Background="#0B6B3A" Foreground="White" FontWeight="Bold" Padding="14,9"/>
+        </Grid>
+
+        <UniformGrid Grid.Row="1" Columns="4" Margin="0,14,0,12">
+            <Border Background="#EAF7EE" CornerRadius="9" Padding="12" Margin="3"><StackPanel><TextBlock Text="TOTAL COMPRADO"/><TextBlock x:Name="TotalBoughtText" FontSize="24" FontWeight="Bold" Foreground="#0B6B3A"/></StackPanel></Border>
+            <Border Background="#FFF2F2" CornerRadius="9" Padding="12" Margin="3"><StackPanel><TextBlock Text="CREDIÁRIO EM ABERTO"/><TextBlock x:Name="OpenCreditText" FontSize="24" FontWeight="Bold" Foreground="#C62828"/></StackPanel></Border>
+            <Border Background="#FFF7E8" CornerRadius="9" Padding="12" Margin="3"><StackPanel><TextBlock Text="CONTAS VENCIDAS"/><TextBlock x:Name="OverdueText" FontSize="24" FontWeight="Bold" Foreground="#A86500"/></StackPanel></Border>
+            <Border Background="#EEF5FF" CornerRadius="9" Padding="12" Margin="3"><StackPanel><TextBlock Text="LIMITE DISPONÍVEL"/><TextBlock x:Name="AvailableText" FontSize="24" FontWeight="Bold" Foreground="#1767B0"/></StackPanel></Border>
+        </UniformGrid>
+
+        <TabControl Grid.Row="2">
+            <TabItem Header="COMPRAS / VENDAS">
+                <DataGrid x:Name="Sales" AutoGenerateColumns="False" IsReadOnly="True" Margin="8">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="VENDA" Binding="{Binding Number,StringFormat=000000}" Width="90"/>
+                        <DataGridTextColumn Header="DATA" Binding="{Binding Date,StringFormat=dd/MM/yyyy HH:mm}" Width="150"/>
+                        <DataGridTextColumn Header="PRODUTOS" Binding="{Binding Products}" Width="*"/>
+                        <DataGridTextColumn Header="TOTAL" Binding="{Binding Total,StringFormat=C}" Width="110"/>
+                        <DataGridTextColumn Header="PAGAMENTO" Binding="{Binding Payments}" Width="220"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem Header="CREDIÁRIO">
+                <DataGrid x:Name="Credits" AutoGenerateColumns="False" IsReadOnly="True" Margin="8">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="VENDA" Binding="{Binding SaleNumber,StringFormat=000000}" Width="95"/>
+                        <DataGridTextColumn Header="ORIGINAL" Binding="{Binding Original,StringFormat=C}" Width="120"/>
+                        <DataGridTextColumn Header="PAGO" Binding="{Binding Paid,StringFormat=C}" Width="120"/>
+                        <DataGridTextColumn Header="SALDO" Binding="{Binding Balance,StringFormat=C}" Width="120"/>
+                        <DataGridTextColumn Header="VENCIMENTO" Binding="{Binding DueAt,StringFormat=dd/MM/yyyy}" Width="130"/>
+                        <DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="120"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+        </TabControl>
+
+        <Grid Grid.Row="3" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBlock x:Name="StatusText" Foreground="#66756D" VerticalAlignment="Center"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Content="PDF DA VENDA" Click="Pdf_Click" Padding="12,8" Margin="3"/>
+                <Button Content="SEGUNDA VIA PDF" Click="Second_Click" Padding="12,8" Margin="3"/>
+                <Button Content="WHATSAPP" Click="WhatsApp_Click" Background="#EAF7EE" Foreground="#0B6B3A" FontWeight="Bold" Padding="12,8" Margin="3"/>
+                <Button Content="FECHAR" IsCancel="True" Padding="12,8" Margin="3"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
