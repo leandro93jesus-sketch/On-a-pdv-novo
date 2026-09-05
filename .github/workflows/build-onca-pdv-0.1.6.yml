@@ -1,0 +1,96 @@
+name: Build ONCA PDV PRO 0.1.6
+
+on:
+  push:
+    branches: [ dev/onca-pdv-0.1.6 ]
+    paths:
+      - 'BUILD-016-TRIGGER.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify version
+        shell: pwsh
+        run: |
+          $p=Get-Content '.\current\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj' -Raw
+          if($p -notmatch '<Version>0\.1\.6</Version>'){throw 'Versao 0.1.6 nao encontrada'}
+      - name: Restore tests
+        shell: pwsh
+        working-directory: .\current
+        run: dotnet restore .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj --configfile .\NuGet.Config
+      - name: Test
+        shell: pwsh
+        working-directory: .\current
+        run: dotnet test .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj -c Release --no-restore --logger "console;verbosity=normal"
+      - name: Restore Desktop
+        shell: pwsh
+        working-directory: .\current
+        run: dotnet restore .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -r win-x64 --configfile .\NuGet.Config
+      - name: Build Desktop
+        shell: pwsh
+        working-directory: .\current
+        run: dotnet build .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --no-restore
+      - name: Publish
+        shell: pwsh
+        working-directory: .\current
+        run: |
+          if(Test-Path .\publish){Remove-Item .\publish -Recurse -Force}
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o .\publish
+          if(-not(Test-Path .\publish\OncaPDV.Desktop.exe)){throw 'EXE nao gerado'}
+          $h=(Get-FileHash .\publish\OncaPDV.Desktop.exe -Algorithm SHA256).Hash
+          "$h  OncaPDV.Desktop.exe" | Set-Content .\publish\OncaPDV.Desktop.exe.sha256 -Encoding ascii
+          Write-Host "EXE SHA256=$h"
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+      - name: Build installer
+        shell: pwsh
+        working-directory: .\current
+        run: |
+          $iscc=@('C:\Program Files (x86)\Inno Setup 6\ISCC.exe','C:\Program Files\Inno Setup 6\ISCC.exe','C:\ProgramData\chocolatey\bin\ISCC.exe')|Where-Object{Test-Path $_}|Select-Object -First 1
+          if(-not $iscc){throw 'Inno Setup nao encontrado'}
+          & $iscc .\installer\ONCA-PDV-PRO.iss
+          if($LASTEXITCODE -ne 0){throw 'Falha instalador'}
+          $setup='.\installer\Output\ONCA-PDV-PRO-Setup.exe'
+          if(-not(Test-Path $setup)){throw 'Setup nao gerado'}
+          $h=(Get-FileHash $setup -Algorithm SHA256).Hash
+          "$h  ONCA-PDV-PRO-Setup.exe" | Set-Content "$setup.sha256" -Encoding ascii
+          Write-Host "SETUP SHA256=$h"
+      - name: Package source
+        shell: pwsh
+        run: Compress-Archive -Path '.\current\*' -DestinationPath '.\ONCA-PDV-PRO-SOURCE-0.1.6.zip' -CompressionLevel Optimal -Force
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.6-EXE
+          retention-days: 7
+          compression-level: 9
+          path: |
+            current/publish/OncaPDV.Desktop.exe
+            current/publish/OncaPDV.Desktop.exe.sha256
+      - name: Upload SETUP
+        uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.6-SETUP
+          retention-days: 7
+          compression-level: 9
+          path: |
+            current/installer/Output/ONCA-PDV-PRO-Setup.exe
+            current/installer/Output/ONCA-PDV-PRO-Setup.exe.sha256
+      - name: Upload SOURCE
+        uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.6-SOURCE
+          retention-days: 7
+          compression-level: 6
+          path: ONCA-PDV-PRO-SOURCE-0.1.6.zip
