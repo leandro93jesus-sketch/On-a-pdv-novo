@@ -1,0 +1,147 @@
+name: Build ONCA full runtime installer 0.1.12
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-onca-full-installer.yml'
+      - 'installer/ONCA-PDV-PRO-0.1.12-full.nsi'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-installer:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract source
+        shell: pwsh
+        run: |
+          $zip = ".\ONCA-PDV-PRO-ATUALIZADO-0.1.3.zip"
+          if (-not (Test-Path $zip)) { throw "ZIP base nao encontrado." }
+          if (Test-Path ".\work") { Remove-Item ".\work" -Recurse -Force }
+          New-Item -ItemType Directory -Path ".\work" | Out-Null
+          Expand-Archive -Path $zip -DestinationPath ".\work" -Force
+          if (-not (Test-Path ".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj")) {
+            throw "Projeto Desktop nao encontrado."
+          }
+
+      - name: Apply 0.1.12 patch
+        shell: pwsh
+        run: |
+          $encoded = (Get-Content ".\patches\onca-runtime-0.1.12.patch.gz.b64" -Raw) -replace "\s", ""
+          $gz = Join-Path $PWD "runtime.patch.gz"
+          $patch = Join-Path $PWD "runtime.patch"
+          [IO.File]::WriteAllBytes($gz,[Convert]::FromBase64String($encoded))
+          $input=[IO.File]::OpenRead($gz)
+          $output=[IO.File]::Create($patch)
+          $gzip=[IO.Compression.GzipStream]::new($input,[IO.Compression.CompressionMode]::Decompress)
+          try { $gzip.CopyTo($output) } finally { $gzip.Dispose(); $output.Dispose(); $input.Dispose() }
+
+          Push-Location ".\work\ONCA-PDV-PRO"
+          try {
+            git init | Out-Null
+            git apply --check $patch
+            if ($LASTEXITCODE -ne 0) { throw "Patch 0.1.12 nao aplica." }
+            git apply $patch
+            if ($LASTEXITCODE -ne 0) { throw "Falha ao aplicar patch." }
+          } finally { Pop-Location }
+
+      - name: Add 0.1.12 windows
+        shell: pwsh
+        run: |
+          $src=".\patches\0.1.12"
+          $dst=".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop"
+          foreach($name in @("ProductSelectionWindow.xaml","ProductSelectionWindow.xaml.cs","DiversosWindow.xaml","DiversosWindow.xaml.cs")){
+            Copy-Item (Join-Path $src $name) (Join-Path $dst $name) -Force
+          }
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore Desktop
+        shell: pwsh
+        working-directory: .\work\ONCA-PDV-PRO
+        run: dotnet restore .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -r win-x64 --configfile .\NuGet.Config
+
+      - name: Publish full self-contained runtime
+        shell: pwsh
+        working-directory: .\work\ONCA-PDV-PRO
+        run: |
+          if (Test-Path ".\publish-full") { Remove-Item ".\publish-full" -Recurse -Force }
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false -o .\publish-full
+          if (-not (Test-Path ".\publish-full\OncaPDV.Desktop.exe")) { throw "EXE nao foi publicado." }
+          $files = Get-ChildItem ".\publish-full" -File
+          Write-Host "Arquivos publicados: $($files.Count)"
+          $files | Select-Object Name,Length | Format-Table -AutoSize
+
+      - name: Prepare installer files
+        shell: pwsh
+        run: |
+          $dst=".\installer\publish-full"
+          if (Test-Path $dst) { Remove-Item $dst -Recurse -Force }
+          Copy-Item ".\work\ONCA-PDV-PRO\publish-full" $dst -Recurse -Force
+
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install nsis -y --no-progress
+
+      - name: Build full installer
+        shell: pwsh
+        working-directory: .\installer
+        run: |
+          $makensis=(Get-Command makensis.exe -ErrorAction SilentlyContinue).Source
+          if (-not $makensis) {
+            $makensis=@(
+              "C:\Program Files (x86)\NSIS\makensis.exe",
+              "C:\Program Files\NSIS\makensis.exe"
+            ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $makensis) { throw "NSIS nao encontrado." }
+          & $makensis ".\ONCA-PDV-PRO-0.1.12-full.nsi"
+          if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar instalador." }
+          if (-not (Test-Path ".\ONCA-PDV-PRO-Setup-0.1.12-RUNTIME-COMPLETO.exe")) { throw "Instalador nao foi gerado." }
+
+      - name: Install and launch smoke test
+        shell: pwsh
+        working-directory: .\installer
+        run: |
+          $setup=Resolve-Path ".\ONCA-PDV-PRO-Setup-0.1.12-RUNTIME-COMPLETO.exe"
+          $dir=Join-Path $env:RUNNER_TEMP "ONCA-PDV-PRO-FULL"
+          if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+
+          $install=Start-Process -FilePath $setup -ArgumentList @("/S","/D=$dir") -PassThru -Wait
+          if ($install.ExitCode -ne 0) { throw "Instalacao retornou codigo $($install.ExitCode)." }
+
+          $exe=Join-Path $dir "OncaPDV.Desktop.exe"
+          if (-not (Test-Path $exe)) { throw "EXE instalado nao encontrado." }
+
+          $p=Start-Process -FilePath $exe -ArgumentList "--smoke-test" -PassThru
+          if (-not $p.WaitForExit(30000)) {
+            try { $p.Kill($true) } catch {}
+            $fatal=Join-Path $env:LOCALAPPDATA "Onca PDV Pro\logs\fatal.log"
+            if (Test-Path $fatal) { Get-Content $fatal -Tail 200 }
+            throw "ONCA PDV instalou, mas nao abriu/fechou no smoke test."
+          }
+          if ($p.ExitCode -ne 0) {
+            $fatal=Join-Path $env:LOCALAPPDATA "Onca PDV Pro\logs\fatal.log"
+            if (Test-Path $fatal) { Get-Content $fatal -Tail 200 }
+            throw "ONCA PDV abriu com codigo $($p.ExitCode)."
+          }
+          Write-Host "APP LAUNCH SMOKE TEST OK"
+
+      - name: Upload final installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.12-RUNTIME-COMPLETO
+          retention-days: 7
+          if-no-files-found: error
+          path: installer/ONCA-PDV-PRO-Setup-0.1.12-RUNTIME-COMPLETO.exe
