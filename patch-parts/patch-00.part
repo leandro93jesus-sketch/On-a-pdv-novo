@@ -1,0 +1,256 @@
+diff --git a/FINALIZAR-NO-WINDOWS.ps1 b/FINALIZAR-NO-WINDOWS.ps1
+index f56eb94..92a041c 100644
+--- a/FINALIZAR-NO-WINDOWS.ps1
++++ b/FINALIZAR-NO-WINDOWS.ps1
+@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
+ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+ Set-Location $root
+ 
+-Write-Host '=== ONCA-PDV-PRO 0.1.3 - FINALIZACAO LOCAL ===' -ForegroundColor Green
++Write-Host '=== ONCA-PDV-PRO 0.1.5 - FINALIZACAO LOCAL ===' -ForegroundColor Green
+ 
+ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+     throw '.NET SDK 10 nao encontrado. Instale o .NET 10 SDK e execute novamente.'
+diff --git a/onca_work/ONCA-PDV-PRO/INSTALAR-ATUALIZACAO-0.1.5.cmd b/INSTALAR-ATUALIZACAO-0.1.5.cmd
+new file mode 100644
+index 0000000..48fbeb5
+--- /dev/null
++++ b/INSTALAR-ATUALIZACAO-0.1.5.cmd
+@@ -0,0 +1,11 @@
++@echo off
++setlocal
++cd /d "%~dp0"
++powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALAR-ATUALIZACAO-0.1.5.ps1"
++if errorlevel 1 (
++  echo.
++  echo A atualizacao nao foi concluida. Leia a mensagem acima.
++  pause
++  exit /b 1
++)
++exit /b 0
+diff --git a/onca_work/ONCA-PDV-PRO/INSTALAR-ATUALIZACAO-0.1.5.ps1 b/INSTALAR-ATUALIZACAO-0.1.5.ps1
+new file mode 100644
+index 0000000..ab374d6
+--- /dev/null
++++ b/INSTALAR-ATUALIZACAO-0.1.5.ps1
+@@ -0,0 +1,72 @@
++$ErrorActionPreference = 'Stop'
++$root = Split-Path -Parent $MyInvocation.MyCommand.Path
++Set-Location $root
++
++Write-Host '=== ONCA PDV PRO 0.1.5 - ATUALIZACAO SEGURA ===' -ForegroundColor Green
++
++# Fecha somente o PDV para garantir consistencia do backup local.
++Get-Process 'OncaPDV.Desktop' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
++Start-Sleep -Milliseconds 700
++
++$dataRoot = Join-Path $env:LOCALAPPDATA 'Onca PDV Pro'
++$db = Join-Path $dataRoot 'data\onca-pdv-pro.db'
++if (Test-Path $db) {
++    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
++    $safe = Join-Path $dataRoot "backups\pre-update-0.1.5-$stamp"
++    New-Item -ItemType Directory -Force -Path $safe | Out-Null
++    Copy-Item -LiteralPath $db -Destination (Join-Path $safe 'onca-pdv-pro.db') -Force
++    foreach ($suffix in @('-wal','-shm')) {
++        $side = "$db$suffix"
++        if (Test-Path $side) { Copy-Item -LiteralPath $side -Destination (Join-Path $safe (Split-Path $side -Leaf)) -Force }
++    }
++    Write-Host "Backup de seguranca criado: $safe" -ForegroundColor Cyan
++}
++
++$dotnet = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
++if (-not $dotnet -or -not (& $dotnet --list-sdks | Select-String '^10\.')) {
++    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
++        throw 'O .NET SDK 10 nao esta instalado e o winget nao foi encontrado. Instale o .NET 10 SDK e execute este arquivo novamente.'
++    }
++    Write-Host 'Instalando .NET SDK 10...' -ForegroundColor Yellow
++    winget install --id Microsoft.DotNet.SDK.10 -e --accept-package-agreements --accept-source-agreements --silent
++    $dotnet = "$env:ProgramFiles\dotnet\dotnet.exe"
++}
++if (-not (Test-Path $dotnet)) { $dotnet = (Get-Command dotnet -ErrorAction Stop).Source }
++
++$isccCandidates = @(
++    "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
++    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
++    "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
++)
++$iscc = $isccCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
++if (-not $iscc) {
++    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { throw 'Inno Setup 6 nao encontrado.' }
++    Write-Host 'Instalando Inno Setup 6...' -ForegroundColor Yellow
++    winget install --id JRSoftware.InnoSetup -e --accept-package-agreements --accept-source-agreements --silent
++    $iscc = $isccCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
++}
++if (-not $iscc) { throw 'Inno Setup 6 nao encontrado apos a instalacao.' }
++
++Write-Host 'Restaurando dependencias...' -ForegroundColor Cyan
++& $dotnet restore .\OncaPDV.slnx --configfile .\NuGet.Config
++if ($LASTEXITCODE -ne 0) { throw 'Falha no restore.' }
++
++Write-Host 'Executando testes...' -ForegroundColor Cyan
++& $dotnet test .\OncaPDV.slnx -c Release --no-restore
++if ($LASTEXITCODE -ne 0) { throw 'Os testes falharam. A versao atual nao sera substituida.' }
++
++$publish = Join-Path $root 'publish'
++if (Test-Path $publish) { Remove-Item $publish -Recurse -Force }
++Write-Host 'Gerando executavel Windows...' -ForegroundColor Cyan
++& $dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o $publish --no-restore
++if ($LASTEXITCODE -ne 0) { throw 'Falha ao gerar o executavel.' }
++
++Write-Host 'Gerando instalador...' -ForegroundColor Cyan
++& $iscc .\installer\ONCA-PDV-PRO.iss
++if ($LASTEXITCODE -ne 0) { throw 'Falha ao gerar o instalador.' }
++
++$setup = Join-Path $root 'installer\Output\ONCA-PDV-PRO-Setup.exe'
++if (-not (Test-Path $setup)) { throw 'Instalador nao encontrado.' }
++Write-Host 'Abrindo instalador 0.1.5...' -ForegroundColor Green
++Start-Process -FilePath $setup -Wait
++Write-Host 'ONCA PDV PRO 0.1.5 instalado. Seus dados permanecem em LocalAppData.' -ForegroundColor Green
+diff --git a/onca_work/ONCA-PDV-PRO/LEIA-ME-ATUALIZACAO-0.1.5.txt b/LEIA-ME-ATUALIZACAO-0.1.5.txt
+new file mode 100644
+index 0000000..64a4677
+--- /dev/null
++++ b/LEIA-ME-ATUALIZACAO-0.1.5.txt
+@@ -0,0 +1,21 @@
++ONCA PDV PRO 0.1.5 - ATUALIZACAO RAPIDA
++
++ALTERACOES
++1. Botao DIVERSOS na tela de venda. Ao clicar, informe o preco e, se quiser, uma descricao.
++2. Ao concluir a venda, o sistema pergunta se deseja imprimir a nota. Escolha SIM ou NAO.
++3. Busca por nome mostra todos os produtos parecidos em uma lista para selecionar o correto.
++4. Codigo interno ou codigo de barras exato continua adicionando direto.
++5. Venda liberada mesmo com estoque 0 ou negativo, sem pergunta e sem bloqueio. O estoque pode ficar negativo.
++6. DIVERSOS nao consome estoque.
++
++ATUALIZAR SEM PERDER DADOS
++- Feche o ONCA PDV.
++- Clique duas vezes em: INSTALAR-ATUALIZACAO-0.1.5.cmd
++- O atualizador cria um backup do banco atual antes da instalacao.
++- Os dados do PDV continuam em: %LOCALAPPDATA%\Onca PDV Pro
++- O instalador nao apaga essa pasta.
++
++IMPORTANTE
++O pacote inclui o codigo-fonte 0.1.5 e o atualizador automatico para Windows.
++O atualizador instala .NET SDK 10 e Inno Setup via winget somente se forem necessarios,
++executa os testes, gera o EXE/instalador e so depois abre a instalacao.
+diff --git a/README.md b/README.md
+index 5f43844..c423ce5 100644
+--- a/README.md
++++ b/README.md
+@@ -2,7 +2,7 @@
+ 
+ PDV desktop Windows da **Onça Produtos de Limpeza**, em C# / .NET 10.
+ 
+-## Estado desta entrega (0.1.3)
++## Estado desta entrega (0.1.5)
+ 
+ Esta fonte preserva o trabalho já aprovado e acrescenta o fechamento das pendências mais importantes sem reconstruir o projeto:
+ 
+@@ -17,6 +17,16 @@ Esta fonte preserva o trabalho já aprovado e acrescenta o fechamento das pendê
+ - tela de Crediário no mesmo padrão visual;
+ - tela de Pagamento com **DINHEIRO RECEBIDO** e **TROCO** em grande destaque.
+ 
++
++### Ajustes rápidos 0.1.5
++
++- botão **DIVERSOS** na venda, solicitando o preço e aceitando descrição opcional;
++- após concluir a venda, o PDV pergunta **Deseja imprimir a nota?**;
++- busca por nome mostra todos os produtos semelhantes para seleção; código interno/código de barras exatos continuam adicionando direto;
++- venda autorizada com estoque zero ou negativo, sem confirmação e sem bloqueio; o estoque real pode ficar negativo e o movimento fica registrado;
++- item DIVERSOS não controla estoque;
++- atualização mantém os dados em `%LOCALAPPDATA%\Onca PDV Pro` e o instalador cria backup do banco antes de atualizar.
++
+ ### Backup real de referência
+ 
+ O importador foi ajustado para a estrutura real validada:
+diff --git a/installer/ONCA-PDV-PRO.iss b/installer/ONCA-PDV-PRO.iss
+index f5c16eb..6600393 100644
+--- a/installer/ONCA-PDV-PRO.iss
++++ b/installer/ONCA-PDV-PRO.iss
+@@ -1,7 +1,7 @@
+ [Setup]
+ AppId={{A4714C8A-931D-4E41-90E1-5F720E7129E7}
+ AppName=ONCA-PDV-PRO
+-AppVersion=0.1.3
++AppVersion=0.1.12
+ AppPublisher=ONCA Produtos de Limpeza
+ DefaultDirName={autopf}\ONCA-PDV-PRO
+ OutputBaseFilename=ONCA-PDV-PRO-Setup
+@@ -19,3 +19,20 @@ Source: "..\publish\*"; DestDir: "{app}"; Excludes: "appsettings.json"; Flags: r
+ Source: "..\publish\appsettings.json"; DestDir: "{app}"; Flags: onlyifdoesntexist uninsneveruninstall
+ [Icons]
+ Name: "{autoprograms}\ONÇA PDV"; Filename: "{app}\OncaPDV.Desktop.exe"
++
++[Code]
++function PrepareToInstall(var NeedsRestart: Boolean): String;
++var
++  DataFile, BackupDir, BackupFile: String;
++begin
++  Result := '';
++  DataFile := ExpandConstant('{localappdata}\Onca PDV Pro\data\onca-pdv-pro.db');
++  if FileExists(DataFile) then
++  begin
++    BackupDir := ExpandConstant('{localappdata}\Onca PDV Pro\backups');
++    ForceDirectories(BackupDir);
++    BackupFile := BackupDir + '\pre-update-0.1.5-' + GetDateTimeString('yyyymmdd-hhnnss', '', '') + '.db';
++    if not FileCopy(DataFile, BackupFile, False) then
++      Result := 'Não foi possível criar o backup de segurança do banco atual. A atualização foi cancelada para proteger seus dados.';
++  end;
++end;
+diff --git a/src/OncaPDV.Application/Contracts.cs b/src/OncaPDV.Application/Contracts.cs
+index 3abc10d..76bde5f 100644
+--- a/src/OncaPDV.Application/Contracts.cs
++++ b/src/OncaPDV.Application/Contracts.cs
+@@ -129,12 +129,40 @@ public sealed class PosWorkflow(
+         }
+     }
+ 
++    public async Task AddExistingProductAsync(Product product, CancellationToken ct = default)
++    {
++        if (!product.Active) throw new DomainException("Produto inativo.");
++        Cart.Add(product);
++        await recovery.SaveAsync(Cart, ct);
++    }
++
++    public async Task AddDiversosAsync(decimal price, string? description = null, CancellationToken ct = default)
++    {
++        if (price <= 0) throw new DomainException("Informe um preço maior que zero.");
++        var product = await products.FindAsync("DIVERSOS", ct) ?? throw new DomainException("Item DIVERSOS não encontrado.");
++        var name = string.IsNullOrWhiteSpace(description) ? "DIVERSOS" : $"DIVERSOS - {description.Trim()}";
++        Cart.AddWithPrice(product, price, 1, name);
++        await recovery.SaveAsync(Cart, ct);
++    }
++
+     public async Task ChangeQuantityAsync(Guid productId, decimal quantity, CancellationToken ct = default)
+     {
+         Cart.ChangeQuantity(productId, quantity);
+         await recovery.SaveAsync(Cart, ct);
+     }
+ 
++    public async Task EditCartItemAsync(int lineIndex, string name, decimal quantity, decimal unitPrice, CancellationToken ct = default)
++    {
++        Cart.ChangeItem(lineIndex, name, quantity, unitPrice);
++        await recovery.SaveAsync(Cart, ct);
++    }
++
++    public async Task RemoveCartItemAsync(int lineIndex, CancellationToken ct = default)
++    {
++        Cart.RemoveItem(lineIndex);
++        await recovery.SaveAsync(Cart, ct);
++    }
++
+     public async Task<Sale> CompleteAsync(IReadOnlyList<Payment> payments, Guid operatorId, CancellationToken ct = default)
+     {
+         var session = await cashSessions.GetOrOpenAsync(operatorId, 0, ct);
+@@ -158,6 +186,6 @@ public sealed class PosWorkflow(
+         if (string.IsNullOrWhiteSpace(product.InternalCode)) throw new DomainException("Informe o código interno.");
+         if (string.IsNullOrWhiteSpace(product.Name)) throw new DomainException("Informe o nome.");
+         if (string.IsNullOrWhiteSpace(product.Unit)) throw new DomainException("Informe a unidade.");
+-        if (product.CostPrice < 0 || product.SalePrice < 0 || product.Stock < 0) throw new DomainException("Valores não podem ser negativos.");
++        if (product.CostPrice < 0 || product.SalePrice < 0) throw new DomainException("Custo e preço não podem ser negativos.");
+     }
+ }
+diff --git a/src/OncaPDV.Desktop/CreditWindow.xaml b/src/OncaPDV.Desktop/CreditWindow.xaml
+index c6ea85c..603ce92 100644
+--- a/src/OncaPDV.Desktop/CreditWindow.xaml
++++ b/src/Onc
