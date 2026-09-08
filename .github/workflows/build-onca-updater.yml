@@ -84,7 +84,20 @@ jobs:
               try { $p.Kill($true) } catch {}
               throw "Atualizador excedeu 120 segundos."
             }
-            if ($p.ExitCode -ne 0) { throw "Atualizador retornou codigo $($p.ExitCode)." }
+            if ($p.ExitCode -ne 0) {
+              $logDir = Join-Path $env:LOCALAPPDATA "Onca PDV Pro\logs"
+              if (Test-Path $logDir) {
+                $latest = Get-ChildItem $logDir -Filter "atualizacao-0.1.12-*.log" -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+                if ($latest) {
+                  Write-Host "===== LOG DO ATUALIZADOR ====="
+                  Get-Content $latest.FullName -Tail 250
+                  Write-Host "===== FIM DO LOG ====="
+                }
+              } else {
+                Write-Host "Nenhum log interno foi criado pelo atualizador."
+              }
+              throw "Atualizador retornou codigo $($p.ExitCode)."
+            }
           } finally {
             Remove-Item Env:ONCA_TEST_INSTALL_DIR -ErrorAction SilentlyContinue
           }
