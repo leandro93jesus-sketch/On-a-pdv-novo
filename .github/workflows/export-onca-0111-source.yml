@@ -1,0 +1,36 @@
+name: Export ONCA 0.1.11 source snapshot
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/export-onca-0111-source.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract base source
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path ".\snapshot" -Force | Out-Null
+          Expand-Archive ".\ONCA-PDV-PRO-ATUALIZADO-0.1.3.zip" ".\snapshot" -Force
+          Get-ChildItem ".\snapshot\ONCA-PDV-PRO\src" -Recurse -File |
+            Select-Object FullName,Length | Format-Table -AutoSize
+
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-0.1.11-SOURCE-SNAPSHOT
+          retention-days: 3
+          path: |
+            snapshot/ONCA-PDV-PRO/src
+            snapshot/ONCA-PDV-PRO/tests
+            snapshot/ONCA-PDV-PRO/NuGet.Config
+            snapshot/ONCA-PDV-PRO/*.sln
