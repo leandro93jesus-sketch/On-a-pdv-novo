@@ -49,6 +49,15 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Failed to apply improvement patch." }
           } finally { Pop-Location }
 
+      - name: Add improvement windows
+        shell: pwsh
+        run: |
+          $src=".\patches\0.1.12"
+          $dst=".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop"
+          foreach($name in @("ProductSelectionWindow.xaml","ProductSelectionWindow.xaml.cs","DiversosWindow.xaml","DiversosWindow.xaml.cs")){
+            Copy-Item (Join-Path $src $name) (Join-Path $dst $name) -Force
+          }
+
       - name: Align stale migration assertion
         shell: pwsh
         run: |
