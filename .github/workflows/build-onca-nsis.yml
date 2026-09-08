@@ -1,0 +1,89 @@
+name: Build ONCA NSIS installer 0.1.12
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-onca-nsis.yml'
+      - 'installer/ONCA-PDV-PRO-0.1.12.nsi'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download validated ONCA 0.1.12 EXE
+        uses: actions/download-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.12-Windows
+          path: previous
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 34279780026
+
+      - name: Prepare validated EXE
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem .\previous -Filter "ONCA-PDV-PRO-0.1.12-DIRETO.exe" -Recurse -File | Select-Object -First 1
+          if (-not $exe) { throw "EXE validado 0.1.12 nao encontrado." }
+          Copy-Item $exe.FullName .\installer\OncaPDV.Desktop.exe -Force
+          Write-Host "SOURCE SHA256=$((Get-FileHash .\installer\OncaPDV.Desktop.exe -Algorithm SHA256).Hash)"
+
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install nsis -y --no-progress
+
+      - name: Build installer
+        shell: pwsh
+        working-directory: .\installer
+        run: |
+          $makensis = (Get-Command makensis.exe -ErrorAction SilentlyContinue).Source
+          if (-not $makensis) {
+            $candidates = @(
+              "C:\Program Files (x86)\NSIS\makensis.exe",
+              "C:\Program Files\NSIS\makensis.exe",
+              "C:\ProgramData\chocolatey\bin\makensis.exe"
+            )
+            $makensis = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $makensis) { throw "makensis.exe nao encontrado." }
+          & $makensis ".\ONCA-PDV-PRO-0.1.12.nsi"
+          if ($LASTEXITCODE -ne 0) { throw "Falha ao gerar instalador NSIS." }
+          if (-not (Test-Path ".\ONCA-PDV-PRO-Setup-0.1.12-NSIS.exe")) { throw "Instalador NSIS nao foi gerado." }
+          Write-Host "INSTALLER SHA256=$((Get-FileHash .\ONCA-PDV-PRO-Setup-0.1.12-NSIS.exe -Algorithm SHA256).Hash)"
+
+      - name: Smoke test installer
+        shell: pwsh
+        working-directory: .\installer
+        run: |
+          $setup = Resolve-Path ".\ONCA-PDV-PRO-Setup-0.1.12-NSIS.exe"
+          $testDir = Join-Path $env:RUNNER_TEMP "ONCA-PDV-PRO"
+          if (Test-Path $testDir) { Remove-Item $testDir -Recurse -Force }
+
+          $p = Start-Process -FilePath $setup -ArgumentList @("/S", "/D=$testDir") -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "Instalador NSIS retornou codigo $($p.ExitCode)." }
+
+          $installed = Join-Path $testDir "OncaPDV.Desktop.exe"
+          if (-not (Test-Path $installed)) { throw "EXE nao foi instalado pelo NSIS." }
+
+          $sourceHash = (Get-FileHash ".\OncaPDV.Desktop.exe" -Algorithm SHA256).Hash
+          $installedHash = (Get-FileHash $installed -Algorithm SHA256).Hash
+          if ($sourceHash -ne $installedHash) { throw "Hash do EXE instalado nao confere." }
+
+          Write-Host "NSIS INSTALL TEST OK"
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-Setup-0.1.12-NSIS-FINAL
+          retention-days: 7
+          if-no-files-found: error
+          path: installer/ONCA-PDV-PRO-Setup-0.1.12-NSIS.exe
