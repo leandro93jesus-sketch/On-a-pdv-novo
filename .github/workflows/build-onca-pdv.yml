@@ -124,66 +124,78 @@ jobs:
           "$hash  ONCA-PDV-PRO-0.1.12-DIRETO.exe" | Set-Content .\publish\ONCA-PDV-PRO-0.1.12-DIRETO.exe.sha256 -Encoding ascii
           Write-Host "EXE SHA256=$hash"
 
-      - name: Install Inno Setup
-        shell: pwsh
-        run: choco install innosetup -y --no-progress
-
-      - name: Build installer
-        shell: pwsh
-        working-directory: .\work\ONCA-PDV-PRO
-        run: |
-          $iscc = (Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source
-          if (-not $iscc) {
-            $roots = @(
-              "$env:ProgramFiles",
-              "$env:ProgramFiles(x86)",
-              "$env:LOCALAPPDATA",
-              "C:\\ProgramData\\chocolatey"
-            ) | Where-Object { $_ -and (Test-Path $_) }
-            foreach ($root in $roots) {
-              $found = Get-ChildItem -Path $root -Filter ISCC.exe -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-              if ($found) { $iscc = $found.FullName; break }
-            }
-          }
-          if (-not $iscc) { throw "Inno Setup 6 nao encontrado." }
-          Write-Host "ISCC=$iscc"
-          & $iscc .\installer\ONCA-PDV-PRO.iss
-          if ($LASTEXITCODE -ne 0) { throw "Falha ao gerar instalador." }
-          $setup = ".\installer\Output\ONCA-PDV-PRO-Setup.exe"
-          if (-not (Test-Path $setup)) { throw "Instalador nao foi gerado." }
-          Copy-Item $setup ".\installer\Output\ONCA-PDV-PRO-Setup-0.1.12.exe" -Force
-          $hash = (Get-FileHash ".\installer\Output\ONCA-PDV-PRO-Setup-0.1.12.exe" -Algorithm SHA256).Hash
-          "$hash  ONCA-PDV-PRO-Setup-0.1.12.exe" | Set-Content ".\installer\Output\ONCA-PDV-PRO-Setup-0.1.12.exe.sha256" -Encoding ascii
-          Write-Host "SETUP SHA256=$hash"
-
-      - name: Smoke test installer
+      - name: Build direct updater EXE
         shell: pwsh
         working-directory: .\\work\\ONCA-PDV-PRO
         run: |
-          $setup = ".\\installer\\Output\\ONCA-PDV-PRO-Setup-0.1.12.exe"
-          $smoke = Join-Path $env:RUNNER_TEMP "onca-pdv-install-smoke"
+          $payloadRoot = ".\\updater-payload"
+          if (Test-Path $payloadRoot) { Remove-Item $payloadRoot -Recurse -Force }
+          $pkg = Join-Path $payloadRoot "ONCA-PDV-PRO"
+          $payload = Join-Path $pkg "payload"
+          New-Item -ItemType Directory -Force -Path $payload | Out-Null
+
+          Copy-Item ".\\publish\\OncaPDV.Desktop.exe" (Join-Path $payload "OncaPDV.Desktop.exe") -Force
+          if (Test-Path ".\\publish\\appsettings.json") {
+            Copy-Item ".\\publish\\appsettings.json" (Join-Path $payload "appsettings.json") -Force
+          }
+          Copy-Item "..\\..\\patches\\0.1.12\\ATUALIZAR-ONCA-PDV-0.1.12.ps1" (Join-Path $pkg "ATUALIZAR-ONCA-PDV-0.1.12.ps1") -Force
+
+          $zip = ".\\updater-payload.zip"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path (Join-Path $payloadRoot "*") -DestinationPath $zip -CompressionLevel Optimal
+
+          $vswhere = "$env:ProgramFiles(x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe"
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw "Visual Studio C++ Build Tools nao encontrado." }
+          $vcvars = Join-Path $vs "VC\\Auxiliary\\Build\\vcvars64.bat"
+          $launcher = Resolve-Path "..\\..\\patches\\0.1.12\\updater-launcher.c"
+          $stub = Join-Path $PWD "updater-stub.exe"
+          $cmd = "`"$vcvars`" >nul && cl.exe /nologo /O2 /MT /DUNICODE /D_UNICODE `"$launcher`" /Fe:`"$stub`" shell32.lib user32.lib /link /SUBSYSTEM:WINDOWS"
+          cmd.exe /d /c $cmd
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $stub)) { throw "Falha ao compilar launcher nativo." }
+
+          $outDir = ".\\installer\\Output"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          $updater = Join-Path $outDir "ONCA-PDV-PRO-ATUALIZAR-0.1.12.exe"
+
+          $stubBytes = [IO.File]::ReadAllBytes($stub)
+          $zipBytes = [IO.File]::ReadAllBytes((Resolve-Path $zip))
+          $lenBytes = [BitConverter]::GetBytes([Int64]$zipBytes.LongLength)
+          $fs = [IO.File]::Create($updater)
+          try {
+            $fs.Write($stubBytes,0,$stubBytes.Length)
+            $fs.Write($zipBytes,0,$zipBytes.Length)
+            $fs.Write($lenBytes,0,$lenBytes.Length)
+          } finally { $fs.Dispose() }
+
+          $hash = (Get-FileHash $updater -Algorithm SHA256).Hash
+          "$hash  ONCA-PDV-PRO-ATUALIZAR-0.1.12.exe" | Set-Content "$updater.sha256" -Encoding ascii
+          Write-Host "UPDATER SHA256=$hash"
+
+      - name: Smoke test direct updater
+        shell: pwsh
+        working-directory: .\\work\\ONCA-PDV-PRO
+        run: |
+          $updater = Resolve-Path ".\\installer\\Output\\ONCA-PDV-PRO-ATUALIZAR-0.1.12.exe"
+          $smoke = Join-Path $env:RUNNER_TEMP "onca-pdv-updater-smoke"
           if (Test-Path $smoke) { Remove-Item $smoke -Recurse -Force }
-          New-Item -ItemType Directory -Path $smoke | Out-Null
-          $log = Join-Path $env:RUNNER_TEMP "onca-pdv-install-smoke.log"
-          $args = @(
-            "/VERYSILENT",
-            "/SUPPRESSMSGBOXES",
-            "/NORESTART",
-            "/SP-",
-            "/DIR=$smoke",
-            "/LOG=$log"
-          )
-          $p = Start-Process -FilePath $setup -ArgumentList $args -PassThru -Wait
-          if ($p.ExitCode -ne 0) {
-            if (Test-Path $log) { Get-Content $log -Tail 200 }
-            throw "Instalador retornou codigo $($p.ExitCode)."
+          New-Item -ItemType Directory -Force -Path $smoke | Out-Null
+
+          $env:ONCA_TEST_INSTALL_DIR = $smoke
+          try {
+            $p = Start-Process -FilePath $updater -ArgumentList "--test" -PassThru -Wait
+            if ($p.ExitCode -ne 0) { throw "Atualizador retornou codigo $($p.ExitCode)." }
+          } finally {
+            Remove-Item Env:ONCA_TEST_INSTALL_DIR -ErrorAction SilentlyContinue
           }
+
           $installed = Join-Path $smoke "OncaPDV.Desktop.exe"
-          if (-not (Test-Path $installed)) {
-            if (Test-Path $log) { Get-Content $log -Tail 200 }
-            throw "Instalador concluiu, mas o EXE nao foi instalado."
-          }
-          Write-Host "SMOKE INSTALL OK: $installed"
+          if (-not (Test-Path $installed)) { throw "Atualizador nao instalou o EXE no teste." }
+
+          $expected = (Get-FileHash ".\\publish\\OncaPDV.Desktop.exe" -Algorithm SHA256).Hash
+          $actual = (Get-FileHash $installed -Algorithm SHA256).Hash
+          if ($expected -ne $actual) { throw "Hash do EXE instalado difere do publicado." }
+          Write-Host "DIRECT UPDATER SMOKE OK"
 
       - name: Upload final Windows artifacts
         uses: actions/upload-artifact@v4
@@ -194,5 +206,5 @@ jobs:
           path: |
             work/ONCA-PDV-PRO/publish/ONCA-PDV-PRO-0.1.12-DIRETO.exe
             work/ONCA-PDV-PRO/publish/ONCA-PDV-PRO-0.1.12-DIRETO.exe.sha256
-            work/ONCA-PDV-PRO/installer/Output/ONCA-PDV-PRO-Setup-0.1.12.exe
-            work/ONCA-PDV-PRO/installer/Output/ONCA-PDV-PRO-Setup-0.1.12.exe.sha256
+            work/ONCA-PDV-PRO/installer/Output/ONCA-PDV-PRO-ATUALIZAR-0.1.12.exe
+            work/ONCA-PDV-PRO/installer/Output/ONCA-PDV-PRO-ATUALIZAR-0.1.12.exe.sha256
