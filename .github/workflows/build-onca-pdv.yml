@@ -183,7 +183,11 @@ jobs:
 
           $env:ONCA_TEST_INSTALL_DIR = $smoke
           try {
-            $p = Start-Process -FilePath $updater -ArgumentList "--test" -PassThru -Wait
+            $p = Start-Process -FilePath $updater -ArgumentList "--test" -PassThru
+            if (-not $p.WaitForExit(120000)) {
+              try { $p.Kill($true) } catch {}
+              throw "Atualizador excedeu 120 segundos no teste."
+            }
             if ($p.ExitCode -ne 0) { throw "Atualizador retornou codigo $($p.ExitCode)." }
           } finally {
             Remove-Item Env:ONCA_TEST_INSTALL_DIR -ErrorAction SilentlyContinue
