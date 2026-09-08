@@ -10,8 +10,12 @@ Start-Transcript -Path $log -Force | Out-Null
 
 function Fail([string]$message) {
     try { Stop-Transcript | Out-Null } catch {}
-    Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
-    try { [System.Windows.MessageBox]::Show($message + "`n`nLog: " + $log, 'ONCA PDV PRO 0.1.12', 'OK', 'Error') | Out-Null } catch {}
+    if (-not $env:ONCA_TEST_INSTALL_DIR) {
+        Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
+        try { [System.Windows.MessageBox]::Show($message + "`n`nLog: " + $log, 'ONCA PDV PRO 0.1.12', 'OK', 'Error') | Out-Null } catch {}
+    } else {
+        Write-Error $message
+    }
     exit 1
 }
 
