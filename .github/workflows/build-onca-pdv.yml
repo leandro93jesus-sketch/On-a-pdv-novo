@@ -144,7 +144,7 @@ jobs:
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path (Join-Path $payloadRoot "*") -DestinationPath $zip -CompressionLevel Optimal
 
-          $vswhere = "$env:ProgramFiles(x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe"
+          $vswhere = "${env:ProgramFiles(x86)}\\Microsoft Visual Studio\\Installer\\vswhere.exe"
           $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
           if (-not $vs) { throw "Visual Studio C++ Build Tools nao encontrado." }
           $vcvars = Join-Path $vs "VC\\Auxiliary\\Build\\vcvars64.bat"
