@@ -55,6 +55,24 @@ jobs:
             Pop-Location
           }
 
+      - name: Include new 0.1.12 desktop windows
+        shell: pwsh
+        run: |
+          $src = ".\\patches\\0.1.12"
+          $dst = ".\\work\\ONCA-PDV-PRO\\src\\OncaPDV.Desktop"
+          $files = @(
+            "ProductSelectionWindow.xaml",
+            "ProductSelectionWindow.xaml.cs",
+            "DiversosWindow.xaml",
+            "DiversosWindow.xaml.cs"
+          )
+          foreach ($name in $files) {
+            $source = Join-Path $src $name
+            $target = Join-Path $dst $name
+            if (-not (Test-Path $source)) { throw "Arquivo 0.1.12 ausente: $name" }
+            Copy-Item $source $target -Force
+          }
+
       - name: Align migration version regression test
         shell: pwsh
         run: |
