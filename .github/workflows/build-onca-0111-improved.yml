@@ -58,6 +58,26 @@ jobs:
             Copy-Item (Join-Path $src $name) (Join-Path $dst $name) -Force
           }
 
+      - name: Adapt improvement windows to 0.1.11 base
+        shell: pwsh
+        run: |
+          $main=".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop\MainWindow.xaml.cs"
+          $text=Get-Content $main -Raw
+          $text=[regex]::Replace(
+            $text,
+            'new ProductSelectionWindow\(([^,\r\n]+),\s*([^,\r\n\)]+)(,\s*(?:true|false))?\)',
+            'new ProductSelectionWindow($2, $1$3)'
+          )
+          Set-Content $main $text -Encoding UTF8
+
+          $div=".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop\DiversosWindow.xaml.cs"
+          $d=Get-Content $div -Raw
+          $d=$d.Replace(
+            'public decimal Price { get; private set; }',
+            "public decimal Price { get; private set; }`r`n    public decimal Quantity => 1m;`r`n    public decimal UnitPrice => Price;"
+          )
+          Set-Content $div $d -Encoding UTF8
+
       - name: Align stale migration assertion
         shell: pwsh
         run: |
