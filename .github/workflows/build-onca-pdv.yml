@@ -72,6 +72,10 @@ jobs:
             if (-not (Test-Path $source)) { throw "Arquivo 0.1.12 ausente: $name" }
             Copy-Item $source $target -Force
           }
+          $installerSource = Join-Path $src "ONCA-PDV-PRO.iss"
+          $installerTarget = ".\\work\\ONCA-PDV-PRO\\installer\\ONCA-PDV-PRO.iss"
+          if (-not (Test-Path $installerSource)) { throw "Instalador padrao 0.1.12 ausente." }
+          Copy-Item $installerSource $installerTarget -Force
 
       - name: Align migration version regression test
         shell: pwsh
@@ -151,6 +155,35 @@ jobs:
           $hash = (Get-FileHash ".\installer\Output\ONCA-PDV-PRO-Setup-0.1.12.exe" -Algorithm SHA256).Hash
           "$hash  ONCA-PDV-PRO-Setup-0.1.12.exe" | Set-Content ".\installer\Output\ONCA-PDV-PRO-Setup-0.1.12.exe.sha256" -Encoding ascii
           Write-Host "SETUP SHA256=$hash"
+
+      - name: Smoke test installer
+        shell: pwsh
+        working-directory: .\\work\\ONCA-PDV-PRO
+        run: |
+          $setup = ".\\installer\\Output\\ONCA-PDV-PRO-Setup-0.1.12.exe"
+          $smoke = Join-Path $env:RUNNER_TEMP "onca-pdv-install-smoke"
+          if (Test-Path $smoke) { Remove-Item $smoke -Recurse -Force }
+          New-Item -ItemType Directory -Path $smoke | Out-Null
+          $log = Join-Path $env:RUNNER_TEMP "onca-pdv-install-smoke.log"
+          $args = @(
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            "/SP-",
+            "/DIR=$smoke",
+            "/LOG=$log"
+          )
+          $p = Start-Process -FilePath $setup -ArgumentList $args -PassThru -Wait
+          if ($p.ExitCode -ne 0) {
+            if (Test-Path $log) { Get-Content $log -Tail 200 }
+            throw "Instalador retornou codigo $($p.ExitCode)."
+          }
+          $installed = Join-Path $smoke "OncaPDV.Desktop.exe"
+          if (-not (Test-Path $installed)) {
+            if (Test-Path $log) { Get-Content $log -Tail 200 }
+            throw "Instalador concluiu, mas o EXE nao foi instalado."
+          }
+          Write-Host "SMOKE INSTALL OK: $installed"
 
       - name: Upload final Windows artifacts
         uses: actions/upload-artifact@v4
