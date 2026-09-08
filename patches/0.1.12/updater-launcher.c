@@ -4,6 +4,7 @@
 #include <shellapi.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <wchar.h>
 
 static int is_test_mode(void) {
     LPWSTR cmd = GetCommandLineW();
@@ -57,11 +58,27 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmdLine, int show) {
         L"\"%s\" \"%llu\" \"%llu\"",
         self, (unsigned long long)offset, (unsigned long long)payloadSize);
 
-    const wchar_t* verb = is_test_mode() ? L"open" : L"runas";
-    HINSTANCE r = ShellExecuteW(NULL, verb, L"powershell.exe", params, NULL, SW_SHOWNORMAL);
-    if ((INT_PTR)r <= 32) {
+    SHELLEXECUTEINFOW sei;
+    ZeroMemory(&sei, sizeof(sei));
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+    sei.hwnd = NULL;
+    sei.lpVerb = is_test_mode() ? L"open" : L"runas";
+    sei.lpFile = L"powershell.exe";
+    sei.lpParameters = params;
+    sei.nShow = SW_SHOWNORMAL;
+
+    if (!ShellExecuteExW(&sei)) {
         MessageBoxW(NULL, L"Nao foi possivel iniciar a atualizacao. Execute como Administrador.", L"ONCA PDV PRO 0.1.12", MB_ICONERROR);
         return 1;
+    }
+
+    if (sei.hProcess) {
+        WaitForSingleObject(sei.hProcess, INFINITE);
+        DWORD exitCode = 1;
+        GetExitCodeProcess(sei.hProcess, &exitCode);
+        CloseHandle(sei.hProcess);
+        return (int)exitCode;
     }
     return 0;
 }
