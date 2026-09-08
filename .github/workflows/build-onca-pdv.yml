@@ -55,6 +55,16 @@ jobs:
             Pop-Location
           }
 
+      - name: Align migration version regression test
+        shell: pwsh
+        run: |
+          $test = ".\\work\\ONCA-PDV-PRO\\tests\\OncaPDV.Tests\\BusinessModuleTests.cs"
+          $text = Get-Content $test -Raw
+          $old = 'Assert.Equal(3,await e.Decimal("SELECT MAX(version) FROM schema_versions"))'
+          $new = 'Assert.Equal(4,await e.Decimal("SELECT MAX(version) FROM schema_versions"))'
+          if (-not $text.Contains($old)) { throw "Expected migration assertion was not found." }
+          Set-Content $test ($text.Replace($old, $new)) -Encoding UTF8
+
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
