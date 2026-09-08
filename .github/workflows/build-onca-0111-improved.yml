@@ -49,6 +49,14 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Failed to apply improvement patch." }
           } finally { Pop-Location }
 
+      - name: Align stale migration assertion
+        shell: pwsh
+        run: |
+          $file=".\work\ONCA-PDV-PRO\tests\OncaPDV.Tests\BusinessModuleTests.cs"
+          $text=Get-Content $file -Raw
+          $text=$text.Replace('Assert.Equal(3,await e.Decimal("SELECT MAX(version) FROM schema_versions"))','Assert.Equal(4,await e.Decimal("SELECT MAX(version) FROM schema_versions"))')
+          Set-Content $file $text -Encoding UTF8
+
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
