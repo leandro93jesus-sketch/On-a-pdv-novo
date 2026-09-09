@@ -10,7 +10,7 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v4
-      - name: Rebuild source
+      - name: Rebuild approved base source
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path ".\work" -Force | Out-Null
@@ -19,12 +19,7 @@ jobs:
           [IO.File]::WriteAllBytes(".\base.gz",[Convert]::FromBase64String($encoded))
           $i=[IO.File]::OpenRead(".\base.gz");$o=[IO.File]::Create(".\base.patch");$g=[IO.Compression.GzipStream]::new($i,[IO.Compression.CompressionMode]::Decompress)
           try{$g.CopyTo($o)}finally{$g.Dispose();$o.Dispose();$i.Dispose()}
-          Push-Location ".\work\ONCA-PDV-PRO"; git init | Out-Null; git apply "..\..\base.patch"; Pop-Location
-          $encoded=(Get-ChildItem "..\..\patches\016\part-*" | Sort-Object Name | ForEach-Object {Get-Content $_.FullName -Raw}) -join "";$encoded=$encoded -replace "\s",""
-          [IO.File]::WriteAllBytes("..\..\u16.gz",[Convert]::FromBase64String($encoded));$i=[IO.File]::OpenRead("..\..\u16.gz");$o=[IO.File]::Create("..\..\u16.patch");$g=[IO.Compression.GzipStream]::new($i,[IO.Compression.CompressionMode]::Decompress)
-          try{$g.CopyTo($o)}finally{$g.Dispose();$o.Dispose();$i.Dispose()}
-          git apply "..\..\u16.patch"
-          Pop-Location
+          Push-Location ".\work\ONCA-PDV-PRO"; git init | Out-Null; git apply "..\..\base.patch"; if($LASTEXITCODE -ne 0){throw "Base patch failed"}; Pop-Location
       - name: Print failing test and backup implementation references
         shell: pwsh
         run: |
@@ -32,4 +27,4 @@ jobs:
           Write-Host '===== OperationalGateTests.cs ====='
           Get-Content "$root\tests\OncaPDV.Tests\OperationalGateTests.cs"
           Write-Host '===== Backup/Restore source matches ====='
-          Get-ChildItem "$root\src" -Recurse -Filter *.cs | Select-String -Pattern 'RestoreAsync|Restore|BackupService|Backup' -Context 2,4 | Select-Object -First 160 | ForEach-Object { $_.ToString() }
+          Get-ChildItem "$root\src" -Recurse -Filter *.cs | Select-String -Pattern 'RestoreAsync|Restore|BackupService|Backup' -Context 3,8 | Select-Object -First 220 | ForEach-Object { $_.ToString() }
