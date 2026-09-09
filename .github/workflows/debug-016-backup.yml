@@ -1,0 +1,35 @@
+name: Debug ONCA 0.1.16 backup stress failure
+on:
+  push:
+    paths:
+      - '.github/workflows/debug-016-backup.yml'
+  workflow_dispatch:
+
+jobs:
+  debug:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild source
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path ".\work" -Force | Out-Null
+          Expand-Archive ".\ONCA-PDV-PRO-ATUALIZADO-0.1.3.zip" ".\work" -Force
+          $encoded=(Get-Content ".\patches\onca-0111-melhorias-hoje.patch.gz.b64" -Raw) -replace "\s",""
+          [IO.File]::WriteAllBytes(".\base.gz",[Convert]::FromBase64String($encoded))
+          $i=[IO.File]::OpenRead(".\base.gz");$o=[IO.File]::Create(".\base.patch");$g=[IO.Compression.GzipStream]::new($i,[IO.Compression.CompressionMode]::Decompress)
+          try{$g.CopyTo($o)}finally{$g.Dispose();$o.Dispose();$i.Dispose()}
+          Push-Location ".\work\ONCA-PDV-PRO"; git init | Out-Null; git apply "..\..\base.patch"; Pop-Location
+          $encoded=(Get-ChildItem "..\..\patches\016\part-*" | Sort-Object Name | ForEach-Object {Get-Content $_.FullName -Raw}) -join "";$encoded=$encoded -replace "\s",""
+          [IO.File]::WriteAllBytes("..\..\u16.gz",[Convert]::FromBase64String($encoded));$i=[IO.File]::OpenRead("..\..\u16.gz");$o=[IO.File]::Create("..\..\u16.patch");$g=[IO.Compression.GzipStream]::new($i,[IO.Compression.CompressionMode]::Decompress)
+          try{$g.CopyTo($o)}finally{$g.Dispose();$o.Dispose();$i.Dispose()}
+          git apply "..\..\u16.patch"
+          Pop-Location
+      - name: Print failing test and backup implementation references
+        shell: pwsh
+        run: |
+          $root=".\work\ONCA-PDV-PRO"
+          Write-Host '===== OperationalGateTests.cs ====='
+          Get-Content "$root\tests\OncaPDV.Tests\OperationalGateTests.cs"
+          Write-Host '===== Backup/Restore source matches ====='
+          Get-ChildItem "$root\src" -Recurse -Filter *.cs | Select-String -Pattern 'RestoreAsync|Restore|BackupService|Backup' -Context 2,4 | Select-Object -First 160 | ForEach-Object { $_.ToString() }
