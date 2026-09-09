@@ -1,0 +1,14 @@
+diff --git a/src/OncaPDV.Desktop/MainWindow.xaml.cs b/src/OncaPDV.Desktop/MainWindow.xaml.cs
+--- a/src/OncaPDV.Desktop/MainWindow.xaml.cs
++++ b/src/OncaPDV.Desktop/MainWindow.xaml.cs
+@@ -377,9 +377,7 @@ public partial class MainWindow : Window
+     private void MainWindow_Closing(object? sender,System.ComponentModel.CancelEventArgs e)
+     {
+         if(_workflow.Cart.Items.Count==0)return;
+-        if(MessageBox.Show("Existe uma venda aberta no carrinho.
+-
+-Ela está salva para recuperação, mas deseja realmente fechar o PDV?","ONÇA PDV",MessageBoxButton.YesNo,MessageBoxImage.Warning)!=MessageBoxResult.Yes)e.Cancel=true;
++        if(MessageBox.Show("Existe uma venda aberta no carrinho.\n\nEla está salva para recuperação, mas deseja realmente fechar o PDV?","ONÇA PDV",MessageBoxButton.YesNo,MessageBoxImage.Warning)!=MessageBoxResult.Yes)e.Cancel=true;
+     }
+ 
+     private async Task RefreshSales() => SalesGrid.ItemsSource = await _workflow.LastSalesAsync();
