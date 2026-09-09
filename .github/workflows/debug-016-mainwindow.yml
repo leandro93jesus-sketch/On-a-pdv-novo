@@ -1,0 +1,47 @@
+name: Debug ONCA 0.1.16 MainWindow
+on:
+  push:
+    paths:
+      - '.github/workflows/debug-016-mainwindow.yml'
+  workflow_dispatch:
+
+jobs:
+  debug:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild approved 0.1.15 source base
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path ".\work" -Force | Out-Null
+          Expand-Archive ".\ONCA-PDV-PRO-ATUALIZADO-0.1.3.zip" ".\work" -Force
+          $encoded=(Get-Content ".\patches\onca-0111-melhorias-hoje.patch.gz.b64" -Raw) -replace "\s",""
+          [IO.File]::WriteAllBytes(".\base.gz",[Convert]::FromBase64String($encoded))
+          $i=[IO.File]::OpenRead(".\base.gz");$o=[IO.File]::Create(".\base.patch");$g=[IO.Compression.GzipStream]::new($i,[IO.Compression.CompressionMode]::Decompress)
+          try{$g.CopyTo($o)}finally{$g.Dispose();$o.Dispose();$i.Dispose()}
+          Push-Location ".\work\ONCA-PDV-PRO"; git init | Out-Null; git apply "..\..\base.patch"; Pop-Location
+          $src=".\patches\0.1.12";$dst=".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop"
+          foreach($n in @("ProductSelectionWindow.xaml","ProductSelectionWindow.xaml.cs","DiversosWindow.xaml","DiversosWindow.xaml.cs")){Copy-Item (Join-Path $src $n) (Join-Path $dst $n) -Force}
+          $main=Join-Path $dst "MainWindow.xaml.cs";$t=Get-Content $main -Raw
+          $t=[regex]::Replace($t,'new ProductSelectionWindow\(([^,\r\n]+),\s*([^,\r\n\)]+)(,\s*(?:true|false))?\)','new ProductSelectionWindow($2, $1$3)');Set-Content $main $t -Encoding UTF8
+          $div=Join-Path $dst "DiversosWindow.xaml.cs";$d=Get-Content $div -Raw;$d=$d.Replace('public decimal Price { get; private set; }',"public decimal Price { get; private set; }`r`n    public decimal Quantity => 1m;`r`n    public decimal UnitPrice => Price;");Set-Content $div $d -Encoding UTF8
+          $file=Join-Path $dst "CreditWindow.xaml";$t=Get-Content $file -Raw
+          $needle='<TextBlock Text="DETALHES DO CLIENTE / CONTA" FontWeight="Bold" Foreground="#33423A"/>';$button='<Button Style="{StaticResource RoundedButton}" Content="💵  RECEBER PAGAMENTO  [F9]" FontSize="17" MinHeight="52" Margin="0,10,0,12" Click="Receive_Click"/>'
+          $t=$t.Replace($needle,$needle+"`r`n"+$button);Set-Content $file $t -Encoding UTF8
+      - name: Apply 0.1.16 patches
+        shell: pwsh
+        run: |
+          $encoded=(Get-ChildItem ".\patches\016\part-*" | Sort-Object Name | ForEach-Object {Get-Content $_.FullName -Raw}) -join "";$encoded=$encoded -replace "\s",""
+          [IO.File]::WriteAllBytes(".\u16.gz",[Convert]::FromBase64String($encoded));$i=[IO.File]::OpenRead(".\u16.gz");$o=[IO.File]::Create(".\u16.patch");$g=[IO.Compression.GzipStream]::new($i,[IO.Compression.CompressionMode]::Decompress)
+          try{$g.CopyTo($o)}finally{$g.Dispose();$o.Dispose();$i.Dispose()}
+          Push-Location ".\work\ONCA-PDV-PRO"
+          git apply "..\..\u16.patch"
+          git apply "..\..\patches\016\fix-raw-string.patch"
+          git apply "..\..\patches\016\fix-mainwindow-closing.patch"
+          Pop-Location
+      - name: Show MainWindow around failing line
+        shell: pwsh
+        run: |
+          $p=".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop\MainWindow.xaml.cs"
+          $lines=Get-Content $p
+          for($i=400;$i -le [Math]::Min(430,$lines.Count);$i++){ Write-Host ("{0,4}: {1}" -f $i,$lines[$i-1]) }
