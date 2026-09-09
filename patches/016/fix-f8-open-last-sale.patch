@@ -1,0 +1,11 @@
+diff --git a/src/OncaPDV.Desktop/MainWindow.xaml.cs b/src/OncaPDV.Desktop/MainWindow.xaml.cs
+--- a/src/OncaPDV.Desktop/MainWindow.xaml.cs
++++ b/src/OncaPDV.Desktop/MainWindow.xaml.cs
+@@ -412,7 +412,7 @@ public partial class MainWindow : Window
+     {
+         if (e.Key == Key.F1) Product_Click(sender, e);
+         else if (e.Key == Key.F2) Pay_Click(sender, e);
+-        else if (e.Key == Key.F8) _ = OpenLastSale();
++        else if (e.Key == Key.F8) OpenLastSale();
+         else if (e.Key == Key.Escape) Cancel_Click(sender, e);
+     }
