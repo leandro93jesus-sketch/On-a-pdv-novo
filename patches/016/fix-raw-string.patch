@@ -1,0 +1,22 @@
+diff --git a/src/OncaPDV.Infrastructure/AdvancedOperations.cs b/src/OncaPDV.Infrastructure/AdvancedOperations.cs
+--- a/src/OncaPDV.Infrastructure/AdvancedOperations.cs
++++ b/src/OncaPDV.Infrastructure/AdvancedOperations.cs
+@@ -17,14 +17,16 @@ public sealed class AdvancedOperationsService(OncaDatabase db,IClock? clock=null)
+     public async Task<IReadOnlyList<SaleSearchRow>> SearchSalesAsync(string term="",string status="Todos",CancellationToken ct=default)
+     {
+         var list=new List<SaleSearchRow>();await using var c=db.Open();await using var q=c.CreateCommand();
+-        q.CommandText="""SELECT s.id,s.number,s.created_at,COALESCE(cu.name,'CONSUMIDOR'),s.total,s.status,s.fiscal_status,
++        q.CommandText="""
++SELECT s.id,s.number,s.created_at,COALESCE(cu.name,'CONSUMIDOR'),s.total,s.status,s.fiscal_status,
+ COALESCE((SELECT group_concat(method, ' + ') FROM payments p WHERE p.sale_id=s.id),'')
+ FROM sales s LEFT JOIN customers cu ON cu.id=s.customer_id
+ WHERE ($status='Todos' OR s.status=$status) AND (
+ CAST(s.number AS TEXT) LIKE $q OR COALESCE(cu.name,'') LIKE $q OR CAST(s.total AS TEXT) LIKE $q OR
+ EXISTS(SELECT 1 FROM sale_items i WHERE i.sale_id=s.id AND (i.name LIKE $q OR i.code LIKE $q)) OR
+ EXISTS(SELECT 1 FROM payments p WHERE p.sale_id=s.id AND p.method LIKE $q))
+-ORDER BY s.number DESC LIMIT 500""";
++ORDER BY s.number DESC LIMIT 500
++""";
+         q.Parameters.AddWithValue("$status",status);q.Parameters.AddWithValue("$q",$"%{term.Trim()}%");
+         await using var r=await q.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))list.Add(new(Guid.Parse(r.GetString(0)),r.GetInt64(1),DateTimeOffset.Parse(r.GetString(2)),r.GetString(3),r.GetDecimal(4),r.GetString(7),r.GetString(5),r.GetString(6)));return list;
+     }
