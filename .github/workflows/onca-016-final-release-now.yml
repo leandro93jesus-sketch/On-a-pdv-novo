@@ -1,0 +1,102 @@
+name: ONCA 0.1.16 FINAL RELEASE NOW
+
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-016-final-release-now.yml'
+      - 'scripts/rebuild-onca-016-final.ps1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stress:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1,2,3,4,5]
+    runs-on: windows-2025
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Rebuild final source
+        shell: pwsh
+        run: .\scripts\rebuild-onca-016-final.ps1
+      - name: Restore and build with warnings as errors
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          dotnet restore .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj --configfile .\NuGet.Config
+          dotnet build .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj -c Release --no-restore -warnaserror
+      - name: Run complete suite 20 times per shard
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          for($i=1;$i -le 20;$i++){
+            Write-Host "===== FINAL SHARD ${{ matrix.shard }} REPETITION $i / 20 ====="
+            dotnet test .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj -c Release --no-build --no-restore --logger "console;verbosity=minimal"
+            if($LASTEXITCODE -ne 0){throw "Final shard ${{ matrix.shard }} failed repetition $i"}
+          }
+
+  package:
+    needs: stress
+    runs-on: windows-2025
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Rebuild exact final candidate
+        shell: pwsh
+        run: .\scripts\rebuild-onca-016-final.ps1
+      - name: Verify final features and protected print rule
+        shell: pwsh
+        run: |
+          $root='.\work-final\ONCA-PDV-PRO'
+          $main=Get-Content "$root\src\OncaPDV.Desktop\MainWindow.xaml.cs" -Raw
+          $xaml=Get-Content "$root\src\OncaPDV.Desktop\MainWindow.xaml" -Raw
+          $svc=Get-Content "$root\src\OncaPDV.Infrastructure\FinalFeaturesService.cs" -Raw
+          foreach($s in @('HoldSale_Click','FinalOps_Click','Deseja imprimir o comprovante?','if (shouldPrint)')){if(-not $main.Contains($s)){throw "Missing protected/final feature: $s"}}
+          foreach($s in @('Colocar venda em espera','Trocas / Devoluções / Despesas','v0.1.16')){if(-not $xaml.Contains($s)){throw "Missing final UI: $s"}}
+          foreach($s in @('HoldAsync','Return','Exchange','Expense')){if(-not $svc.Contains($s)){throw "Missing final service feature: $s"}}
+      - name: Final regression and publish
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          dotnet restore .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj --configfile .\NuGet.Config
+          dotnet test .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj -c Release --no-restore
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false -o .\publish-full
+          if(-not (Test-Path '.\publish-full\OncaPDV.Desktop.exe')){throw 'Published EXE missing'}
+      - name: Build NSIS installer
+        shell: pwsh
+        run: |
+          $dst='.\installer\publish-full';if(Test-Path $dst){Remove-Item $dst -Recurse -Force};Copy-Item '.\work-final\ONCA-PDV-PRO\publish-full' $dst -Recurse -Force
+          choco install nsis -y --no-progress
+          $m=(Get-Command makensis.exe -ErrorAction SilentlyContinue).Source;if(-not $m){$m=@('C:\Program Files (x86)\NSIS\makensis.exe','C:\Program Files\NSIS\makensis.exe')|Where-Object{Test-Path $_}|Select-Object -First 1};if(-not $m){throw 'NSIS missing'}
+          Push-Location .\installer;& $m '.\ONCA-PDV-PRO-0.1.16-base0111.nsi';if($LASTEXITCODE -ne 0){throw 'Installer failed'};Pop-Location
+          Copy-Item '.\installer\ONCA-PDV-PRO-Setup-0.1.16-BASE-0111.exe' '.\installer\ONCA-PDV-PRO-Setup-0.1.16-FINAL-COMPLETO.exe' -Force
+      - name: Install and launch final installer 10 times
+        shell: pwsh
+        run: |
+          $setup=Resolve-Path '.\installer\ONCA-PDV-PRO-Setup-0.1.16-FINAL-COMPLETO.exe'
+          for($i=1;$i -le 10;$i++){
+            $dir=Join-Path $env:RUNNER_TEMP ("ONCA-016-final-completo-"+$i)
+            $p=Start-Process -FilePath $setup -ArgumentList @('/S',"/D=$dir") -PassThru -Wait
+            if($p.ExitCode -ne 0){throw "Install failed $i"}
+            $exe=Join-Path $dir 'OncaPDV.Desktop.exe';if(-not(Test-Path $exe)){throw "Installed EXE missing $i"}
+            $app=Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru
+            if(-not $app.WaitForExit(30000)){try{$app.Kill($true)}catch{};throw "Launch timeout $i"}
+            if($app.ExitCode -ne 0){throw "Launch failed $i exit $($app.ExitCode)"}
+          }
+      - name: Upload final installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.16-FINAL-COMPLETO
+          path: installer/ONCA-PDV-PRO-Setup-0.1.16-FINAL-COMPLETO.exe
+          retention-days: 7
+          if-no-files-found: error
