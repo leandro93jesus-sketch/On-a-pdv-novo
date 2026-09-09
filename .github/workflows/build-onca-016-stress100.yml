@@ -60,7 +60,7 @@ jobs:
           git apply "..\..\u16.patch"; if($LASTEXITCODE -ne 0){throw "0.1.16 patch failed"}
           git apply "..\..\patches\016\fix-raw-string.patch"; if($LASTEXITCODE -ne 0){throw "SQL compile fix failed"}
           git apply "..\..\patches\016\fix-mainwindow-closing.patch"; if($LASTEXITCODE -ne 0){throw "Closing compile fix failed"}
-          git apply "..\..\patches\016\fix-f8-open-last-sale.patch"; if($LASTEXITCODE -ne 0){throw "F8 compile fix failed"}
+          $p=".\src\OncaPDV.Desktop\MainWindow.xaml.cs";$t=Get-Content $p -Raw;$old='else if (e.Key == Key.F8) _ = OpenLastSale();';$new='else if (e.Key == Key.F8) OpenLastSale();';if(-not $t.Contains($old)){throw "F8 target missing"};$t=$t.Replace($old,$new);Set-Content $p $t -Encoding UTF8
           Pop-Location
 
       - name: Verify protected behavior
