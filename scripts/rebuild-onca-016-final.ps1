@@ -51,7 +51,11 @@ Copy-Item "$finalDir\FinalFeaturesTests.cs" (Join-Path $root 'tests\OncaPDV.Test
 $xamlPath=Join-Path $root 'src\OncaPDV.Desktop\MainWindow.xaml';$x=Get-Content $xamlPath -Raw
 if(-not $x.Contains('Click="FinalOps_Click"')){
   $m=[regex]::Match($x,'<Button[^>]+Click="Documents_Click"\s*/>');if(-not $m.Success){throw 'Documents button anchor missing'}
-  $buttons=$m.Value+"`r`n                    <Button Style=\"{StaticResource NavButton}\" Content=\"⏸   Colocar venda em espera\" Click=\"HoldSale_Click\"/>`r`n                    <Button Style=\"{StaticResource NavButton}\" Content=\"↩   Trocas / Devoluções / Despesas\" Click=\"FinalOps_Click\"/>"
+  $extra=@'
+                    <Button Style="{StaticResource NavButton}" Content="⏸   Colocar venda em espera" Click="HoldSale_Click"/>
+                    <Button Style="{StaticResource NavButton}" Content="↩   Trocas / Devoluções / Despesas" Click="FinalOps_Click"/>
+'@
+  $buttons=$m.Value+"`r`n"+$extra.TrimEnd()
   $x=$x.Remove($m.Index,$m.Length).Insert($m.Index,$buttons)
 }
 Set-Content $xamlPath $x -Encoding UTF8
