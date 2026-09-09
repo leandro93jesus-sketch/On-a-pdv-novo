@@ -1,0 +1,23 @@
+name: Debug final017 test constructor
+on:
+  push:
+    paths:
+      - '.github/workflows/debug-final017-test.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode and show final tests
+        shell: pwsh
+        run: |
+          $encoded=(Get-Content '.\patches\final017\final017b.tar.gz.b64' -Raw) -replace '\s',''
+          [IO.File]::WriteAllBytes('.\final017.tar.gz',[Convert]::FromBase64String($encoded))
+          New-Item -ItemType Directory -Path '.\inspect' -Force | Out-Null
+          tar -xzf '.\final017.tar.gz' -C '.\inspect'
+          Write-Host '=== FinalFeaturesTests.cs ==='
+          $n=0
+          Get-Content '.\inspect\FinalFeaturesTests.cs' | ForEach-Object { $n++; Write-Host (("{0,3}: " -f $n)+$_) }
