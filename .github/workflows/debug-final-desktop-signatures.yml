@@ -1,0 +1,27 @@
+name: Debug final desktop signatures
+on:
+  push:
+    paths:
+      - '.github/workflows/debug-final-desktop-signatures.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild exact final source
+        shell: pwsh
+        run: .\scripts\rebuild-onca-016-final.ps1
+      - name: Inspect signatures and MainWindow lines
+        shell: pwsh
+        run: |
+          $root='.\work-final\ONCA-PDV-PRO'
+          Write-Host '=== ReplaceCartAsync matches ==='
+          Get-ChildItem "$root\src" -Recurse -Filter '*.cs' | Select-String 'ReplaceCartAsync' -Context 4,8 | ForEach-Object { Write-Host $_.ToString(); $_.Context.PreContext | ForEach-Object {Write-Host $_}; $_.Context.PostContext | ForEach-Object {Write-Host $_} }
+          Write-Host '=== Cart definitions ==='
+          Get-ChildItem "$root\src" -Recurse -Filter '*.cs' | Select-String -Pattern 'record Cart|class Cart|sealed class Cart' -Context 2,18 | ForEach-Object { Write-Host $_.ToString(); $_.Context.PreContext | ForEach-Object {Write-Host $_}; $_.Context.PostContext | ForEach-Object {Write-Host $_} }
+          $p="$root\src\OncaPDV.Desktop\MainWindow.xaml.cs";$lines=Get-Content $p
+          Write-Host '=== MainWindow 245-270 ==='; foreach($n in 245..270){if($n -le $lines.Count){Write-Host (('{0,4}: {1}' -f $n,$lines[$n-1]))}}
+          Write-Host '=== MainWindow 325-340 ==='; foreach($n in 325..340){if($n -le $lines.Count){Write-Host (('{0,4}: {1}' -f $n,$lines[$n-1]))}}
