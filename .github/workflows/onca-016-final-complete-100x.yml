@@ -1,0 +1,202 @@
+name: ONCA 0.1.16 FINAL complete 100x
+
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-016-final-complete-100x.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stress:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1,2,3,4,5,6,7,8,9,10]
+    runs-on: windows-2025
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild approved 0.1.15 plus 0.1.16
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path ".\work" -Force | Out-Null
+          Expand-Archive ".\ONCA-PDV-PRO-ATUALIZADO-0.1.3.zip" ".\work" -Force
+          $encoded=(Get-Content ".\patches\onca-0111-melhorias-hoje.patch.gz.b64" -Raw) -replace "\s",""
+          [IO.File]::WriteAllBytes(".\base.gz",[Convert]::FromBase64String($encoded))
+          $i=[IO.File]::OpenRead(".\base.gz");$o=[IO.File]::Create(".\base.patch");$g=[IO.Compression.GzipStream]::new($i,[IO.Compression.CompressionMode]::Decompress)
+          try{$g.CopyTo($o)}finally{$g.Dispose();$o.Dispose();$i.Dispose()}
+          Push-Location ".\work\ONCA-PDV-PRO"; git init | Out-Null; git apply "..\..\base.patch"; if($LASTEXITCODE -ne 0){throw "Base patch failed"}; Pop-Location
+          $src=".\patches\0.1.12";$dst=".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop"
+          foreach($n in @("ProductSelectionWindow.xaml","ProductSelectionWindow.xaml.cs","DiversosWindow.xaml","DiversosWindow.xaml.cs")){Copy-Item (Join-Path $src $n) (Join-Path $dst $n) -Force}
+          $main=Join-Path $dst "MainWindow.xaml.cs";$t=Get-Content $main -Raw
+          $t=[regex]::Replace($t,'new ProductSelectionWindow\(([^,\r\n]+),\s*([^,\r\n\)]+)(,\s*(?:true|false))?\)','new ProductSelectionWindow($2, $1$3)');Set-Content $main $t -Encoding UTF8
+          $div=Join-Path $dst "DiversosWindow.xaml.cs";$d=Get-Content $div -Raw;$d=$d.Replace('public decimal Price { get; private set; }',"public decimal Price { get; private set; }`r`n    public decimal Quantity => 1m;`r`n    public decimal UnitPrice => Price;");Set-Content $div $d -Encoding UTF8
+          $file=Join-Path $dst "CreditWindow.xaml";$t=Get-Content $file -Raw
+          $needle='<TextBlock Text="DETALHES DO CLIENTE / CONTA" FontWeight="Bold" Foreground="#33423A"/>';$button='<Button Style="{StaticResource RoundedButton}" Content="💵  RECEBER PAGAMENTO  [F9]" FontSize="17" MinHeight="52" Margin="0,10,0,12" Click="Receive_Click"/>'
+          if(-not $t.Contains($button)){if(-not $t.Contains($needle)){throw "Credit anchor missing"};$t=$t.Replace($needle,$needle+"`r`n"+$button);Set-Content $file $t -Encoding UTF8}
+          $encoded=(Get-ChildItem ".\patches\016\part-*" | Sort-Object Name | ForEach-Object {Get-Content $_.FullName -Raw}) -join "";$encoded=$encoded -replace "\s",""
+          [IO.File]::WriteAllBytes(".\u16.gz",[Convert]::FromBase64String($encoded));$i=[IO.File]::OpenRead(".\u16.gz");$o=[IO.File]::Create(".\u16.patch");$g=[IO.Compression.GzipStream]::new($i,[IO.Compression.CompressionMode]::Decompress)
+          try{$g.CopyTo($o)}finally{$g.Dispose();$o.Dispose();$i.Dispose()}
+          Push-Location ".\work\ONCA-PDV-PRO"
+          git apply "..\..\u16.patch"; if($LASTEXITCODE -ne 0){throw "0.1.16 patch failed"}
+          git apply "..\..\patches\016\fix-raw-string.patch"; if($LASTEXITCODE -ne 0){throw "SQL fix failed"}
+          git apply "..\..\patches\016\fix-mainwindow-closing.patch"; if($LASTEXITCODE -ne 0){throw "Closing fix failed"}
+          $p=".\src\OncaPDV.Desktop\MainWindow.xaml.cs";$t=Get-Content $p -Raw;$t=$t.Replace('else if (e.Key == Key.F8) _ = OpenLastSale();','else if (e.Key == Key.F8) OpenLastSale();');Set-Content $p $t -Encoding UTF8
+          Pop-Location
+      - name: Apply final operations bundle and integration
+        shell: pwsh
+        run: |
+          $encoded=(Get-Content ".\patches\final017\final017b.tar.gz.b64" -Raw) -replace "\s",""
+          [IO.File]::WriteAllBytes(".\final017.tar.gz",[Convert]::FromBase64String($encoded))
+          New-Item -ItemType Directory -Path ".\final017" -Force | Out-Null
+          tar -xzf ".\final017.tar.gz" -C ".\final017"
+          Copy-Item ".\final017\FinalFeaturesService.cs" ".\work\ONCA-PDV-PRO\src\OncaPDV.Infrastructure\FinalFeaturesService.cs" -Force
+          Copy-Item ".\final017\FinalOperationsWindow.xaml" ".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop\FinalOperationsWindow.xaml" -Force
+          Copy-Item ".\final017\FinalOperationsWindow.xaml.cs" ".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop\FinalOperationsWindow.xaml.cs" -Force
+          Copy-Item ".\final017\FinalFeaturesTests.cs" ".\work\ONCA-PDV-PRO\tests\OncaPDV.Tests\FinalFeaturesTests.cs" -Force
+          $xamlPath=".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop\MainWindow.xaml";$x=Get-Content $xamlPath -Raw
+          if(-not $x.Contains('Click="FinalOps_Click"')){
+            $m=[regex]::Match($x,'<Button[^>]+Click="Documents_Click"\s*/>');if(-not $m.Success){throw "Documents button anchor missing"}
+            $buttons=$m.Value+"`r`n                    <Button Style=\"{StaticResource NavButton}\" Content=\"⏸   Colocar venda em espera\" Click=\"HoldSale_Click\"/>`r`n                    <Button Style=\"{StaticResource NavButton}\" Content=\"↩   Trocas / Devoluções / Despesas\" Click=\"FinalOps_Click\"/>"
+            $x=$x.Remove($m.Index,$m.Length).Insert($m.Index,$buttons)
+          }
+          if($x.Contains('<StackPanel Grid.Row="1" Margin="0,5">') -and -not $x.Contains('<ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"')){
+            $x=$x.Replace('<StackPanel Grid.Row="1" Margin="0,5">','<ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="0,5">')
+            $x=$x.Replace('</StackPanel>`r`n                <StackPanel Grid.Row="2"','</StackPanel></ScrollViewer>`r`n                <StackPanel Grid.Row="2"')
+            $x=$x.Replace("</StackPanel>`n                <StackPanel Grid.Row=\"2\"","</StackPanel></ScrollViewer>`n                <StackPanel Grid.Row=\"2\"")
+          }
+          Set-Content $xamlPath $x -Encoding UTF8
+          $csPath=".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop\MainWindow.xaml.cs";$c=Get-Content $csPath -Raw
+          $c=$c.Replace('dialog.Description, dialog.Quantity','dialog.Description ?? "DIVERSOS", dialog.Quantity')
+          if(-not $c.Contains('HoldSale_Click(object sender')){
+            $insert=@'
+    private async void HoldSale_Click(object sender, RoutedEventArgs e)
+    {
+        if (_workflow.Cart.Items.Count == 0) { FinalOps_Click(sender, e); return; }
+        try
+        {
+            var svc = new FinalFeaturesService(_database);
+            await svc.HoldAsync($"Espera {DateTime.Now:HH:mm}", _workflow.Cart.CustomerId, _workflow.Cart.Items.ToArray(), _workflow.Cart.Discount);
+            await _workflow.CancelAsync(); RefreshCart(); SetStatus("VENDA SALVA EM ESPERA"); SearchBox.Focus();
+        }
+        catch (Exception ex) { MessageBox.Show(ex.Message, "Venda em espera", MessageBoxButton.OK, MessageBoxImage.Warning); }
+    }
+
+    private async void FinalOps_Click(object sender, RoutedEventArgs e)
+    {
+        var w = new FinalOperationsWindow(_database, OperatorId) { Owner = this };
+        if (w.ShowDialog() != true || w.SelectedHold is null) return;
+        if (_workflow.Cart.Items.Count > 0 && MessageBox.Show("Substituir o carrinho atual pela venda em espera?", "ONÇA PDV", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        var h = w.SelectedHold;
+        await _workflow.CancelAsync();
+        var replaced = false;
+        try
+        {
+            var m = _workflow.GetType().GetMethods().FirstOrDefault(x => x.Name == "ReplaceCartAsync" && x.GetParameters().Length == 2);
+            if (m is not null) { var task = m.Invoke(_workflow, new object?[] { h.Items, h.CustomerId }) as Task; if (task is not null) { await task; replaced = true; } }
+        }
+        catch { replaced = false; }
+        if (!replaced)
+        {
+            await _workflow.SelectCustomerAsync(h.CustomerId);
+            foreach (var item in h.Items)
+            {
+                if (item.Code.Equals("DIVERSOS", StringComparison.OrdinalIgnoreCase)) await _workflow.AddDiversosAsync(item.Name, item.Quantity, item.UnitPrice);
+                else { await _workflow.ScanAsync(item.Code); await _workflow.ChangeQuantityAsync(item.ProductId, item.Quantity); }
+            }
+        }
+        await new FinalFeaturesService(_database).DeleteHoldAsync(h.Id);
+        RefreshCart(); SetStatus("VENDA EM ESPERA RECUPERADA");
+    }
+
+'@
+            $anchor='    private void Preview_Click(object sender, RoutedEventArgs e)'
+            if(-not $c.Contains($anchor)){throw "Preview anchor missing"};$c=$c.Replace($anchor,$insert+$anchor)
+          }
+          Set-Content $csPath $c -Encoding UTF8
+          @'
+using Xunit;
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
+'@ | Set-Content ".\work\ONCA-PDV-PRO\tests\OncaPDV.Tests\StressSerial.cs" -Encoding UTF8
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build all tests
+        shell: pwsh
+        working-directory: .\work\ONCA-PDV-PRO
+        run: |
+          dotnet restore .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj --configfile .\NuGet.Config
+          dotnet build .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj -c Release --no-restore -warnaserror
+      - name: Run complete suite 10 times per shard
+        shell: pwsh
+        working-directory: .\work\ONCA-PDV-PRO
+        run: |
+          for($i=1;$i -le 10;$i++){
+            Write-Host "===== FINAL SHARD ${{ matrix.shard }} - $i/10 ====="
+            dotnet test .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj -c Release --no-build --no-restore --logger "console;verbosity=minimal"
+            if($LASTEXITCODE -ne 0){throw "Final shard ${{ matrix.shard }} failed repetition $i"}
+          }
+
+  package:
+    needs: stress
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct final candidate
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path ".\work" -Force | Out-Null
+          Expand-Archive ".\ONCA-PDV-PRO-ATUALIZADO-0.1.3.zip" ".\work" -Force
+          $encoded=(Get-Content ".\patches\onca-0111-melhorias-hoje.patch.gz.b64" -Raw) -replace "\s","";[IO.File]::WriteAllBytes(".\base.gz",[Convert]::FromBase64String($encoded));$i=[IO.File]::OpenRead(".\base.gz");$o=[IO.File]::Create(".\base.patch");$g=[IO.Compression.GzipStream]::new($i,[IO.Compression.CompressionMode]::Decompress);try{$g.CopyTo($o)}finally{$g.Dispose();$o.Dispose();$i.Dispose()};Push-Location ".\work\ONCA-PDV-PRO";git init|Out-Null;git apply "..\..\base.patch";Pop-Location
+          $src=".\patches\0.1.12";$dst=".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop";foreach($n in @("ProductSelectionWindow.xaml","ProductSelectionWindow.xaml.cs","DiversosWindow.xaml","DiversosWindow.xaml.cs")){Copy-Item (Join-Path $src $n) (Join-Path $dst $n) -Force}
+          $main=Join-Path $dst "MainWindow.xaml.cs";$t=Get-Content $main -Raw;$t=[regex]::Replace($t,'new ProductSelectionWindow\(([^,\r\n]+),\s*([^,\r\n\)]+)(,\s*(?:true|false))?\)','new ProductSelectionWindow($2, $1$3)');Set-Content $main $t -Encoding UTF8
+          $div=Join-Path $dst "DiversosWindow.xaml.cs";$d=Get-Content $div -Raw;$d=$d.Replace('public decimal Price { get; private set; }',"public decimal Price { get; private set; }`r`n    public decimal Quantity => 1m;`r`n    public decimal UnitPrice => Price;");Set-Content $div $d -Encoding UTF8
+          $file=Join-Path $dst "CreditWindow.xaml";$t=Get-Content $file -Raw;$needle='<TextBlock Text="DETALHES DO CLIENTE / CONTA" FontWeight="Bold" Foreground="#33423A"/>';$button='<Button Style="{StaticResource RoundedButton}" Content="💵  RECEBER PAGAMENTO  [F9]" FontSize="17" MinHeight="52" Margin="0,10,0,12" Click="Receive_Click"/>';if(-not $t.Contains($button)){$t=$t.Replace($needle,$needle+"`r`n"+$button);Set-Content $file $t -Encoding UTF8}
+          $encoded=(Get-ChildItem ".\patches\016\part-*"|Sort-Object Name|%{Get-Content $_.FullName -Raw}) -join "";$encoded=$encoded-replace"\s","";[IO.File]::WriteAllBytes(".\u16.gz",[Convert]::FromBase64String($encoded));$i=[IO.File]::OpenRead(".\u16.gz");$o=[IO.File]::Create(".\u16.patch");$g=[IO.Compression.GzipStream]::new($i,[IO.Compression.CompressionMode]::Decompress);try{$g.CopyTo($o)}finally{$g.Dispose();$o.Dispose();$i.Dispose()};Push-Location ".\work\ONCA-PDV-PRO";git apply "..\..\u16.patch";git apply "..\..\patches\016\fix-raw-string.patch";git apply "..\..\patches\016\fix-mainwindow-closing.patch";$p=".\src\OncaPDV.Desktop\MainWindow.xaml.cs";$t=Get-Content $p -Raw;$t=$t.Replace('else if (e.Key == Key.F8) _ = OpenLastSale();','else if (e.Key == Key.F8) OpenLastSale();');Set-Content $p $t -Encoding UTF8;Pop-Location
+          $encoded=(Get-Content ".\patches\final017\final017b.tar.gz.b64" -Raw)-replace"\s","";[IO.File]::WriteAllBytes(".\final017.tar.gz",[Convert]::FromBase64String($encoded));New-Item -ItemType Directory ".\final017" -Force|Out-Null;tar -xzf ".\final017.tar.gz" -C ".\final017";Copy-Item ".\final017\FinalFeaturesService.cs" ".\work\ONCA-PDV-PRO\src\OncaPDV.Infrastructure\FinalFeaturesService.cs" -Force;Copy-Item ".\final017\FinalOperationsWindow.xaml" ".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop\FinalOperationsWindow.xaml" -Force;Copy-Item ".\final017\FinalOperationsWindow.xaml.cs" ".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop\FinalOperationsWindow.xaml.cs" -Force;Copy-Item ".\final017\FinalFeaturesTests.cs" ".\work\ONCA-PDV-PRO\tests\OncaPDV.Tests\FinalFeaturesTests.cs" -Force
+          $xamlPath=".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop\MainWindow.xaml";$x=Get-Content $xamlPath -Raw;if(-not $x.Contains('Click="FinalOps_Click"')){$m=[regex]::Match($x,'<Button[^>]+Click="Documents_Click"\s*/>');$buttons=$m.Value+"`r`n                    <Button Style=\"{StaticResource NavButton}\" Content=\"⏸   Colocar venda em espera\" Click=\"HoldSale_Click\"/>`r`n                    <Button Style=\"{StaticResource NavButton}\" Content=\"↩   Trocas / Devoluções / Despesas\" Click=\"FinalOps_Click\"/>";$x=$x.Remove($m.Index,$m.Length).Insert($m.Index,$buttons)};Set-Content $xamlPath $x -Encoding UTF8
+          $csPath=".\work\ONCA-PDV-PRO\src\OncaPDV.Desktop\MainWindow.xaml.cs";$c=Get-Content $csPath -Raw;$c=$c.Replace('dialog.Description, dialog.Quantity','dialog.Description ?? "DIVERSOS", dialog.Quantity');if(-not $c.Contains('HoldSale_Click(object sender')){$insert=@'
+    private async void HoldSale_Click(object sender, RoutedEventArgs e){if(_workflow.Cart.Items.Count==0){FinalOps_Click(sender,e);return;}try{var svc=new FinalFeaturesService(_database);await svc.HoldAsync($"Espera {DateTime.Now:HH:mm}",_workflow.Cart.CustomerId,_workflow.Cart.Items.ToArray(),_workflow.Cart.Discount);await _workflow.CancelAsync();RefreshCart();SetStatus("VENDA SALVA EM ESPERA");}catch(Exception ex){MessageBox.Show(ex.Message);}}
+    private async void FinalOps_Click(object sender, RoutedEventArgs e){var w=new FinalOperationsWindow(_database,OperatorId){Owner=this};if(w.ShowDialog()!=true||w.SelectedHold is null)return;if(_workflow.Cart.Items.Count>0&&MessageBox.Show("Substituir o carrinho atual pela venda em espera?","ONÇA PDV",MessageBoxButton.YesNo)!=MessageBoxResult.Yes)return;var h=w.SelectedHold;await _workflow.CancelAsync();var replaced=false;try{var m=_workflow.GetType().GetMethods().FirstOrDefault(x=>x.Name=="ReplaceCartAsync"&&x.GetParameters().Length==2);if(m is not null){var task=m.Invoke(_workflow,new object?[]{h.Items,h.CustomerId}) as Task;if(task is not null){await task;replaced=true;}}}catch{replaced=false;}if(!replaced){await _workflow.SelectCustomerAsync(h.CustomerId);foreach(var item in h.Items){if(item.Code.Equals("DIVERSOS",StringComparison.OrdinalIgnoreCase))await _workflow.AddDiversosAsync(item.Name,item.Quantity,item.UnitPrice);else{await _workflow.ScanAsync(item.Code);await _workflow.ChangeQuantityAsync(item.ProductId,item.Quantity);}}}await new FinalFeaturesService(_database).DeleteHoldAsync(h.Id);RefreshCart();SetStatus("VENDA EM ESPERA RECUPERADA");}
+'@;$anchor='    private void Preview_Click(object sender, RoutedEventArgs e)';$c=$c.Replace($anchor,$insert+$anchor)};Set-Content $csPath $c -Encoding UTF8
+      - name: Layout and protected behavior gate
+        shell: pwsh
+        run: |
+          $root=".\work\ONCA-PDV-PRO";$mx=Get-Content "$root\src\OncaPDV.Desktop\MainWindow.xaml" -Raw;$mc=Get-Content "$root\src\OncaPDV.Desktop\MainWindow.xaml.cs" -Raw;$fo=Get-Content "$root\src\OncaPDV.Desktop\FinalOperationsWindow.xaml" -Raw
+          foreach($needle in @('v0.1.16','FinalOps_Click','HoldSale_Click')){if(-not ($mx+$mc).Contains($needle)){throw "Missing protected/layout item: $needle"}}
+          foreach($needle in @('MinWidth="980"','MinHeight="680"','HorizontalScrollBarVisibility="Auto"','VerticalScrollBarVisibility="Auto"')){if(-not $fo.Contains($needle)){throw "Final window layout gate failed: $needle"}}
+          if(-not $mc.Contains('Deseja imprimir o comprovante?')){throw "Print confirmation missing"};if(-not $mc.Contains('if (shouldPrint)')){throw "Print gate missing"}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Final regression publish installer and smoke
+        shell: pwsh
+        working-directory: .\work\ONCA-PDV-PRO
+        run: |
+          dotnet restore .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj --configfile .\NuGet.Config
+          dotnet test .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj -c Release --no-restore
+          if($LASTEXITCODE -ne 0){throw "Final tests failed"}
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false -o .\publish-final
+          if(-not(Test-Path '.\publish-final\OncaPDV.Desktop.exe')){throw 'EXE missing'}
+      - name: Build NSIS final installer
+        shell: pwsh
+        run: |
+          $dst=".\installer\publish-full";if(Test-Path $dst){Remove-Item $dst -Recurse -Force};Copy-Item ".\work\ONCA-PDV-PRO\publish-final" $dst -Recurse -Force
+          choco install nsis -y --no-progress
+          $m=(Get-Command makensis.exe -ErrorAction SilentlyContinue).Source;if(-not$m){$m=@('C:\Program Files (x86)\NSIS\makensis.exe','C:\Program Files\NSIS\makensis.exe')|?{Test-Path $_}|select -First 1};if(-not$m){throw 'NSIS missing'}
+          Push-Location .\installer;& $m '.\ONCA-PDV-PRO-0.1.16-base0111.nsi';if($LASTEXITCODE-ne0){throw 'Installer failed'};Pop-Location
+          Copy-Item '.\installer\ONCA-PDV-PRO-Setup-0.1.16-BASE-0111.exe' '.\installer\ONCA-PDV-PRO-Setup-0.1.16-FINAL-COMPLETO.exe' -Force
+      - name: Install and launch 20 times
+        shell: pwsh
+        run: |
+          $setup=Resolve-Path '.\installer\ONCA-PDV-PRO-Setup-0.1.16-FINAL-COMPLETO.exe'
+          for($i=1;$i-le20;$i++){$dir=Join-Path $env:RUNNER_TEMP ("ONCA-final-"+$i);$p=Start-Process -FilePath $setup -ArgumentList @('/S',"/D=$dir") -PassThru -Wait;if($p.ExitCode-ne0){throw "Install failed $i"};$app=Start-Process -FilePath (Join-Path $dir 'OncaPDV.Desktop.exe') -ArgumentList '--smoke-test' -PassThru;if(-not$app.WaitForExit(30000)){try{$app.Kill($true)}catch{};throw "Launch timeout $i"};if($app.ExitCode-ne0){throw "Launch failed $i"}}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.16-FINAL-COMPLETO-TESTADO
+          path: installer/ONCA-PDV-PRO-Setup-0.1.16-FINAL-COMPLETO.exe
+          retention-days: 7
