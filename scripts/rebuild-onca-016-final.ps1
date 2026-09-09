@@ -49,7 +49,10 @@ Copy-Item "$finalDir\FinalOperationsWindow.xaml.cs" (Join-Path $root 'src\OncaPD
 $testPath=Join-Path $root 'tests\OncaPDV.Tests\FinalFeaturesTests.cs'
 Copy-Item "$finalDir\FinalFeaturesTests.cs" $testPath -Force
 $ft=Get-Content $testPath -Raw
-$ft=[regex]::Replace($ft,'new Database\(([^;\r\n]+)\)','new Database(new AppPaths($1))')
+$old='_db=new(Path.Combine(_root,"data.db"));'
+$new='var paths=new AppPaths(_root,Path.Combine(_root,"data"),Path.Combine(_root,"backups"),Path.Combine(_root,"logs"),Path.Combine(_root,"exports"),Path.Combine(_root,"print"));_db=new(paths);'
+if(-not $ft.Contains($old)){throw 'Final test DB constructor anchor missing'}
+$ft=$ft.Replace($old,$new)
 Set-Content $testPath $ft -Encoding UTF8
 
 $xamlPath=Join-Path $root 'src\OncaPDV.Desktop\MainWindow.xaml';$x=Get-Content $xamlPath -Raw
