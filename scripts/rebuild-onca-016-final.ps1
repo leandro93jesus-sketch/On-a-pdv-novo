@@ -46,7 +46,11 @@ tar -xzf '.\final017.tar.gz' -C $finalDir
 Copy-Item "$finalDir\FinalFeaturesService.cs" (Join-Path $root 'src\OncaPDV.Infrastructure\FinalFeaturesService.cs') -Force
 Copy-Item "$finalDir\FinalOperationsWindow.xaml" (Join-Path $root 'src\OncaPDV.Desktop\FinalOperationsWindow.xaml') -Force
 Copy-Item "$finalDir\FinalOperationsWindow.xaml.cs" (Join-Path $root 'src\OncaPDV.Desktop\FinalOperationsWindow.xaml.cs') -Force
-Copy-Item "$finalDir\FinalFeaturesTests.cs" (Join-Path $root 'tests\OncaPDV.Tests\FinalFeaturesTests.cs') -Force
+$testPath=Join-Path $root 'tests\OncaPDV.Tests\FinalFeaturesTests.cs'
+Copy-Item "$finalDir\FinalFeaturesTests.cs" $testPath -Force
+$ft=Get-Content $testPath -Raw
+$ft=[regex]::Replace($ft,'new Database\(([^;\r\n]+)\)','new Database(new AppPaths($1))')
+Set-Content $testPath $ft -Encoding UTF8
 
 $xamlPath=Join-Path $root 'src\OncaPDV.Desktop\MainWindow.xaml';$x=Get-Content $xamlPath -Raw
 if(-not $x.Contains('Click="FinalOps_Click"')){
