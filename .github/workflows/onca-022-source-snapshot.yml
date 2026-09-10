@@ -1,0 +1,56 @@
+name: ONCA 0.1.22 SOURCE SNAPSHOT
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-022-source-snapshot.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  snapshot:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild approved base
+        shell: pwsh
+        run: .\scripts\rebuild-onca-016-final.ps1
+      - name: Apply 0.1.18
+        shell: pwsh
+        run: python .\scripts\apply_ui_018.py
+      - name: Apply 0.1.19
+        shell: pwsh
+        run: python .\scripts\apply_ui_019.py
+      - name: Apply 0.1.20
+        shell: pwsh
+        run: python .\scripts\apply_ui_020.py
+      - name: Apply 0.1.21
+        shell: pwsh
+        run: python .\scripts\apply_print_021.py
+      - name: Save selected reconstructed source
+        shell: pwsh
+        run: |
+          $r='.\work-final\ONCA-PDV-PRO'
+          $out='.\snapshot-021'
+          if(Test-Path $out){Remove-Item $out -Recurse -Force}
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+          $files=@(
+            'src\OncaPDV.Desktop\MainWindow.xaml','src\OncaPDV.Desktop\MainWindow.xaml.cs',
+            'src\OncaPDV.Desktop\CreditWindow.xaml','src\OncaPDV.Desktop\CreditWindow.xaml.cs',
+            'src\OncaPDV.Desktop\FinalOperationsWindow.xaml','src\OncaPDV.Desktop\FinalOperationsWindow.xaml.cs',
+            'src\OncaPDV.Infrastructure\FinalFeaturesService.cs',
+            'src\OncaPDV.Infrastructure\Database.cs',
+            'src\OncaPDV.Infrastructure\AdvancedOperations.cs',
+            'src\OncaPDV.Infrastructure\OperationalServices.cs',
+            'src\OncaPDV.Printing\ReceiptDocument.cs',
+            'src\OncaPDV.Printing\EscPos58Renderer.cs',
+            'src\OncaPDV.Printing\EscPos80Renderer.cs',
+            'src\OncaPDV.Desktop\DisplaySettingsWindow.xaml','src\OncaPDV.Desktop\DisplaySettingsWindow.xaml.cs',
+            'src\OncaPDV.Desktop\ReportsWindow.xaml','src\OncaPDV.Desktop\ReportsWindow.xaml.cs'
+          )
+          foreach($rel in $files){$src=Join-Path $r $rel;if(Test-Path $src){$safe=$rel -replace '[\\/]','__';Copy-Item $src (Join-Path $out $safe) -Force}}
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add snapshot-021
+          git commit -m 'chore: snapshot reconstructed 0.1.21 source for 0.1.22' || exit 0
+          git push
