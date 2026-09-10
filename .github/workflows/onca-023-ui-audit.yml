@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'scripts/apply_ui_023.py'
+      - 'scripts/fix_022_nullable.py'
       - '.github/workflows/onca-023-ui-audit.yml'
 jobs:
   build-test-release:
@@ -72,4 +73,3 @@ jobs:
           name: ONCA-PDV-PRO-0.1.23-UI-REVISAO
           path: publish023/ONCA-PDV-PRO-0.1.23-UI-REVISAO.exe
           retention-days: 14
-# retrigger audit 2026-09-10
