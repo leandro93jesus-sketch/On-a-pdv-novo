@@ -1,0 +1,53 @@
+name: ONCA 0.1.16 TEST INSTALLER NOW
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-016-test-installer-now.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-test-installer:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Rebuild exact current source
+        shell: pwsh
+        run: .\scripts\rebuild-onca-016-final.ps1
+      - name: Build and publish desktop
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          dotnet restore .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj --configfile .\NuGet.Config
+          dotnet build .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release --no-restore
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false -o .\publish-test
+          if(-not(Test-Path '.\publish-test\OncaPDV.Desktop.exe')){throw 'Published EXE missing'}
+      - name: Build test installer
+        shell: pwsh
+        run: |
+          $dst='.\installer\publish-full';if(Test-Path $dst){Remove-Item $dst -Recurse -Force};Copy-Item '.\work-final\ONCA-PDV-PRO\publish-test' $dst -Recurse -Force
+          choco install nsis -y --no-progress
+          $m=(Get-Command makensis.exe -ErrorAction SilentlyContinue).Source;if(-not $m){$m=@('C:\Program Files (x86)\NSIS\makensis.exe','C:\Program Files\NSIS\makensis.exe')|Where-Object{Test-Path $_}|Select-Object -First 1};if(-not $m){throw 'NSIS missing'}
+          Push-Location .\installer;& $m '.\ONCA-PDV-PRO-0.1.16-base0111.nsi';if($LASTEXITCODE -ne 0){throw 'Installer failed'};Pop-Location
+          Copy-Item '.\installer\ONCA-PDV-PRO-Setup-0.1.16-BASE-0111.exe' '.\installer\ONCA-PDV-PRO-Setup-0.1.16-TESTE-MELHORIAS.exe' -Force
+      - name: Install and launch once
+        shell: pwsh
+        run: |
+          $setup=Resolve-Path '.\installer\ONCA-PDV-PRO-Setup-0.1.16-TESTE-MELHORIAS.exe'
+          $dir=Join-Path $env:RUNNER_TEMP 'ONCA-TESTE-MELHORIAS'
+          $p=Start-Process -FilePath $setup -ArgumentList @('/S',"/D=$dir") -Wait -PassThru
+          if($p.ExitCode -ne 0){throw 'Install failed'}
+          $exe=Join-Path $dir 'OncaPDV.Desktop.exe';if(-not(Test-Path $exe)){throw 'Installed EXE missing'}
+          $app=Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru
+          if(-not $app.WaitForExit(30000)){try{$app.Kill($true)}catch{};throw 'Launch timeout'}
+          if($app.ExitCode -ne 0){throw 'Launch failed'}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.16-TESTE-MELHORIAS
+          path: installer/ONCA-PDV-PRO-Setup-0.1.16-TESTE-MELHORIAS.exe
+          retention-days: 7
+          if-no-files-found: error
