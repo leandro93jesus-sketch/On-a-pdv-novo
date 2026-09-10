@@ -1,0 +1,34 @@
+name: DEBUG UI019 SOURCE
+on:
+  push:
+    paths:
+      - '.github/workflows/debug-ui019-source.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - shell: pwsh
+        run: |
+          .\scripts\rebuild-onca-016-final.ps1
+          python .\scripts\apply_ui_018.py
+          $d='.\work-final\ONCA-PDV-PRO\src\OncaPDV.Desktop'
+          Write-Host '===MAINXAML_START==='
+          Get-Content "$d\MainWindow.xaml"
+          Write-Host '===MAINXAML_END==='
+          Write-Host '===MAINCS_START==='
+          Get-Content "$d\MainWindow.xaml.cs"
+          Write-Host '===MAINCS_END==='
+          Write-Host '===FILES==='
+          Get-ChildItem $d -Filter '*Price*' | Select-Object -ExpandProperty Name
+          Get-ChildItem $d -Filter '*Lookup*' | Select-Object -ExpandProperty Name
+          Get-ChildItem $d -Filter '*Consult*' | Select-Object -ExpandProperty Name
+          Write-Host '===DIVERSOSCS_START==='
+          Get-Content "$d\DiversosWindow.xaml.cs"
+          Write-Host '===DIVERSOSCS_END==='
