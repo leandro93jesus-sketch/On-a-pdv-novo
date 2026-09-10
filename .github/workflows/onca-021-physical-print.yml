@@ -1,0 +1,74 @@
+name: ONCA 0.1.21 PHYSICAL PRINT
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-021-physical-print.yml'
+      - 'scripts/apply_print_021.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-test:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Rebuild approved base
+        shell: pwsh
+        run: .\scripts\rebuild-onca-016-final.ps1
+      - name: Apply 0.1.18
+        shell: pwsh
+        run: python .\scripts\apply_ui_018.py
+      - name: Apply 0.1.19
+        shell: pwsh
+        run: python .\scripts\apply_ui_019.py
+      - name: Apply 0.1.20
+        shell: pwsh
+        run: python .\scripts\apply_ui_020.py
+      - name: Apply physical print fix 0.1.21
+        shell: pwsh
+        run: python .\scripts\apply_print_021.py
+      - name: Verify physical printing wiring
+        shell: pwsh
+        run: |
+          $d='.\work-final\ONCA-PDV-PRO\src\OncaPDV.Desktop'
+          $main=Get-Content "$d\MainWindow.xaml.cs" -Raw
+          $cfg=Get-Content "$d\PrinterSettingsWindow.xaml.cs" -Raw
+          if($main.Contains('new MockPrintService')){throw 'MainWindow still uses MockPrintService'}
+          foreach($s in @('ConfiguredPhysicalPrintService','WindowsRawPrintService','physicalPrintingEnabled: true')){if(-not(($main+(Get-Content "$d\ConfiguredPhysicalPrintService.cs" -Raw)).Contains($s))){throw "Missing $s"}}
+          if(-not $cfg.Contains('Physical_Click')){throw 'Physical test handler missing'}
+          if(-not (Get-Content "$d\PrinterSettingsWindow.xaml" -Raw).Contains('TESTE FÍSICO')){throw 'Physical test button missing'}
+          if(-not $main.Contains('Deseja imprimir o comprovante?')){throw 'Print confirmation removed'}
+      - name: Full regression tests
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          dotnet restore .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj --configfile .\NuGet.Config
+          dotnet test .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj -c Release --no-restore --logger "console;verbosity=minimal"
+      - name: Build Desktop warnings as errors
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          dotnet restore .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj --configfile .\NuGet.Config
+          dotnet build .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release --no-restore -warnaserror
+      - name: Publish EXE
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\portable021
+          Copy-Item '.\portable021\OncaPDV.Desktop.exe' '.\portable021\ONCA-PDV-PRO-0.1.21-IMPRESSAO-FISICA.exe' -Force
+      - name: Smoke launch 5x
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          $exe=Resolve-Path '.\portable021\ONCA-PDV-PRO-0.1.21-IMPRESSAO-FISICA.exe'
+          1..5 | ForEach-Object {$p=Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru;if(-not $p.WaitForExit(30000)){try{$p.Kill($true)}catch{};throw "Smoke timeout $_"};if($p.ExitCode -ne 0){throw "Smoke failed $_"}}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.21-IMPRESSAO-FISICA
+          path: work-final/ONCA-PDV-PRO/portable021/ONCA-PDV-PRO-0.1.21-IMPRESSAO-FISICA.exe
+          retention-days: 7
+          if-no-files-found: error
