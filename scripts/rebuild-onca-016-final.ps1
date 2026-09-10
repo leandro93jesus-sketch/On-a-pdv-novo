@@ -69,6 +69,7 @@ Set-Content $xamlPath $x -Encoding UTF8
 
 $csPath=Join-Path $root 'src\OncaPDV.Desktop\MainWindow.xaml.cs';$c=Get-Content $csPath -Raw
 $c=$c.Replace('dialog.Description, dialog.Quantity','dialog.Description ?? "DIVERSOS", dialog.Quantity')
+$c=$c.Replace('await _workflow.AddDiversosAsync(w.Description, w.Quantity, w.UnitPrice);','await _workflow.AddDiversosAsync(w.Description ?? "DIVERSOS", w.Quantity, w.UnitPrice);')
 if(-not $c.Contains('HoldSale_Click(object sender')){
 $insert=@'
     private async void HoldSale_Click(object sender, RoutedEventArgs e)
@@ -90,7 +91,10 @@ $insert=@'
         if (_workflow.Cart.Items.Count > 0 && MessageBox.Show("Substituir o carrinho atual pela venda em espera?", "ONÇA PDV", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         var h = w.SelectedHold;
         await _workflow.CancelAsync();
-        await _workflow.ReplaceCartAsync(h.Items, h.CustomerId);
+        var cart = new Cart { CustomerId = h.CustomerId };
+        foreach (var item in h.Items) cart.AddCustom(item.ProductId, item.Code, item.Name, item.Quantity, item.UnitPrice);
+        cart.SetDiscount(h.Discount);
+        await _workflow.ReplaceCartAsync(cart);
         await new FinalFeaturesService(_database).DeleteHoldAsync(h.Id);
         RefreshCart(); SetStatus("VENDA EM ESPERA RECUPERADA");
     }
