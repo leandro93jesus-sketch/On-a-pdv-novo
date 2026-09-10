@@ -20,7 +20,7 @@ jobs:
         run: .\scripts\rebuild-onca-016-final.ps1
       - name: Apply UI backup and BRL corrections
         shell: pwsh
-        run: .\scripts\apply-ui-018.ps1
+        run: .\scripts\apply-ui-018-fixed.ps1
       - name: Verify requested changes
         shell: pwsh
         run: |
