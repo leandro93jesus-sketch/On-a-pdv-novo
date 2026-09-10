@@ -70,3 +70,4 @@ jobs:
           path: work-final/ONCA-PDV-PRO/portable018/ONCA-PDV-PRO-0.1.18-TESTE-UI-BACKUP-REAL.exe
           retention-days: 7
           if-no-files-found: error
+# rerun robust culture patch
