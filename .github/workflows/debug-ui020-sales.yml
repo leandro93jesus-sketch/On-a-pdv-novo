@@ -1,0 +1,28 @@
+name: DEBUG UI020 SALES
+on:
+  push:
+    paths:
+      - '.github/workflows/debug-ui020-sales.yml'
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - shell: pwsh
+        run: |
+          .\scripts\rebuild-onca-016-final.ps1
+          python .\scripts\apply_ui_018.py
+          python .\scripts\apply_ui_019.py
+          $d='.\work-final\ONCA-PDV-PRO\src\OncaPDV.Desktop'
+          Write-Host '===SALESMGMTXAML_START==='
+          Get-Content "$d\SalesManagementWindow.xaml"
+          Write-Host '===SALESMGMTXAML_END==='
+          Write-Host '===SALESMGMTCS_START==='
+          Get-Content "$d\SalesManagementWindow.xaml.cs"
+          Write-Host '===SALESMGMTCS_END==='
+          Write-Host '===DOMAIN_PRODUCT_START==='
+          Select-String -Path '.\work-final\ONCA-PDV-PRO\src\OncaPDV.Domain\*.cs' -Pattern 'class Product|record Product' -Context 0,40
+          Write-Host '===DOMAIN_PRODUCT_END==='
