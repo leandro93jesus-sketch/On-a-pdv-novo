@@ -1,0 +1,74 @@
+name: ONCA 0.1.23 UI AUDIT
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/apply_ui_023.py'
+      - '.github/workflows/onca-023-ui-audit.yml'
+jobs:
+  build-test-release:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Rebuild approved base
+        shell: pwsh
+        run: ./scripts/rebuild-onca-016-final.ps1
+      - name: Apply 0.1.18
+        run: python scripts/apply_ui_018.py
+      - name: Apply 0.1.19
+        run: python scripts/apply_ui_019.py
+      - name: Apply 0.1.20
+        run: python scripts/apply_ui_020.py
+      - name: Apply 0.1.21 physical print
+        run: python scripts/apply_print_021.py
+      - name: Apply 0.1.22 features
+        run: python scripts/apply_features_022.py
+      - name: Fix 0.1.22 nullable product id
+        run: python scripts/fix_022_nullable.py
+      - name: Apply 0.1.23 UI visibility
+        run: python scripts/apply_ui_023.py
+      - name: Audit critical features
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root='work-final/ONCA-PDV-PRO/src/OncaPDV.Desktop'
+          $checks=@(
+            @{f="$root/SalesManagementWindow.xaml"; s='EDITAR VENDA'},
+            @{f="$root/SalesManagementWindow.xaml"; s='CANCELAR VENDA'},
+            @{f="$root/SalesManagementWindow.xaml.cs"; s='Edit_Click'},
+            @{f="$root/CreditWindow.xaml"; s='EDITAR RECEBIMENTO'},
+            @{f="$root/CreditWindow.xaml"; s='APAGAR / ESTORNAR'},
+            @{f="$root/CreditWindow.xaml.cs"; s='EditReceipt_Click'},
+            @{f="$root/CreditWindow.xaml.cs"; s='ReverseReceipt_Click'},
+            @{f="$root/ConfiguredPhysicalPrintService.cs"; s='WindowsRawPrintService'},
+            @{f="$root/FinalizeChoiceWindow.xaml"; s='SEPARAR PEDIDO'},
+            @{f="$root/OrdersWindow.xaml"; s='CONFIRMAR PAGAMENTO'}
+          )
+          foreach($c in $checks){if(-not (Select-String -Path $c.f -Pattern $c.s -SimpleMatch -Quiet)){throw "Missing: $($c.s) in $($c.f)"}}
+      - name: Full regression tests
+        shell: pwsh
+        run: dotnet test work-final/ONCA-PDV-PRO/OncaPDV.sln -c Release --no-restore
+      - name: Build Desktop warnings as errors
+        shell: pwsh
+        run: dotnet build work-final/ONCA-PDV-PRO/src/OncaPDV.Desktop/OncaPDV.Desktop.csproj -c Release -p:TreatWarningsAsErrors=true
+      - name: Publish EXE
+        shell: pwsh
+        run: |
+          dotnet publish work-final/ONCA-PDV-PRO/src/OncaPDV.Desktop/OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish023
+          Copy-Item publish023/OncaPDV.Desktop.exe publish023/ONCA-PDV-PRO-0.1.23-UI-REVISAO.exe
+      - name: Smoke launch 5x
+        shell: pwsh
+        run: |
+          $exe=(Resolve-Path 'publish023/ONCA-PDV-PRO-0.1.23-UI-REVISAO.exe').Path
+          1..5 | ForEach-Object { $p=Start-Process $exe -PassThru; Start-Sleep -Milliseconds 900; if($p.HasExited -and $p.ExitCode -ne 0){throw "Smoke failed $($_): $($p.ExitCode)"}; if(-not $p.HasExited){Stop-Process -Id $p.Id -Force} }
+      - name: SHA256
+        shell: pwsh
+        run: Get-FileHash publish023/ONCA-PDV-PRO-0.1.23-UI-REVISAO.exe -Algorithm SHA256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.23-UI-REVISAO
+          path: publish023/ONCA-PDV-PRO-0.1.23-UI-REVISAO.exe
+          retention-days: 14
