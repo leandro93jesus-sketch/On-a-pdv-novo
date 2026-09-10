@@ -1,0 +1,74 @@
+name: ONCA 0.1.20 FINAL TEST
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-020-final-test.yml'
+      - 'scripts/apply_ui_020.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-test:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Rebuild approved base
+        shell: pwsh
+        run: .\scripts\rebuild-onca-016-final.ps1
+      - name: Apply 0.1.18 baseline
+        shell: pwsh
+        run: python .\scripts\apply_ui_018.py
+      - name: Apply 0.1.19 approved UI
+        shell: pwsh
+        run: python .\scripts\apply_ui_019.py
+      - name: Apply 0.1.20 requested changes
+        shell: pwsh
+        run: python .\scripts\apply_ui_020.py
+      - name: Verify requested changes and preserved rules
+        shell: pwsh
+        run: |
+          $d='.\work-final\ONCA-PDV-PRO\src\OncaPDV.Desktop'
+          $main=Get-Content "$d\MainWindow.xaml" -Raw
+          $cs=Get-Content "$d\MainWindow.xaml.cs" -Raw
+          $sales=Get-Content "$d\SalesManagementWindow.xaml" -Raw
+          $salescs=Get-Content "$d\SalesManagementWindow.xaml.cs" -Raw
+          $price=Get-Content "$d\QuickPriceWindow.xaml" -Raw
+          if($cs.Contains('EnsureDailyBackupAsync')){throw 'Automatic backup returned'}
+          foreach($s in @('DiversosNameBox','DiversosValueBox','DiversosQtyBox','InlineDiversosAdd_Click','SIM — ADICIONAR AO CARRINHO','ReceiptText','Grid_SelectionChanged','REIMPRIMIR','PDF','v0.1.20')){if(-not(($main+$cs+$sales+$salescs+$price).Contains($s))){throw "Missing $s"}}
+          if(-not $cs.Contains('await _workflow.AddExistingProductAsync(selected)')){throw 'Price consultation add flow missing'}
+          if(-not $cs.Contains('await _workflow.AddDiversosAsync(name, qty, value)')){throw 'Inline Diversos flow missing'}
+          if(-not $salescs.Contains('Confirmação de impressão')){throw 'Reprint confirmation missing'}
+      - name: Full regression tests
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          dotnet restore .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj --configfile .\NuGet.Config
+          dotnet test .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj -c Release --no-restore --logger "console;verbosity=minimal"
+      - name: Build Desktop warnings as errors
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          dotnet restore .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj --configfile .\NuGet.Config
+          dotnet build .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release --no-restore -warnaserror
+      - name: Publish EXE
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\portable020
+          Copy-Item '.\portable020\OncaPDV.Desktop.exe' '.\portable020\ONCA-PDV-PRO-0.1.20-CONSULTA-DIVERSOS-CUPONS.exe' -Force
+      - name: Smoke launch 5x
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          $exe=Resolve-Path '.\portable020\ONCA-PDV-PRO-0.1.20-CONSULTA-DIVERSOS-CUPONS.exe'
+          1..5 | ForEach-Object {$p=Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru;if(-not $p.WaitForExit(30000)){try{$p.Kill($true)}catch{};throw "Smoke timeout $_"};if($p.ExitCode -ne 0){throw "Smoke failed $_"}}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.20-CONSULTA-DIVERSOS-CUPONS
+          path: work-final/ONCA-PDV-PRO/portable020/ONCA-PDV-PRO-0.1.20-CONSULTA-DIVERSOS-CUPONS.exe
+          retention-days: 7
+          if-no-files-found: error
