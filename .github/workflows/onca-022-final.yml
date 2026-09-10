@@ -4,6 +4,7 @@ on:
     paths:
       - '.github/workflows/onca-022-final.yml'
       - 'scripts/apply_features_022.py'
+      - 'scripts/fix_022_guid.py'
   workflow_dispatch:
 permissions:
   contents: write
@@ -34,6 +35,9 @@ jobs:
       - name: Apply 0.1.22 features
         shell: pwsh
         run: python .\scripts\apply_features_022.py
+      - name: Fix nullable product id
+        shell: pwsh
+        run: python .\scripts\fix_022_guid.py
       - name: Verify requested scope
         shell: pwsh
         run: |
