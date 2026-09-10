@@ -1,0 +1,104 @@
+from pathlib import Path
+import re
+
+root=Path('work-final/ONCA-PDV-PRO').resolve()
+d=root/'src'/'OncaPDV.Desktop'
+
+# Main window: compact, grouped and clearer without redesigning approved palette/layout.
+p=d/'MainWindow.xaml'; x=p.read_text(encoding='utf-8-sig')
+x=x.replace('v0.1.16','v0.1.19')
+x=x.replace('<Setter Property="Padding" Value="18,13"/>','<Setter Property="Padding" Value="15,9"/>')
+x=x.replace('<Setter Property="Margin" Value="8,3"/>','<Setter Property="Margin" Value="8,2"/>')
+x=x.replace('<Setter Property="Height" Value="74"/>','<Setter Property="Height" Value="64"/>')
+x=x.replace('<RowDefinition Height="70"/>','<RowDefinition Height="66"/>',1)
+x=x.replace('<RowDefinition Height="34"/>','<RowDefinition Height="46"/>',1)
+x=x.replace('<Grid.RowDefinitions><RowDefinition Height="112"/><RowDefinition/><RowDefinition Height="116"/></Grid.RowDefinitions>','<Grid.RowDefinitions><RowDefinition Height="96"/><RowDefinition/><RowDefinition Height="90"/></Grid.RowDefinitions>')
+x=x.replace('Text="ONÇA" FontSize="31"','Text="ONÇA" FontSize="27"').replace('Text="PDV" FontSize="21"','Text="PDV" FontSize="18"').replace('Text=" PRO" FontSize="21"','Text=" PRO" FontSize="18"')
+x=x.replace('Content="BUSCAR / ADICIONAR  [ENTER]"','Content="ADICIONAR  [ENTER]"')
+x=x.replace('Content="CONSULTAR PREÇO"','Content="PREÇO  [F3]"')
+x=x.replace('Content="+ DIVERSOS"','Content="DIVERSOS  [F4]"')
+x=x.replace('Content="+ CADASTRAR PRODUTO  [F1]"','Content="PRODUTO  [F1]"')
+x=x.replace('<Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="195"/></Grid.RowDefinitions>','<Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="170"/></Grid.RowDefinitions>')
+# Sidebar becomes scrollable so nothing hides on 1366x768.
+start=x.find('<StackPanel Grid.Row="1" Margin="0,5">')
+end=x.find('<StackPanel Grid.Row="2"', start)
+if start<0 or end<0: raise RuntimeError('sidebar anchors missing')
+block=x[start:end]
+block=block.replace('<StackPanel Grid.Row="1" Margin="0,5">','<ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="0,5">',1)
+# close the original stackpanel and scrollviewer
+pos=block.rfind('</StackPanel>')
+block=block[:pos]+'</StackPanel></ScrollViewer>'+block[pos+len('</StackPanel>'):]
+x=x[:start]+block+x[end:]
+# Right utility buttons: add calculator.
+needle='<Button Style="{StaticResource SoftButton}" Content="Compras" Click="Purchases_Click"/>'
+if needle in x and 'Calculadora [F5]' not in x:
+    x=x.replace(needle, needle+'\n                    <Button Style="{StaticResource SoftButton}" Content="Calculadora [F5]" Click="Calculator_Click"/>')
+# Top status chips: replace online-only indicator.
+old='''<StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0">\n                    <Ellipse Width="9" Height="9" Fill="#16A34A" Margin="0,0,7,0"/>\n                    <TextBlock Text="Sistema online" Foreground="#137333" FontWeight="SemiBold"/>\n                </StackPanel>'''
+new='''<StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0">\n                    <Border Background="#EAF8EF" CornerRadius="8" Padding="9,6" Margin="3,0"><TextBlock Text="● CAIXA ABERTO" Foreground="#087233" FontSize="12" FontWeight="Bold"/></Border>\n                    <Border Background="#FFF7E8" CornerRadius="8" Padding="9,6" Margin="3,0"><TextBlock x:Name="LastBackupText" Text="Backup: manual" Foreground="#9A6200" FontSize="12" FontWeight="SemiBold"/></Border>\n                </StackPanel>'''
+if old in x: x=x.replace(old,new)
+else: raise RuntimeError('top online status anchor missing')
+# Footer becomes visible shortcut/status strip.
+footer_re=re.compile(r'<Border Grid.Column="1" Grid.ColumnSpan="2" Grid.Row="2" Background="White" BorderBrush="#E1E7E4" BorderThickness="0,1,0,0">.*?</Border>\s*</Grid>\s*</Window>',re.S)
+footer='''<Border Grid.Column="1" Grid.ColumnSpan="2" Grid.Row="2" Background="White" BorderBrush="#E1E7E4" BorderThickness="0,1,0,0">\n            <Grid Margin="14,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>\n                <StackPanel VerticalAlignment="Center">\n                    <TextBlock Text="ATALHOS  F1 Produto   F2 Pagamento   F3 Consultar   F4 Diversos   F5 Calculadora   F8 Última venda   ESC Cancelar" FontSize="11" FontWeight="SemiBold" Foreground="#3D5147"/>\n                    <TextBlock x:Name="RecoveryText" Foreground="#B16E00" FontSize="10" FontWeight="SemiBold"/>\n                </StackPanel>\n                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">\n                    <TextBlock Text="Caixa 001  •  Administrador  •  " Foreground="#67756E" FontSize="11"/>\n                    <TextBlock x:Name="DatabaseStatus" Foreground="#67756E" FontSize="11"/>\n                </StackPanel>\n            </Grid>\n        </Border>\n    </Grid>\n</Window>'''
+x,n=footer_re.subn(footer,x,count=1)
+if n!=1: raise RuntimeError('footer replacement failed')
+p.write_text(x,encoding='utf-8')
+
+# Main code: no automatic backup, saved terminal display, visible backup status, shortcuts, richer price window.
+p=d/'MainWindow.xaml.cs'; c=p.read_text(encoding='utf-8-sig')
+c=c.replace('        await new OperationalService(_database, _paths).EnsureDailyBackupAsync();\n        DatabaseStatus.Text = $"Banco: {_database.IntegrityCheck()} • abertura {sw.ElapsedMilliseconds} ms • backup diário OK";','        DatabaseStatus.Text = $"Banco: {_database.IntegrityCheck()} • {sw.ElapsedMilliseconds} ms";\n        ApplySavedDisplaySettings();\n        UpdateBackupStatus();')
+old='MessageBox.Show($"{selected.Name}\\n\\nCódigo: {selected.InternalCode}\\nPreço: {price:C}\\nEstoque: {selected.Stock:N3} {selected.Unit}", "Consulta de preço", MessageBoxButton.OK, MessageBoxImage.Information);'
+if old in c:
+    c=c.replace(old,'new QuickPriceWindow(selected) { Owner = this }.ShowDialog();')
+else: raise RuntimeError('price lookup message anchor missing')
+old='    private void BackupCenter_Click(object sender, RoutedEventArgs e) => new BackupWindow(_database, _paths) { Owner = this }.ShowDialog();'
+new='''    private void BackupCenter_Click(object sender, RoutedEventArgs e)\n    {\n        new BackupWindow(_database, _paths) { Owner = this }.ShowDialog();\n        UpdateBackupStatus();\n    }'''
+c=c.replace(old,new)
+anchor='    private void DisplaySettings_Click(object sender, RoutedEventArgs e) => new DisplaySettingsWindow(this) { Owner = this }.ShowDialog();'
+extra=anchor+'''\n    private void Calculator_Click(object sender, RoutedEventArgs e) => new CalculatorWindow { Owner = this }.ShowDialog();\n\n    private void UpdateBackupStatus()\n    {\n        try\n        {\n            _paths.EnsureCreated();\n            var f = System.IO.Directory.GetFiles(_paths.Backups, "*.zip").OrderByDescending(System.IO.File.GetLastWriteTime).FirstOrDefault();\n            LastBackupText.Text = f is null ? "Backup: nenhum" : $"Backup: {System.IO.File.GetLastWriteTime(f):dd/MM HH:mm}";\n        }\n        catch { LastBackupText.Text = "Backup: verificar"; }\n    }\n\n    private void ApplySavedDisplaySettings()\n    {\n        try\n        {\n            var file = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Onca PDV Pro", "terminal-ui.txt");\n            if (!System.IO.File.Exists(file)) return;\n            var p = System.IO.File.ReadAllText(file).Split(';');\n            if (p.Length < 3) return;\n            if (p[2] == "MAX") { WindowState = WindowState.Maximized; return; }\n            if (double.TryParse(p[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var w) && double.TryParse(p[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var h))\n            { Width = Math.Max(1240, w); Height = Math.Max(760, h); }\n        }\n        catch { }\n    }'''
+if anchor not in c: raise RuntimeError('display settings anchor missing')
+c=c.replace(anchor,extra)
+c=c.replace('        else if (e.Key == Key.F8) OpenLastSale();','        else if (e.Key == Key.F3) PriceLookup_Click(sender, e);\n        else if (e.Key == Key.F4) Diversos_Click(sender, e);\n        else if (e.Key == Key.F5) Calculator_Click(sender, e);\n        else if (e.Key == Key.F8) OpenLastSale();')
+p.write_text(c,encoding='utf-8')
+
+# Dedicated quick price screen, includes stock/promo and photo when a path exists on the product model.
+(d/'QuickPriceWindow.xaml').write_text(r'''<Window x:Class="OncaPDV.Desktop.QuickPriceWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Consulta rápida" Width="720" Height="470" WindowStartupLocation="CenterOwner" Background="#F7F9F8" FontFamily="Segoe UI"><Grid Margin="22"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><StackPanel><TextBlock Text="CONSULTA RÁPIDA" FontSize="26" FontWeight="Bold" Foreground="#0B6B3A"/><TextBlock Text="Somente consulta — o produto não será adicionado ao carrinho." Foreground="#6A786F" Margin="0,4,0,14"/></StackPanel><Border Grid.Row="1" Background="White" BorderBrush="#DCE5DF" BorderThickness="1" CornerRadius="14" Padding="20"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="180"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Border Background="#F2F6F3" CornerRadius="10" Margin="0,0,20,0"><Grid><Image x:Name="Photo" Stretch="Uniform" Margin="10"/><TextBlock x:Name="NoPhoto" Text="SEM FOTO" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#89938E" FontWeight="SemiBold"/></Grid></Border><StackPanel Grid.Column="1"><TextBlock x:Name="NameText" FontSize="24" FontWeight="Bold" Foreground="#233129" TextWrapping="Wrap"/><TextBlock x:Name="CodeText" Foreground="#718078" Margin="0,4,0,14"/><Border Background="#EAF8EF" CornerRadius="10" Padding="14" Margin="0,0,0,10"><StackPanel><TextBlock Text="PREÇO ATUAL" Foreground="#0B6B3A" FontWeight="SemiBold"/><TextBlock x:Name="PriceText" FontSize="34" FontWeight="Bold" Foreground="#087233"/></StackPanel></Border><TextBlock x:Name="StockText" FontSize="17" FontWeight="SemiBold" Margin="2,4"/><TextBlock x:Name="PromoText" FontSize="14" Foreground="#B56A00" FontWeight="SemiBold" Margin="2,4"/></StackPanel></Grid></Border><Button Grid.Row="2" Content="FECHAR" Padding="24,10" HorizontalAlignment="Right" Margin="0,14,0,0" IsDefault="True" IsCancel="True"/></Grid></Window>''',encoding='utf-8')
+(d/'QuickPriceWindow.xaml.cs').write_text(r'''using System; using System.IO; using System.Windows; using System.Windows.Media.Imaging; using OncaPDV.Domain;
+namespace OncaPDV.Desktop;
+public partial class QuickPriceWindow:Window{
+ public QuickPriceWindow(Product p){InitializeComponent();NameText.Text=p.Name;CodeText.Text=$"Código: {p.InternalCode}   •   Barras: {p.Barcode}";PriceText.Text=p.CurrentPrice(DateTimeOffset.Now).ToString("C");StockText.Text=$"Estoque: {p.Stock:N3} {p.Unit}";PromoText.Text=PromoInfo(p);TryPhoto(p);}
+ private string PromoInfo(Product p){try{var t=p.GetType();var pp=t.GetProperty("PromotionPrice")??t.GetProperty("PromoPrice");var v=pp?.GetValue(p);if(v is decimal m&&m>0)return $"PROMOÇÃO CADASTRADA: {m:C} — aplicada automaticamente quando vigente";}catch{}return "Preço normal / nenhuma promoção vigente identificada";}
+ private void TryPhoto(Product p){try{var t=p.GetType();foreach(var n in new[]{"PhotoPath","ImagePath","Photo","Image"}){var s=t.GetProperty(n)?.GetValue(p)?.ToString();if(!string.IsNullOrWhiteSpace(s)&&File.Exists(s)){Photo.Source=new BitmapImage(new Uri(s));NoPhoto.Visibility=Visibility.Collapsed;return;}}}catch{}}
+}''',encoding='utf-8')
+
+# DIVERSOS: quantity + recent descriptions stored locally. No stock movement behavior remains unchanged.
+(d/'DiversosWindow.xaml').write_text(r'''<Window x:Class="OncaPDV.Desktop.DiversosWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Adicionar item diverso" Width="590" Height="570" MinWidth="540" MinHeight="520" WindowStartupLocation="CenterOwner" Background="#F7F9F8" FontFamily="Segoe UI"><Grid><Grid.RowDefinitions><RowDefinition Height="88"/><RowDefinition Height="*"/></Grid.RowDefinitions><Border Background="#0B6B3A" CornerRadius="0,0,18,18"><StackPanel Margin="26,16"><TextBlock Text="DIVERSOS" Foreground="White" FontSize="27" FontWeight="Bold"/><TextBlock Text="Item sem cadastro • não movimenta estoque" Foreground="#DDEFE5" FontSize="14" Margin="0,4,0,0"/></StackPanel></Border><ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"><StackPanel Margin="24,16,24,24"><Border Background="White" CornerRadius="14" BorderBrush="#DCE5DF" BorderThickness="1" Padding="20"><StackPanel><TextBlock Text="DESCRIÇÃO" FontWeight="SemiBold" Foreground="#526159"/><TextBox x:Name="DescriptionBox" Margin="0,6,0,12" Padding="11" FontSize="17"/><TextBlock Text="VALOR UNITÁRIO" FontWeight="SemiBold" Foreground="#526159"/><Grid Margin="0,6,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="62"/><ColumnDefinition/></Grid.ColumnDefinitions><Border Background="#EDF6F0" CornerRadius="8,0,0,8"><TextBlock Text="R$" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="20" FontWeight="Bold" Foreground="#0B6B3A"/></Border><TextBox Grid.Column="1" x:Name="PriceBox" FontSize="24" FontWeight="SemiBold" Padding="10" KeyDown="PriceBox_KeyDown"/></Grid><TextBlock Text="QUANTIDADE" FontWeight="SemiBold" Foreground="#526159"/><TextBox x:Name="QuantityBox" Text="1" Margin="0,6,0,12" Padding="10" FontSize="18"/><TextBlock Text="ÚLTIMOS DIVERSOS USADOS" FontWeight="SemiBold" Foreground="#526159"/><ListBox x:Name="RecentList" Height="88" Margin="0,6,0,0" MouseDoubleClick="Recent_DoubleClick" ToolTip="Dê dois cliques para reutilizar a descrição"/></StackPanel></Border><Grid Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><Button Content="CANCELAR" Padding="18,12" Margin="4" IsCancel="True"/><Button Grid.Column="1" Content="ADICIONAR AO CARRINHO" Padding="18,12" Margin="4" Background="#0B6B3A" Foreground="White" FontWeight="Bold" Click="Add_Click" IsDefault="True"/></Grid></StackPanel></ScrollViewer></Grid></Window>''',encoding='utf-8')
+(d/'DiversosWindow.xaml.cs').write_text(r'''using System; using System.Globalization; using System.IO; using System.Linq; using System.Windows; using System.Windows.Input;
+namespace OncaPDV.Desktop;
+public partial class DiversosWindow:Window{
+ public decimal Price{get;private set;} public decimal Quantity{get;private set;}=1m; public decimal UnitPrice=>Price; public string? Description=>string.IsNullOrWhiteSpace(DescriptionBox.Text)?null:DescriptionBox.Text.Trim();
+ private static string RecentFile=>Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Onca PDV Pro","diversos-recentes.txt");
+ public DiversosWindow(){InitializeComponent();Loaded+=(_,_)=>{LoadRecent();DescriptionBox.Focus();};}
+ private void LoadRecent(){try{if(File.Exists(RecentFile))RecentList.ItemsSource=File.ReadAllLines(RecentFile).Where(x=>!string.IsNullOrWhiteSpace(x)).Take(8).ToArray();}catch{}}
+ private void SaveRecent(){try{var s=Description;if(string.IsNullOrWhiteSpace(s))return;Directory.CreateDirectory(Path.GetDirectoryName(RecentFile)!);var a=(File.Exists(RecentFile)?File.ReadAllLines(RecentFile):Array.Empty<string>()).Prepend(s).Distinct(StringComparer.OrdinalIgnoreCase).Take(8);File.WriteAllLines(RecentFile,a);}catch{}}
+ private void Recent_DoubleClick(object sender,MouseButtonEventArgs e){if(RecentList.SelectedItem is string s)DescriptionBox.Text=s;}
+ private void Add_Click(object sender,RoutedEventArgs e)=>Confirm(); private void PriceBox_KeyDown(object sender,KeyEventArgs e){if(e.Key==Key.Enter)Confirm();}
+ private void Confirm(){var text=PriceBox.Text.Trim().Replace("R$","",StringComparison.OrdinalIgnoreCase).Trim();var ok=decimal.TryParse(text,NumberStyles.Number,CultureInfo.CurrentCulture,out var v)||decimal.TryParse(text.Replace(',','.'),NumberStyles.Number,CultureInfo.InvariantCulture,out v);if(!ok||v<=0){MessageBox.Show("Informe um preço válido maior que zero.","DIVERSOS",MessageBoxButton.OK,MessageBoxImage.Warning);return;}if(!decimal.TryParse(QuantityBox.Text,NumberStyles.Number,CultureInfo.CurrentCulture,out var q)||q<=0){MessageBox.Show("Informe uma quantidade válida maior que zero.","DIVERSOS",MessageBoxButton.OK,MessageBoxImage.Warning);return;}Price=v;Quantity=q;SaveRecent();DialogResult=true;}
+}''',encoding='utf-8')
+
+# Calculator.
+(d/'CalculatorWindow.xaml').write_text(r'''<Window x:Class="OncaPDV.Desktop.CalculatorWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Calculadora" Width="390" Height="470" WindowStartupLocation="CenterOwner" Background="#F7F9F8"><Grid Margin="18"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions><TextBox x:Name="Display" Text="0" FontSize="30" TextAlignment="Right" Padding="12" IsReadOnly="True"/><UniformGrid Grid.Row="1" Columns="4" Margin="0,12,0,0"><Button Content="7" Click="Num"/><Button Content="8" Click="Num"/><Button Content="9" Click="Num"/><Button Content="÷" Click="Op"/><Button Content="4" Click="Num"/><Button Content="5" Click="Num"/><Button Content="6" Click="Num"/><Button Content="×" Click="Op"/><Button Content="1" Click="Num"/><Button Content="2" Click="Num"/><Button Content="3" Click="Num"/><Button Content="−" Click="Op"/><Button Content="0" Click="Num"/><Button Content="," Click="Num"/><Button Content="=" Click="Eq" Background="#0B6B3A" Foreground="White"/><Button Content="+" Click="Op"/><Button Content="C" Click="Clear"/><Button Content="←" Click="Back"/><Button Content="FECHAR" IsCancel="True"/><Button Content="=" Click="Eq" Background="#0B6B3A" Foreground="White"/></UniformGrid></Grid></Window>''',encoding='utf-8')
+(d/'CalculatorWindow.xaml.cs').write_text(r'''using System;using System.Globalization;using System.Windows;using System.Windows.Controls;
+namespace OncaPDV.Desktop; public partial class CalculatorWindow:Window{decimal a;string? op;bool fresh=true;public CalculatorWindow(){InitializeComponent();}void Num(object s,RoutedEventArgs e){var t=((Button)s).Content.ToString()!;if(fresh){Display.Text=t==","?"0,":t;fresh=false;}else if(t==","&&!Display.Text.Contains(','))Display.Text+=",";else if(t!=",")Display.Text+=t;}void Op(object s,RoutedEventArgs e){Parse(out a);op=((Button)s).Content.ToString();fresh=true;}void Eq(object s,RoutedEventArgs e){if(op is null||!Parse(out var b))return;decimal r=op switch{"+"=>a+b,"−"=>a-b,"×"=>a*b,"÷"=>b==0?0:a/b,_=>b};Display.Text=r.ToString("N2");op=null;fresh=true;}bool Parse(out decimal v)=>decimal.TryParse(Display.Text,NumberStyles.Number,CultureInfo.CurrentCulture,out v);void Clear(object s,RoutedEventArgs e){Display.Text="0";op=null;fresh=true;}void Back(object s,RoutedEventArgs e){if(Display.Text.Length>1)Display.Text=Display.Text[..^1];else Display.Text="0";}}
+''',encoding='utf-8')
+
+# Terminal screen setting persistence.
+p=d/'DisplaySettingsWindow.xaml.cs'; s=p.read_text(encoding='utf-8-sig')
+s=s.replace('    private void SetSize(double w, double h)\n    {','    private void SetSize(double w, double h)\n    {')
+s=s.replace('        _target.Top = Math.Max(0, (SystemParameters.WorkArea.Height - _target.Height) / 2);\n    }','        _target.Top = Math.Max(0, (SystemParameters.WorkArea.Height - _target.Height) / 2);\n        Save(_target.Width, _target.Height, false);\n    }')
+s=s.replace('    private void Max_Click(object sender, RoutedEventArgs e) => _target.WindowState = WindowState.Maximized;','    private void Max_Click(object sender, RoutedEventArgs e) { _target.WindowState = WindowState.Maximized; Save(_target.Width, _target.Height, true); }')
+insert='''\n    private static void Save(double w,double h,bool max)\n    {\n        try { var dir=System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Onca PDV Pro"); System.IO.Directory.CreateDirectory(dir); System.IO.File.WriteAllText(System.IO.Path.Combine(dir,"terminal-ui.txt"),$"{w.ToString(System.Globalization.CultureInfo.InvariantCulture)};{h.ToString(System.Globalization.CultureInfo.InvariantCulture)};{(max?"MAX":"NORMAL")}"); } catch { }\n    }\n'''
+s=s.replace('\n    private void Apply_Click(object sender, RoutedEventArgs e)',insert+'\n    private void Apply_Click(object sender, RoutedEventArgs e)')
+p.write_text(s,encoding='utf-8')
+print('UI019_APPLIED=YES')
