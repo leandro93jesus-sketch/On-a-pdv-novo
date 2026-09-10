@@ -20,7 +20,7 @@ jobs:
         run: .\scripts\rebuild-onca-016-final.ps1
       - name: Apply UI backup and BRL corrections
         shell: pwsh
-        run: .\scripts\apply-ui-018-fixed.ps1
+        run: python .\scripts\apply_ui_018.py
       - name: Verify requested changes
         shell: pwsh
         run: |
@@ -70,4 +70,4 @@ jobs:
           path: work-final/ONCA-PDV-PRO/portable018/ONCA-PDV-PRO-0.1.18-TESTE-UI-BACKUP-REAL.exe
           retention-days: 7
           if-no-files-found: error
-# rerun robust culture patch
+# python patcher
