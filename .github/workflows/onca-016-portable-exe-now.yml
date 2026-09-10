@@ -1,0 +1,42 @@
+name: ONCA 0.1.16 PORTABLE EXE NOW
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-016-portable-exe-now.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  portable-exe:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Rebuild latest improved source
+        shell: pwsh
+        run: .\scripts\rebuild-onca-016-final.ps1
+      - name: Build single-file EXE
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          dotnet restore .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj --configfile .\NuGet.Config
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\portable
+          if(-not(Test-Path '.\portable\OncaPDV.Desktop.exe')){throw 'Portable EXE missing'}
+          Copy-Item '.\portable\OncaPDV.Desktop.exe' '.\portable\ONCA-PDV-PRO-0.1.16-TESTE-MELHORIAS.exe' -Force
+      - name: Launch smoke test
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          $exe=Resolve-Path '.\portable\ONCA-PDV-PRO-0.1.16-TESTE-MELHORIAS.exe'
+          $app=Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru
+          if(-not $app.WaitForExit(30000)){try{$app.Kill($true)}catch{};throw 'Launch timeout'}
+          if($app.ExitCode -ne 0){throw "Launch failed $($app.ExitCode)"}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.16-TESTE-MELHORIAS-EXE
+          path: work-final/ONCA-PDV-PRO/portable/ONCA-PDV-PRO-0.1.16-TESTE-MELHORIAS.exe
+          retention-days: 7
+          if-no-files-found: error
