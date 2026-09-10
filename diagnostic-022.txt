@@ -1,0 +1,9 @@
+  Determining projects to restore...
+  Restored D:\a\On-a-pdv-novo\On-a-pdv-novo\work-final\ONCA-PDV-PRO\src\OncaPDV.Migration\OncaPDV.Migration.csproj (in 6.21 sec).
+  Restored D:\a\On-a-pdv-novo\On-a-pdv-novo\work-final\ONCA-PDV-PRO\src\OncaPDV.PostgreSql\OncaPDV.PostgreSql.csproj (in 7.05 sec).
+  Restored D:\a\On-a-pdv-novo\On-a-pdv-novo\work-final\ONCA-PDV-PRO\src\OncaPDV.Fiscal\OncaPDV.Fiscal.csproj (in 6.21 sec).
+  Restored D:\a\On-a-pdv-novo\On-a-pdv-novo\work-final\ONCA-PDV-PRO\src\OncaPDV.Printing\OncaPDV.Printing.csproj (in 2 ms).
+  Restored D:\a\On-a-pdv-novo\On-a-pdv-novo\work-final\ONCA-PDV-PRO\src\OncaPDV.Infrastructure\OncaPDV.Infrastructure.csproj (in 6 ms).
+  Restored D:\a\On-a-pdv-novo\On-a-pdv-novo\work-final\ONCA-PDV-PRO\src\OncaPDV.Domain\OncaPDV.Domain.csproj (in 1 ms).
+  Restored D:\a\On-a-pdv-novo\On-a-pdv-novo\work-final\ONCA-PDV-PRO\src\OncaPDV.Application\OncaPDV.Application.csproj (in 2 ms).
+  Restored D:\a\On-a-pdv-novo\On-a-pdv-novo\work-final\ONCA-PDV-PRO\tests\OncaPDV.Tests\OncaPDV.Tests.csproj (in 9.1 sec).

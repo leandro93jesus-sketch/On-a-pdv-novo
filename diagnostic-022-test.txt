@@ -1,0 +1,6 @@
+  OncaPDV.Domain -> D:\a\On-a-pdv-novo\On-a-pdv-novo\work-final\ONCA-PDV-PRO\src\OncaPDV.Domain\bin\Release\net10.0\OncaPDV.Domain.dll
+  OncaPDV.Fiscal -> D:\a\On-a-pdv-novo\On-a-pdv-novo\work-final\ONCA-PDV-PRO\src\OncaPDV.Fiscal\bin\Release\net10.0\OncaPDV.Fiscal.dll
+  OncaPDV.Application -> D:\a\On-a-pdv-novo\On-a-pdv-novo\work-final\ONCA-PDV-PRO\src\OncaPDV.Application\bin\Release\net10.0\OncaPDV.Application.dll
+  OncaPDV.Printing -> D:\a\On-a-pdv-novo\On-a-pdv-novo\work-final\ONCA-PDV-PRO\src\OncaPDV.Printing\bin\Release\net10.0\OncaPDV.Printing.dll
+  OncaPDV.PostgreSql -> D:\a\On-a-pdv-novo\On-a-pdv-novo\work-final\ONCA-PDV-PRO\src\OncaPDV.PostgreSql\bin\Release\net10.0\OncaPDV.PostgreSql.dll
+D:\a\On-a-pdv-novo\On-a-pdv-novo\work-final\ONCA-PDV-PRO\src\OncaPDV.Infrastructure\OrderService022.cs(45,157): error CS1503: Argument 1: cannot convert from 'System.Guid?' to 'System.Guid' [D:\a\On-a-pdv-novo\On-a-pdv-novo\work-final\ONCA-PDV-PRO\src\OncaPDV.Infrastructure\OncaPDV.Infrastructure.csproj]
