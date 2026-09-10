@@ -46,8 +46,6 @@ public sealed class ConfiguredPhysicalPrintService(AppPaths paths) : IPrintServi
                 ? new EscPos58Renderer(new CodePagePrinterEncoding(cp))
                 : new EscPos80Renderer(new CodePagePrinterEncoding(cp));
 
-            // Physical printing is enabled only when PrintAsync is called.
-            // The UI continues asking the user for confirmation before calling this service.
             var service = new WindowsRawPrintService(renderer, _paths.PrintPreview, physicalPrintingEnabled: true);
             return await service.PrintAsync(document, selectedPrinter, ct);
         }
@@ -74,7 +72,7 @@ public sealed class ConfiguredPhysicalPrintService(AppPaths paths) : IPrintServi
 }
 ''',encoding='utf-8')
 
-# Printer settings: clearly show physical mode enabled and provide an explicit physical test button.
+# Printer settings: physical mode + explicit user-confirmed physical test.
 p=d/'PrinterSettingsWindow.xaml'
 x=p.read_text(encoding='utf-8-sig')
 x=x.replace('MODO FÍSICO: BLOQUEADO','MODO FÍSICO: ATIVO — somente após sua confirmação')
@@ -89,7 +87,7 @@ p=d/'PrinterSettingsWindow.xaml.cs'
 c=p.read_text(encoding='utf-8-sig')
 c=c.replace('Status.Text=$"{_printers.Count} fila(s). Configuração independente por terminal; impressão física permanece bloqueada.";', 'Status.Text=$"{_printers.Count} fila(s). Configuração independente por terminal; impressão física disponível após confirmação.";')
 c=c.replace('Status.Text="PERFIL DO TERMINAL SALVO — PHYSICAL_PRINTING=false";', '''var folder=System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Onca PDV Pro");System.IO.Directory.CreateDirectory(folder);System.IO.File.WriteAllText(System.IO.Path.Combine(folder,"printer-terminal.txt"),TerminalId.Text.Trim());Status.Text="PERFIL DO TERMINAL SALVO — impressão física pronta";''')
-insert='''
+insert=r'''
  private async void Physical_Click(object sender,RoutedEventArgs e)
  {
   try
