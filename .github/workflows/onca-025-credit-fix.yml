@@ -1,0 +1,85 @@
+name: ONCA 0.1.25 CREDIT FIX
+on:
+  push:
+    paths:
+      - 'scripts/apply_ui_025.py'
+      - '.github/workflows/onca-025-credit-fix.yml'
+  workflow_dispatch:
+jobs:
+  build-test-release:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Rebuild approved base
+        shell: pwsh
+        run: .\scripts\rebuild-onca-016-final.ps1
+      - name: Apply 0.1.18
+        shell: pwsh
+        run: python .\scripts\apply_ui_018.py
+      - name: Apply 0.1.19
+        shell: pwsh
+        run: python .\scripts\apply_ui_019.py
+      - name: Apply 0.1.20
+        shell: pwsh
+        run: python .\scripts\apply_ui_020.py
+      - name: Apply 0.1.21 physical print
+        shell: pwsh
+        run: python .\scripts\apply_print_021.py
+      - name: Apply 0.1.22 features
+        shell: pwsh
+        run: python .\scripts\apply_features_022.py
+      - name: Fix nullable product id
+        shell: pwsh
+        run: python .\scripts\fix_022_guid.py
+      - name: Apply 0.1.25 credit UI fix
+        shell: pwsh
+        run: python .\scripts\apply_ui_025.py
+      - name: Audit credit actions and print preservation
+        shell: pwsh
+        run: |
+          $r='.\work-final\ONCA-PDV-PRO'
+          $d="$r\src\OncaPDV.Desktop"
+          $credit=Get-Content "$d\CreditWindow.xaml" -Raw
+          $creditCs=Get-Content "$d\CreditWindow.xaml.cs" -Raw
+          $main=Get-Content "$d\MainWindow.xaml.cs" -Raw
+          foreach($s in @('RECEBER PAGAMENTO','EDITAR / CORRIGIR RECEBIMENTO','ESTORNAR RECEBIMENTO')){if(-not $credit.Contains($s)){throw "Missing visible credit action: $s"}}
+          foreach($s in @('EditReceipt_Click','ReverseReceipt_Click')){if(-not $creditCs.Contains($s)){throw "Missing credit handler: $s"}}
+          if(($credit -split 'EditReceipt_Click').Count -lt 2){throw 'Edit receipt action not wired visibly'}
+          if(($credit -split 'ReverseReceipt_Click').Count -lt 2){throw 'Reverse receipt action not wired visibly'}
+          if(-not $main.Contains('Deseja imprimir o comprovante?')){throw 'Print confirmation changed'}
+          if(-not $main.Contains('ConfiguredPhysicalPrintService')){throw 'Physical print wiring changed'}
+          if(-not $main.Contains('Cut:true')){throw 'Receipt cut wiring changed'}
+      - name: Full regression tests
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          dotnet restore .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj --configfile .\NuGet.Config
+          dotnet test .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj -c Release --no-restore --logger "console;verbosity=minimal"
+      - name: Build Desktop warnings as errors
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          dotnet restore .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj --configfile .\NuGet.Config
+          dotnet build .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release --no-restore -warnaserror
+      - name: Publish EXE
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\portable025
+          Copy-Item '.\portable025\OncaPDV.Desktop.exe' '.\portable025\ONCA-PDV-PRO-0.1.25-CREDIARIO-FIX.exe' -Force
+      - name: Smoke launch 5x
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          $exe=Resolve-Path '.\portable025\ONCA-PDV-PRO-0.1.25-CREDIARIO-FIX.exe'
+          1..5 | ForEach-Object {$p=Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru;if(-not $p.WaitForExit(30000)){try{$p.Kill($true)}catch{};throw "Smoke timeout $_"};if($p.ExitCode -ne 0){throw "Smoke failed $_"}}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.25-CREDIARIO-FIX
+          path: work-final/ONCA-PDV-PRO/portable025/ONCA-PDV-PRO-0.1.25-CREDIARIO-FIX.exe
+          retention-days: 14
+          if-no-files-found: error
