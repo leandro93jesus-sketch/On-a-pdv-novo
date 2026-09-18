@@ -5,7 +5,6 @@ d=root/'src'/'OncaPDV.Desktop'
 i=root/'src'/'OncaPDV.Infrastructure'
 
 # Build exactly on top of 0.1.25.
-exec(Path('scripts/apply_ui_025.py').read_text(encoding='utf-8'), {})
 
 # --- Inventory service: explicit, audited stock movements. ---
 (i/'InventoryService026.cs').write_text(r'''using Microsoft.Data.Sqlite;
