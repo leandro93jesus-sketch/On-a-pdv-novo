@@ -219,3 +219,25 @@ c=c[:start]+new+c[end:]
 p.write_text(c,encoding='utf-8')
 
 print('ONCA_026_PATCH_APPLIED=YES')
+
+# 0.1.26 rule: sales are allowed with zero/negative stock. Inventory is informational and keeps the resulting negative balance.
+p=d/'MainWindow.xaml.cs'
+c=p.read_text(encoding='utf-8-sig')
+# Guard against common UI stock blocks introduced by older patches without changing cart/payment flow.
+for old in [
+    'if (product.Stock <= 0) { MessageBox.Show("PRODUTO SEM ESTOQUE"); return; }',
+    'if (product.Stock <= 0) { SetStatus("PRODUTO SEM ESTOQUE"); return; }',
+    'if (product.Stock < quantity) { MessageBox.Show("ESTOQUE INSUFICIENTE"); return; }',
+    'if (product.Stock < quantity) { SetStatus("ESTOQUE INSUFICIENTE"); return; }'
+]: c=c.replace(old,'')
+p.write_text(c,encoding='utf-8')
+
+# Domain/infrastructure safety: remove only explicit insufficient-stock rejection; keep stock decrement itself.
+for p in list((root/'src').rglob('*.cs')):
+    s=p.read_text(encoding='utf-8-sig')
+    before=s
+    import re
+    s=re.sub(r'if\s*\([^\n{}]*(?:Stock|stock)[^\n{}]*(?:<|<=)[^\n{}]*\)\s*(?:throw new [^;]+(?:ESTOQUE INSUFICIENTE|SEM ESTOQUE)[^;]+;|\{\s*throw new [^;]+(?:ESTOQUE INSUFICIENTE|SEM ESTOQUE)[^;]+;\s*\})','',s,flags=re.I)
+    if s!=before: p.write_text(s,encoding='utf-8')
+
+print('ZERO_NEGATIVE_STOCK_SALES_ALLOWED=YES')
