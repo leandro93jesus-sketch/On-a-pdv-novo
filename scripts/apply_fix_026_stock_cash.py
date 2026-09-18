@@ -167,7 +167,7 @@ new=r''' public async Task<CashClosing> CloseCashAsync(Guid operatorId,decimal i
    decimal cash=0,pix=0,debit=0,credit=0,receipts=0,supply=0,withdrawal=0;
    await using(var q=c.CreateCommand()){
      q.Transaction=(SqliteTransaction)tx;
-     q.CommandText="""SELECT
+     q.CommandText=@"SELECT
 COALESCE(SUM(CASE WHEN type='Sale' AND reason='Cash' THEN amount ELSE 0 END),0),
 COALESCE(SUM(CASE WHEN type='Sale' AND reason='Pix' THEN amount ELSE 0 END),0),
 COALESCE(SUM(CASE WHEN type='Sale' AND reason='Debit' THEN amount ELSE 0 END),0),
@@ -175,7 +175,7 @@ COALESCE(SUM(CASE WHEN type='Sale' AND reason='Credit' THEN amount ELSE 0 END),0
 COALESCE(SUM(CASE WHEN type='StoreCreditReceipt' THEN amount ELSE 0 END),0),
 COALESCE(SUM(CASE WHEN type='Supply' THEN amount ELSE 0 END),0),
 COALESCE(SUM(CASE WHEN type='Withdrawal' THEN amount ELSE 0 END),0)
-FROM cash_movements WHERE session_id=$id""";
+FROM cash_movements WHERE session_id=$id";
      q.Parameters.AddWithValue("$id",id.ToString());
      await using var r=await q.ExecuteReaderAsync(ct);
      if(await r.ReadAsync(ct)){cash=r.GetDecimal(0);pix=r.GetDecimal(1);debit=r.GetDecimal(2);credit=r.GetDecimal(3);receipts=r.GetDecimal(4);supply=r.GetDecimal(5);withdrawal=r.GetDecimal(6);}
