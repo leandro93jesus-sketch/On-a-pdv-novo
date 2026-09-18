@@ -239,4 +239,12 @@ for p in list((root/'src').rglob('*.cs')):
     s=re.sub(r'if\s*\([^\n{}]*(?:Stock|stock)[^\n{}]*(?:<|<=)[^\n{}]*\)\s*(?:throw new [^;]+(?:ESTOQUE INSUFICIENTE|SEM ESTOQUE)[^;]+;|\{\s*throw new [^;]+(?:ESTOQUE INSUFICIENTE|SEM ESTOQUE)[^;]+;\s*\})','',s,flags=re.I)
     if s!=before: p.write_text(s,encoding='utf-8')
 
+# Sales report PDF: save directly on the Windows Desktop.
+p=i/'ReportService022.cs'; rc=p.read_text(encoding='utf-8-sig')
+old='var file=Path.Combine(paths.Exports,$"relatorio-onca-{DateTime.Now:yyyyMMdd-HHmmssfff}.pdf");'
+new='var desktop=Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);if(string.IsNullOrWhiteSpace(desktop)||!Directory.Exists(desktop)) desktop=paths.Exports;var file=Path.Combine(desktop,$"relatorio-onca-{DateTime.Now:yyyyMMdd-HHmmssfff}.pdf");'
+if old not in rc: raise RuntimeError('Sales report PDF path anchor missing')
+rc=rc.replace(old,new,1)
+p.write_text(rc,encoding='utf-8')
+
 print('ZERO_NEGATIVE_STOCK_SALES_ALLOWED=YES')
