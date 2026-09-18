@@ -247,4 +247,67 @@ if old not in rc: raise RuntimeError('Sales report PDF path anchor missing')
 rc=rc.replace(old,new,1)
 p.write_text(rc,encoding='utf-8')
 
+
+# --- 0.1.27 hardening requested: ESTOQUE is the single product/stock area, show all products, and guard printing. ---
+# Inventory search reads the products table directly so an empty search returns every already-cadastrated product.
+p=i/'InventoryService026.cs'; s=p.read_text(encoding='utf-8-sig')
+old='''    public Task<IReadOnlyList<Product>> SearchAsync(string term, CancellationToken ct=default)
+        => new SqliteProductRepository(_db).SearchAsync(term ?? "", ct);'''
+new='''    public async Task<IReadOnlyList<Product>> SearchAsync(string term, CancellationToken ct=default)
+    {
+        var list=new List<Product>(); term=(term??"").Trim();
+        await using var c=_db.Open(); await using var q=c.CreateCommand();
+        q.CommandText=@"SELECT id,internal_code,barcode,name,unit,cost_price,sale_price,stock,min_stock,active,created_at,updated_at
+FROM products
+WHERE $term='' OR name LIKE $like OR internal_code LIKE $like OR COALESCE(barcode,'') LIKE $like
+ORDER BY name COLLATE NOCASE, internal_code";
+        q.Parameters.AddWithValue("$term",term); q.Parameters.AddWithValue("$like","%"+term+"%");
+        await using var r=await q.ExecuteReaderAsync(ct);
+        while(await r.ReadAsync(ct)) list.Add(new Product(Guid.Parse(r.GetString(0)),r.GetString(1),r.IsDBNull(2)?null:r.GetString(2),r.GetString(3),r.GetString(4),r.GetDecimal(5),r.GetDecimal(6),r.GetDecimal(7),r.GetDecimal(8),r.GetInt32(9)!=0,DateTimeOffset.Parse(r.GetString(10)),DateTimeOffset.Parse(r.GetString(11))));
+        return list;
+    }'''
+if old not in s: raise RuntimeError('Inventory SearchAsync anchor missing')
+s=s.replace(old,new,1); p.write_text(s,encoding='utf-8')
+
+# Rename the navigation/window to ESTOQUE and make product registration available there.
+p=d/'MainWindow.xaml'; s=p.read_text(encoding='utf-8-sig')
+s=s.replace('Content="📦   Produtos / Estoque"','Content="📦   ESTOQUE"')
+p.write_text(s,encoding='utf-8')
+p=d/'InventoryWindow.xaml'; s=p.read_text(encoding='utf-8-sig')
+s=s.replace('Title="Produtos / Estoque — ONÇA PDV PRO 0.1.26"','Title="ESTOQUE — ONÇA PDV PRO"').replace('Text="PRODUTOS / ESTOQUE"','Text="ESTOQUE"')
+s=s.replace('<Button Content="EDITAR PRODUTO"','<Button Content="CADASTRAR PRODUTO" Padding="14,10" Margin="4" Background="#0B6B3A" Foreground="White" Click="NewProduct_Click"/><Button Content="EDITAR PRODUTO"')
+p.write_text(s,encoding='utf-8')
+p=d/'InventoryWindow.xaml.cs'; s=p.read_text(encoding='utf-8-sig')
+anchor='    private async void Edit_Click'
+if anchor not in s: raise RuntimeError('Inventory edit handler anchor missing')
+s=s.replace(anchor,'    private async void NewProduct_Click(object s,RoutedEventArgs e){var w=new ProductWindow(null){Owner=this};if(w.ShowDialog()!=true||w.Product is null)return;try{await _svc.SaveProductAsync(w.Product);SearchBox.Text="";await Refresh();MessageBox.Show("Produto cadastrado e exibido no estoque.","ESTOQUE");}catch(Exception ex){MessageBox.Show(ex.Message,"ESTOQUE",MessageBoxButton.OK,MessageBoxImage.Warning);}}\\n'+anchor,1)
+p.write_text(s,encoding='utf-8')
+
+# Printing: serialize requests and block accidental immediate duplicate spool submissions.
+(d/'SafePrintService027.cs').write_text(r'''using System.Security.Cryptography;
+using System.Text;
+using OncaPDV.Printing;
+namespace OncaPDV.Desktop;
+public sealed class SafePrintService027(IPrintService inner):IPrintService
+{
+    private readonly SemaphoreSlim _gate=new(1,1); private string? _last; private DateTimeOffset _lastAt=DateTimeOffset.MinValue;
+    public async Task<PrintResult> PrintAsync(ReceiptDocument document,string? printerName=null,CancellationToken ct=default)
+    {
+        await _gate.WaitAsync(ct); try{
+            var key=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{document.Sale?.Id}|{document.IsReprint}|{document.SaleLabel}|{printerName}")));
+            if(key==_last && DateTimeOffset.Now-_lastAt<TimeSpan.FromSeconds(5)) return new(false,null,"IMPRESSÃO DUPLICADA BLOQUEADA. CONFIRME NOVAMENTE PARA REIMPRIMIR.");
+            var r=await inner.PrintAsync(document,printerName,ct); if(r.Success){_last=key;_lastAt=DateTimeOffset.Now;} return r;
+        } finally{_gate.Release();}
+    }
+}''',encoding='utf-8')
+p=d/'MainWindow.xaml.cs'; s=p.read_text(encoding='utf-8-sig')
+s=s.replace('_printer = new QueuedPrintService(new ConfiguredPhysicalPrintService(_paths), _database);','_printer = new SafePrintService027(new QueuedPrintService(new ConfiguredPhysicalPrintService(_paths), _database));')
+p.write_text(s,encoding='utf-8')
+
+# Cash close diagnostics: use SQLite numeric conversion tolerant of INTEGER/REAL storage and expose stage in errors.
+p=i/'OperationalServices.cs'; s=p.read_text(encoding='utf-8-sig')
+s=s.replace('opening=r.GetDecimal(1);','opening=Convert.ToDecimal(r.GetValue(1),System.Globalization.CultureInfo.InvariantCulture);')
+for n in range(7): s=s.replace(f'r.GetDecimal({n})',f'Convert.ToDecimal(r.GetValue({n}),System.Globalization.CultureInfo.InvariantCulture)')
+p.write_text(s,encoding='utf-8')
+
 print('ZERO_NEGATIVE_STOCK_SALES_ALLOWED=YES')
