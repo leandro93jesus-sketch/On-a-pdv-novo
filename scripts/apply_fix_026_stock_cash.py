@@ -255,16 +255,14 @@ old='''    public Task<IReadOnlyList<Product>> SearchAsync(string term, Cancella
         => new SqliteProductRepository(_db).SearchAsync(term ?? "", ct);'''
 new='''    public async Task<IReadOnlyList<Product>> SearchAsync(string term, CancellationToken ct=default)
     {
-        var list=new List<Product>(); term=(term??"").Trim();
-        await using var c=_db.Open(); await using var q=c.CreateCommand();
-        q.CommandText=@"SELECT id,internal_code,barcode,name,unit,cost_price,sale_price,stock,min_stock,active,created_at,updated_at
-FROM products
-WHERE $term='' OR name LIKE $like OR internal_code LIKE $like OR COALESCE(barcode,'') LIKE $like
-ORDER BY name COLLATE NOCASE, internal_code";
-        q.Parameters.AddWithValue("$term",term); q.Parameters.AddWithValue("$like","%"+term+"%");
-        await using var r=await q.ExecuteReaderAsync(ct);
-        while(await r.ReadAsync(ct)) list.Add(new Product(Guid.Parse(r.GetString(0)),r.GetString(1),r.IsDBNull(2)?null:r.GetString(2),r.GetString(3),r.GetString(4),r.GetDecimal(5),r.GetDecimal(6),r.GetDecimal(7),r.GetDecimal(8),r.GetInt32(9)!=0,DateTimeOffset.Parse(r.GetString(10)),DateTimeOffset.Parse(r.GetString(11))));
-        return list;
+        // Empty search must return all products using the proven repository materializer.
+        var repo=new SqliteProductRepository(_db);
+        if(!string.IsNullOrWhiteSpace(term)) return await repo.SearchAsync(term.Trim(),ct);
+        var all=new List<Product>();
+        foreach(var prefix in new[]{"","0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"})
+            foreach(var p in await repo.SearchAsync(prefix,ct))
+                if(!all.Any(x=>x.Id==p.Id)) all.Add(p);
+        return all.OrderBy(x=>x.Name,StringComparer.CurrentCultureIgnoreCase).ToList();
     }'''
 if old not in s: raise RuntimeError('Inventory SearchAsync anchor missing')
 s=s.replace(old,new,1); p.write_text(s,encoding='utf-8')
