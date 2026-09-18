@@ -278,7 +278,7 @@ p.write_text(s,encoding='utf-8')
 p=d/'InventoryWindow.xaml.cs'; s=p.read_text(encoding='utf-8-sig')
 anchor='    private async void Edit_Click'
 if anchor not in s: raise RuntimeError('Inventory edit handler anchor missing')
-s=s.replace(anchor,'    private async void NewProduct_Click(object s,RoutedEventArgs e){var w=new ProductWindow(null){Owner=this};if(w.ShowDialog()!=true||w.Product is null)return;try{await _svc.SaveProductAsync(w.Product);SearchBox.Text="";await Refresh();MessageBox.Show("Produto cadastrado e exibido no estoque.","ESTOQUE");}catch(Exception ex){MessageBox.Show(ex.Message,"ESTOQUE",MessageBoxButton.OK,MessageBoxImage.Warning);}}\\n'+anchor,1)
+s=s.replace(anchor,'    private async void NewProduct_Click(object s,RoutedEventArgs e){var w=new ProductWindow(null){Owner=this};if(w.ShowDialog()!=true||w.Product is null)return;try{await _svc.SaveProductAsync(w.Product);SearchBox.Text="";await Refresh();MessageBox.Show("Produto cadastrado e exibido no estoque.","ESTOQUE");}catch(Exception ex){MessageBox.Show(ex.Message,"ESTOQUE",MessageBoxButton.OK,MessageBoxImage.Warning);}}\n'+anchor,1)
 p.write_text(s,encoding='utf-8')
 
 # Printing: serialize requests and block accidental immediate duplicate spool submissions.
