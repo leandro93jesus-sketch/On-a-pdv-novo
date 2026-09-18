@@ -14,7 +14,31 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Rebuild 0.1.26 from approved 0.1.25 chain
+      - name: Rebuild approved base
+        shell: pwsh
+        run: .\scripts\rebuild-onca-016-final.ps1
+      - name: Apply 0.1.18
+        shell: pwsh
+        run: python .\scripts\apply_ui_018.py
+      - name: Apply 0.1.19
+        shell: pwsh
+        run: python .\scripts\apply_ui_019.py
+      - name: Apply 0.1.20
+        shell: pwsh
+        run: python .\scripts\apply_ui_020.py
+      - name: Apply 0.1.21 physical print
+        shell: pwsh
+        run: python .\scripts\apply_print_021.py
+      - name: Apply 0.1.22 features
+        shell: pwsh
+        run: python .\scripts\apply_features_022.py
+      - name: Fix nullable product id
+        shell: pwsh
+        run: python .\scripts\fix_022_guid.py
+      - name: Apply 0.1.25 credit UI fix
+        shell: pwsh
+        run: python .\scripts\apply_ui_025.py
+      - name: Apply 0.1.26 stock and cash fix
         shell: pwsh
         run: python .\scripts\apply_fix_026_stock_cash.py
       - name: Audit requested corrections
