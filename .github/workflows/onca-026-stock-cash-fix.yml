@@ -1,4 +1,4 @@
-name: ONCA 0.1.26 STOCK CASH FIX
+name: ONCA 0.1.27 VERIFIED FIX
 on:
   push:
     paths:
@@ -38,7 +38,7 @@ jobs:
       - name: Apply 0.1.25 credit UI fix
         shell: pwsh
         run: python .\scripts\apply_ui_025.py
-      - name: Apply 0.1.26 stock and cash fix
+      - name: Apply 0.1.27 verified fixes
         shell: pwsh
         run: python .\scripts\apply_fix_026_stock_cash.py
       - name: Audit requested corrections
@@ -48,8 +48,15 @@ jobs:
           $inv=Get-Content "$r\src\OncaPDV.Desktop\InventoryWindow.xaml" -Raw
           $cash=Get-Content "$r\src\OncaPDV.Desktop\OperationsWindow.xaml.cs" -Raw
           $main=Get-Content "$r\src\OncaPDV.Desktop\MainWindow.xaml.cs" -Raw
-          foreach($s in @('EDITAR PRODUTO','+ ENTRADA','- SAÍDA','AJUSTAR SALDO')){if(-not $inv.Contains($s)){throw "Missing inventory action: $s"}}
+          foreach($s in @('CADASTRAR PRODUTO','EDITAR PRODUTO','+ ENTRADA','- SAÍDA','AJUSTAR SALDO')){if(-not $inv.Contains($s)){throw "Missing inventory action: $s"}}
           if(-not $cash.Contains('CAIXA FECHADO COM SUCESSO')){throw 'Cash closing confirmation missing'}
+          if(-not $inv.Contains('Text="ESTOQUE"')){throw 'ESTOQUE title missing'}
+          $svc=Get-Content "$r\src\OncaPDV.Infrastructure\InventoryService026.cs" -Raw
+          if(-not $svc.Contains('if(!string.IsNullOrWhiteSpace(term))')){throw 'All-products inventory loading fix missing'}
+          $safe=Get-Content "$r\src\OncaPDV.Desktop\SafePrintService027.cs" -Raw
+          if(-not $safe.Contains('IMPRESSÃO DUPLICADA BLOQUEADA')){throw 'Duplicate print protection missing'}
+          $report=Get-Content "$r\src\OncaPDV.Infrastructure\ReportService022.cs" -Raw
+          if(-not $report.Contains('SpecialFolder.DesktopDirectory')){throw 'Sales report Desktop PDF fix missing'}
           if(-not $main.Contains('Deseja imprimir o comprovante?')){throw 'Print confirmation regressed'}
           if(-not $main.Contains('ConfiguredPhysicalPrintService')){throw 'Physical printing wiring regressed'}
       - name: Full regression tests
@@ -68,17 +75,17 @@ jobs:
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
         run: |
-          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\portable026
-          Copy-Item '.\portable026\OncaPDV.Desktop.exe' '.\portable026\ONCA-PDV-PRO-0.1.26-ESTOQUE-CAIXA-FIX.exe' -Force
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\portable027
+          Copy-Item '.\portable027\OncaPDV.Desktop.exe' '.\portable027\ONCA-PDV-PRO-0.1.27-TESTADO.exe.exe' -Force
       - name: Smoke launch 5x
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
         run: |
-          $exe=Resolve-Path '.\portable026\ONCA-PDV-PRO-0.1.26-ESTOQUE-CAIXA-FIX.exe'
+          $exe=Resolve-Path '.\portable027\ONCA-PDV-PRO-0.1.27-TESTADO.exe.exe'
           1..5 | ForEach-Object {$p=Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru;if(-not $p.WaitForExit(30000)){try{$p.Kill($true)}catch{};throw "Smoke timeout $_"};if($p.ExitCode -ne 0){throw "Smoke failed $_"}}
       - uses: actions/upload-artifact@v4
         with:
-          name: ONCA-PDV-PRO-0.1.26-ESTOQUE-CAIXA-FIX
-          path: work-final/ONCA-PDV-PRO/portable026/ONCA-PDV-PRO-0.1.26-ESTOQUE-CAIXA-FIX.exe
+          name: ONCA-PDV-PRO-0.1.27-TESTADO.exe
+          path: work-final/ONCA-PDV-PRO/portable027/ONCA-PDV-PRO-0.1.27-TESTADO.exe.exe
           retention-days: 14
           if-no-files-found: error
