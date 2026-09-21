@@ -271,6 +271,8 @@ s=s.replace(old,new,1); p.write_text(s,encoding='utf-8')
 p=d/'MainWindow.xaml'; s=p.read_text(encoding='utf-8-sig')
 s=s.replace('Content="📦   Produtos / Estoque"','Content="📦   ESTOQUE"')
 p.write_text(s,encoding='utf-8')
+
+# 0.1.28 clean inventory UI: preserve existing handlers/services and only reorganize the proven inventory screen.
 p=d/'InventoryWindow.xaml'; s=p.read_text(encoding='utf-8-sig')
 s=s.replace('Title="Produtos / Estoque — ONÇA PDV PRO 0.1.26"','Title="ESTOQUE — ONÇA PDV PRO"').replace('Text="PRODUTOS / ESTOQUE"','Text="ESTOQUE"')
 s=s.replace('<Button Content="EDITAR PRODUTO"','<Button Content="CADASTRAR PRODUTO" Padding="14,10" Margin="4" Background="#0B6B3A" Foreground="White" Click="NewProduct_Click"/><Button Content="EDITAR PRODUTO"')
