@@ -1,4 +1,4 @@
-name: ONCA 0.1.29 ORDER PRINT
+name: ONCA 0.1.30 IMPROVED INVENTORY
 on:
   push:
     paths:
@@ -80,17 +80,17 @@ jobs:
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
         run: |
-          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\portable029
-          Copy-Item '.\portable029\OncaPDV.Desktop.exe' '.\portable029\ONCA-PDV-PRO-0.1.29-PEDIDOS-IMPRIMIR-TESTADO.exe.exe' -Force
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\portable030
+          Copy-Item '.\portable030\OncaPDV.Desktop.exe' '.\portable030\ONCA-PDV-PRO-0.1.30-ESTOQUE-MELHORADO-TESTADO.exe.exe' -Force
       - name: Smoke launch 5x
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
         run: |
-          $exe=Resolve-Path '.\portable029\ONCA-PDV-PRO-0.1.29-PEDIDOS-IMPRIMIR-TESTADO.exe.exe'
+          $exe=Resolve-Path '.\portable030\ONCA-PDV-PRO-0.1.30-ESTOQUE-MELHORADO-TESTADO.exe.exe'
           1..5 | ForEach-Object {$p=Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru;if(-not $p.WaitForExit(30000)){try{$p.Kill($true)}catch{};throw "Smoke timeout $_"};if($p.ExitCode -ne 0){throw "Smoke failed $_"}}
       - uses: actions/upload-artifact@v4
         with:
-          name: ONCA-PDV-PRO-0.1.29-PEDIDOS-IMPRIMIR-TESTADO.exe
-          path: work-final/ONCA-PDV-PRO/portable029/ONCA-PDV-PRO-0.1.29-PEDIDOS-IMPRIMIR-TESTADO.exe.exe
+          name: ONCA-PDV-PRO-0.1.30-ESTOQUE-MELHORADO-TESTADO.exe
+          path: work-final/ONCA-PDV-PRO/portable030/ONCA-PDV-PRO-0.1.30-ESTOQUE-MELHORADO-TESTADO.exe.exe
           retention-days: 14
           if-no-files-found: error
