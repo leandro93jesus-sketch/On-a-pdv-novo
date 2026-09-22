@@ -90,11 +90,11 @@ jobs:
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
         run: |
-          $exe=Resolve-Path '.\portable030\ONCA-PDV-PRO-0.1.30-ESTOQUE-MELHORADO-TESTADO.exe.exe'
+          $exe=Resolve-Path '.\portable030\ONCA-PDV-PRO-0.1.30-ESTOQUE-MELHORADO-TESTADO.exe'
           1..5 | ForEach-Object {$p=Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru;if(-not $p.WaitForExit(30000)){try{$p.Kill($true)}catch{};throw "Smoke timeout $_"};if($p.ExitCode -ne 0){throw "Smoke failed $_"}}
       - uses: actions/upload-artifact@v4
         with:
           name: ONCA-PDV-PRO-0.1.30-ESTOQUE-MELHORADO-TESTADO.exe
-          path: work-final/ONCA-PDV-PRO/portable030/ONCA-PDV-PRO-0.1.30-ESTOQUE-MELHORADO-TESTADO.exe.exe
+          path: work-final/ONCA-PDV-PRO/portable030/ONCA-PDV-PRO-0.1.30-ESTOQUE-MELHORADO-TESTADO.exe
           retention-days: 14
           if-no-files-found: error
