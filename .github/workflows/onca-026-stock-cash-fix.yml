@@ -1,4 +1,4 @@
-name: ONCA 0.1.28 NEW INVENTORY
+name: ONCA 0.1.29 ORDER PRINT
 on:
   push:
     paths:
@@ -58,6 +58,11 @@ jobs:
           $report=Get-Content "$r\src\OncaPDV.Infrastructure\ReportService022.cs" -Raw
           if(-not $report.Contains('SpecialFolder.DesktopDirectory')){throw 'Sales report Desktop PDF fix missing'}
           if(-not $main.Contains('Deseja imprimir o comprovante?')){throw 'Print confirmation regressed'}
+          $orders=Get-Content "$r\src\OncaPDV.Desktop\OrdersWindow.xaml.cs" -Raw
+          if(-not $orders.Contains('Deseja imprimir o pedido')){throw 'Order print confirmation missing'}
+          if(-not $orders.Contains('PrintDocument')){throw 'Order print action missing'}
+          $ordersXaml=Get-Content "$r\src\OncaPDV.Desktop\OrdersWindow.xaml" -Raw
+          if(-not $ordersXaml.Contains('IMPRIMIR PEDIDO')){throw 'Order print button missing'}
           if(-not $main.Contains('ConfiguredPhysicalPrintService')){throw 'Physical printing wiring regressed'}
       - name: Full regression tests
         shell: pwsh
@@ -75,17 +80,17 @@ jobs:
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
         run: |
-          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\portable028
-          Copy-Item '.\portable028\OncaPDV.Desktop.exe' '.\portable028\ONCA-PDV-PRO-0.1.28-NOVO-ESTOQUE-TESTADO.exe.exe' -Force
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\portable029
+          Copy-Item '.\portable029\OncaPDV.Desktop.exe' '.\portable029\ONCA-PDV-PRO-0.1.29-PEDIDOS-IMPRIMIR-TESTADO.exe.exe' -Force
       - name: Smoke launch 5x
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
         run: |
-          $exe=Resolve-Path '.\portable028\ONCA-PDV-PRO-0.1.28-NOVO-ESTOQUE-TESTADO.exe.exe'
+          $exe=Resolve-Path '.\portable029\ONCA-PDV-PRO-0.1.29-PEDIDOS-IMPRIMIR-TESTADO.exe.exe'
           1..5 | ForEach-Object {$p=Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru;if(-not $p.WaitForExit(30000)){try{$p.Kill($true)}catch{};throw "Smoke timeout $_"};if($p.ExitCode -ne 0){throw "Smoke failed $_"}}
       - uses: actions/upload-artifact@v4
         with:
-          name: ONCA-PDV-PRO-0.1.28-NOVO-ESTOQUE-TESTADO.exe
-          path: work-final/ONCA-PDV-PRO/portable028/ONCA-PDV-PRO-0.1.28-NOVO-ESTOQUE-TESTADO.exe.exe
+          name: ONCA-PDV-PRO-0.1.29-PEDIDOS-IMPRIMIR-TESTADO.exe
+          path: work-final/ONCA-PDV-PRO/portable029/ONCA-PDV-PRO-0.1.29-PEDIDOS-IMPRIMIR-TESTADO.exe.exe
           retention-days: 14
           if-no-files-found: error
