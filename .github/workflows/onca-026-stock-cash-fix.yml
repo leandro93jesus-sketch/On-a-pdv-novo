@@ -48,7 +48,7 @@ jobs:
           $inv=Get-Content "$r\src\OncaPDV.Desktop\InventoryWindow.xaml" -Raw
           $cash=Get-Content "$r\src\OncaPDV.Desktop\OperationsWindow.xaml.cs" -Raw
           $main=Get-Content "$r\src\OncaPDV.Desktop\MainWindow.xaml.cs" -Raw
-          foreach($s in @('CADASTRAR PRODUTO','EDITAR PRODUTO','+ ENTRADA','- SAÍDA','AJUSTAR SALDO')){if(-not $inv.Contains($s)){throw "Missing inventory action: $s"}}
+          foreach($s in @('CADASTRAR PRODUTO','EDITAR / ALTERAR PREÇO','+ ENTRADA','- SAÍDA','AJUSTAR QUANTIDADE')){if(-not $inv.Contains($s)){throw "Missing inventory action: $s"}}
           if(-not $cash.Contains('CAIXA FECHADO COM SUCESSO')){throw 'Cash closing confirmation missing'}
           if(-not $inv.Contains('Text="ESTOQUE"')){throw 'ESTOQUE title missing'}
           $svc=Get-Content "$r\src\OncaPDV.Infrastructure\InventoryService026.cs" -Raw
@@ -64,6 +64,10 @@ jobs:
           $ordersXaml=Get-Content "$r\src\OncaPDV.Desktop\OrdersWindow.xaml" -Raw
           if(-not $ordersXaml.Contains('IMPRIMIR PEDIDO')){throw 'Order print button missing'}
           if(-not $main.Contains('ConfiguredPhysicalPrintService')){throw 'Physical printing wiring regressed'}
+          if(-not $inv.Contains('StringFormat=N0')){throw 'Whole-number inventory display missing'}
+          $invcs=Get-Content "$r\src\OncaPDV.Desktop\InventoryWindow.xaml.cs" -Raw
+          if(-not $invcs.Contains('q!=decimal.Truncate(q)')){throw 'Whole-number entry/exit validation missing'}
+          if(-not $invcs.Contains('v!=decimal.Truncate(v)')){throw 'Whole-number balance validation missing'}
       - name: Full regression tests
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
@@ -81,7 +85,7 @@ jobs:
         working-directory: .\work-final\ONCA-PDV-PRO
         run: |
           dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\portable030
-          Copy-Item '.\portable030\OncaPDV.Desktop.exe' '.\portable030\ONCA-PDV-PRO-0.1.30-ESTOQUE-MELHORADO-TESTADO.exe.exe' -Force
+          Copy-Item '.\portable030\OncaPDV.Desktop.exe' '.\portable030\ONCA-PDV-PRO-0.1.30-ESTOQUE-MELHORADO-TESTADO.exe' -Force
       - name: Smoke launch 5x
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
