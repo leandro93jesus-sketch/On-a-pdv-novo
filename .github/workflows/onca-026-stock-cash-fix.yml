@@ -1,4 +1,4 @@
-name: ONCA 0.1.30 IMPROVED INVENTORY
+name: ONCA 0.1.31 INVENTORY ROUTING FIX
 on:
   push:
     paths:
@@ -65,6 +65,9 @@ jobs:
           if(-not $ordersXaml.Contains('IMPRIMIR PEDIDO')){throw 'Order print button missing'}
           if(-not $main.Contains('ConfiguredPhysicalPrintService')){throw 'Physical printing wiring regressed'}
           if(-not $inv.Contains('StringFormat=N0')){throw 'Whole-number inventory display missing'}
+          $mainXaml=Get-Content "$r\src\OncaPDV.Desktop\MainWindow.xaml" -Raw
+          if(-not $mainXaml.Contains('Content="▦   ESTOQUE" Click="Inventory026_Click"')){throw 'Main ESTOQUE route missing'}
+          if($mainXaml.Contains('Content="▦   Produtos" Click="Product_Click"')){throw 'Old Products route still active'}
           $invcs=Get-Content "$r\src\OncaPDV.Desktop\InventoryWindow.xaml.cs" -Raw
           if(-not $invcs.Contains('q!=decimal.Truncate(q)')){throw 'Whole-number entry/exit validation missing'}
           if(-not $invcs.Contains('v!=decimal.Truncate(v)')){throw 'Whole-number balance validation missing'}
@@ -84,17 +87,17 @@ jobs:
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
         run: |
-          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\portable030
-          Copy-Item '.\portable030\OncaPDV.Desktop.exe' '.\portable030\ONCA-PDV-PRO-0.1.30-ESTOQUE-MELHORADO-TESTADO.exe' -Force
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\portable031
+          Copy-Item '.\portable031\OncaPDV.Desktop.exe' '.\portable031\ONCA-PDV-PRO-0.1.31-ESTOQUE-CORRIGIDO-TESTADO.exe' -Force
       - name: Smoke launch 5x
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
         run: |
-          $exe=Resolve-Path '.\portable030\ONCA-PDV-PRO-0.1.30-ESTOQUE-MELHORADO-TESTADO.exe'
+          $exe=Resolve-Path '.\portable031\ONCA-PDV-PRO-0.1.31-ESTOQUE-CORRIGIDO-TESTADO.exe'
           1..5 | ForEach-Object {$p=Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru;if(-not $p.WaitForExit(30000)){try{$p.Kill($true)}catch{};throw "Smoke timeout $_"};if($p.ExitCode -ne 0){throw "Smoke failed $_"}}
       - uses: actions/upload-artifact@v4
         with:
-          name: ONCA-PDV-PRO-0.1.30-ESTOQUE-MELHORADO-TESTADO.exe
-          path: work-final/ONCA-PDV-PRO/portable030/ONCA-PDV-PRO-0.1.30-ESTOQUE-MELHORADO-TESTADO.exe
+          name: ONCA-PDV-PRO-0.1.31-ESTOQUE-CORRIGIDO-TESTADO.exe
+          path: work-final/ONCA-PDV-PRO/portable031/ONCA-PDV-PRO-0.1.31-ESTOQUE-CORRIGIDO-TESTADO.exe
           retention-days: 14
           if-no-files-found: error
