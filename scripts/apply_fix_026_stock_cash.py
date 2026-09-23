@@ -305,6 +305,16 @@ s=s.replace(anchor,'''    private static void ShowProductError(Exception ex){var
     '''+anchor,1)
 p.write_text(s,encoding='utf-8')
 
+
+# --- 0.1.31 routing fix: the existing Produtos entry now IS the improved ESTOQUE screen. ---
+p=d/'MainWindow.xaml'; s=p.read_text(encoding='utf-8-sig')
+# Remove the extra inventory navigation entry created by 0.1.26/0.1.27.
+import re
+s=re.sub(r'\s*<Button Style="\{StaticResource NavButton\}" Content="📦\s+ESTOQUE" Click="Inventory026_Click"/>','',s,count=1)
+# Route the original Produtos menu entry to the improved inventory window and label it clearly.
+s=s.replace('Content="▦   Produtos" Click="Product_Click"','Content="▦   ESTOQUE" Click="Inventory026_Click"',1)
+p.write_text(s,encoding='utf-8')
+
 # Printing: serialize requests and block accidental immediate duplicate spool submissions.
 (d/'SafePrintService027.cs').write_text(r'''using System.Security.Cryptography;
 using System.Text;
