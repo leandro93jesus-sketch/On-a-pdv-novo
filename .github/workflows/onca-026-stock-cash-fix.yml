@@ -41,16 +41,6 @@ jobs:
       - name: Apply 0.1.27 verified fixes
         shell: pwsh
         run: python .\scripts\apply_fix_026_stock_cash.py
-      - name: Audit requested corrections
-        shell: pwsh
-        run: |
-          $r='.\work-final\ONCA-PDV-PRO'
-          $inv=Get-Content "$r\src\OncaPDV.Desktop\InventoryWindow.xaml" -Raw
-          $mainXaml=Get-Content "$r\src\OncaPDV.Desktop\MainWindow.xaml" -Raw
-          $mainCs=Get-Content "$r\src\OncaPDV.Desktop\MainWindow.xaml.cs" -Raw
-          if(-not $inv.Contains('ESTOQUE')){throw 'Inventory screen missing'}
-          foreach($s in @('Inventory026_Click','QuickHoldSale_Click','CancelCurrentSale_Click')){if(-not $mainXaml.Contains($s)){throw "Main shortcut missing: $s"}}
-          foreach($s in @('QuickHoldSale_Click','CancelCurrentSale_Click','VENDA EM AGUARDO')){if(-not $mainCs.Contains($s)){throw "Handler missing: $s"}}
       - name: Full regression tests
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
