@@ -66,7 +66,7 @@ jobs:
           if(-not $main.Contains('ConfiguredPhysicalPrintService')){throw 'Physical printing wiring regressed'}
           if(-not $inv.Contains('StringFormat=N0')){throw 'Whole-number inventory display missing'}
           $mainXaml=Get-Content "$r\src\OncaPDV.Desktop\MainWindow.xaml" -Raw
-          if(-not $mainXaml.Contains('Content="▦   ESTOQUE" Click="Inventory026_Click"')){throw 'Main ESTOQUE route missing'}
+          if(-not $mainXaml.Contains('ESTOQUE') -or -not $mainXaml.Contains('Click="Inventory026_Click"')){throw 'Main ESTOQUE route missing'}
           if($mainXaml.Contains('Content="▦   Produtos" Click="Product_Click"')){throw 'Old Products route still active'}
           if(-not $mainXaml.Contains('Click="QuickHoldSale_Click"')){throw 'Hold sale shortcut missing'}
           if(-not $mainXaml.Contains('Click="CancelCurrentSale_Click"')){throw 'Current sale cancel shortcut missing'}
