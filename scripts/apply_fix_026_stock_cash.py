@@ -315,6 +315,60 @@ s=re.sub(r'\s*<Button Style="\{StaticResource NavButton\}" Content="📦\s+ESTOQ
 s=s.replace('Content="▦   Produtos" Click="Product_Click"','Content="▦   ESTOQUE" Click="Inventory026_Click"',1)
 p.write_text(s,encoding='utf-8')
 
+
+# --- 0.1.32 advanced PDV usability: hold/resume + easy current-sale cancel; preserve existing flows. ---
+p=d/'MainWindow.xaml'; s=p.read_text(encoding='utf-8-sig')
+# Keep Orders and every existing function. Add explicit operational shortcuts beside Orders.
+orders_btn='<Button Style="{StaticResource NavButton}" Content="📦   Pedidos" Click="Orders_Click"/>'
+extra='''<Button Style="{StaticResource NavButton}" Content="⏸   VENDA EM AGUARDO" Click="QuickHoldSale_Click"/>
+                    <Button Style="{StaticResource NavButton}" Content="✖   CANCELAR VENDA ATUAL" Click="CancelCurrentSale_Click"/>'''
+if 'Click="QuickHoldSale_Click"' not in s:
+    if orders_btn not in s: raise RuntimeError('Orders navigation anchor missing')
+    s=s.replace(orders_btn,orders_btn+'\\n                    '+extra,1)
+# Enforce a single, real inventory entry routed to the improved InventoryWindow.
+s=re.sub(r'\\s*<Button Style="\\{StaticResource NavButton\\}" Content="📦\\s+ESTOQUE" Click="Inventory026_Click"/>','',s)
+s=s.replace('Content="▦   Produtos" Click="Product_Click"','Content="▦   ESTOQUE" Click="Inventory026_Click"',1)
+p.write_text(s,encoding='utf-8')
+
+p=d/'MainWindow.xaml.cs'; s=p.read_text(encoding='utf-8-sig')
+anchor='    private void Reports022_Click'
+handlers=r'''    private async void QuickHoldSale_Click(object sender, RoutedEventArgs e)
+    {
+        if (_workflow.Cart.Items.Count == 0) { MessageBox.Show("O carrinho está vazio.","Venda em aguardo"); return; }
+        if (MessageBox.Show($"Colocar esta venda de {_workflow.Cart.Total:C} em aguardo?\\n\\nO carrinho será liberado para atender outro cliente.","Venda em aguardo",MessageBoxButton.YesNo,MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        try
+        {
+            var label = $"VENDA EM AGUARDO {DateTime.Now:HH:mm}";
+            var held = await _orders.CreateAsync(_workflow.Cart.CustomerId,label,"","VENDA EM AGUARDO",_workflow.Cart.Items.ToArray(),_workflow.Cart.Discount);
+            await _workflow.CancelAsync();
+            _activeOrderId = null;
+            CustomerText.Text = "CONSUMIDOR";
+            RefreshCart();
+            SearchBox.Focus();
+            SetStatus($"VENDA EM AGUARDO Nº {held.Number:000000} — CARRINHO LIBERADO");
+            MessageBox.Show($"Venda em aguardo salva com sucesso.\\n\\nNº {held.Number:000000}\\nUse PEDIDOS > EDITAR NO CARRINHO para continuar.","Venda em aguardo",MessageBoxButton.OK,MessageBoxImage.Information);
+        }
+        catch(Exception ex){MessageBox.Show(ex.Message,"Venda em aguardo",MessageBoxButton.OK,MessageBoxImage.Warning);}
+    }
+
+    private async void CancelCurrentSale_Click(object sender, RoutedEventArgs e)
+    {
+        if (_workflow.Cart.Items.Count == 0) { MessageBox.Show("Não há venda atual para cancelar.","Cancelar venda"); return; }
+        if (MessageBox.Show($"CANCELAR A VENDA ATUAL?\\n\\nTotal do carrinho: {_workflow.Cart.Total:C}\\n\\nEsta ação limpa somente o carrinho atual. Vendas já concluídas não serão alteradas.","Cancelar venda atual",MessageBoxButton.YesNo,MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        await _workflow.CancelAsync();
+        _activeOrderId = null;
+        CustomerText.Text = "CONSUMIDOR";
+        RefreshCart();
+        SearchBox.Focus();
+        SetStatus("VENDA ATUAL CANCELADA — PRONTO PARA NOVA VENDA");
+    }
+
+'''
+if 'QuickHoldSale_Click(object' not in s:
+    if anchor not in s: raise RuntimeError('Reports handler anchor missing')
+    s=s.replace(anchor,handlers+anchor,1)
+p.write_text(s,encoding='utf-8')
+
 # Printing: serialize requests and block accidental immediate duplicate spool submissions.
 (d/'SafePrintService027.cs').write_text(r'''using System.Security.Cryptography;
 using System.Text;
