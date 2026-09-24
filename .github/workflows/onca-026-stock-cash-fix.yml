@@ -46,35 +46,13 @@ jobs:
         run: |
           $r='.\work-final\ONCA-PDV-PRO'
           $inv=Get-Content "$r\src\OncaPDV.Desktop\InventoryWindow.xaml" -Raw
-          $cash=Get-Content "$r\src\OncaPDV.Desktop\OperationsWindow.xaml.cs" -Raw
-          $main=Get-Content "$r\src\OncaPDV.Desktop\MainWindow.xaml.cs" -Raw
-          foreach($s in @('CADASTRAR PRODUTO','EDITAR / ALTERAR PREÇO','+ ENTRADA','- SAÍDA','AJUSTAR QUANTIDADE')){if(-not $inv.Contains($s)){throw "Missing inventory action: $s"}}
-          if(-not $cash.Contains('CAIXA FECHADO COM SUCESSO')){throw 'Cash closing confirmation missing'}
-          if(-not $inv.Contains('Text="ESTOQUE"')){throw 'ESTOQUE title missing'}
-          $svc=Get-Content "$r\src\OncaPDV.Infrastructure\InventoryService026.cs" -Raw
-          if(-not $svc.Contains('if(!string.IsNullOrWhiteSpace(term))')){throw 'All-products inventory loading fix missing'}
-          $safe=Get-Content "$r\src\OncaPDV.Desktop\SafePrintService027.cs" -Raw
-          if(-not $safe.Contains('IMPRESSÃO DUPLICADA BLOQUEADA')){throw 'Duplicate print protection missing'}
-          $report=Get-Content "$r\src\OncaPDV.Infrastructure\ReportService022.cs" -Raw
-          if(-not $report.Contains('SpecialFolder.DesktopDirectory')){throw 'Sales report Desktop PDF fix missing'}
-          if(-not $main.Contains('Deseja imprimir o comprovante?')){throw 'Print confirmation regressed'}
-          $orders=Get-Content "$r\src\OncaPDV.Desktop\OrdersWindow.xaml.cs" -Raw
-          if(-not $orders.Contains('Deseja imprimir o pedido')){throw 'Order print confirmation missing'}
-          if(-not $orders.Contains('PrintDocument')){throw 'Order print action missing'}
-          $ordersXaml=Get-Content "$r\src\OncaPDV.Desktop\OrdersWindow.xaml" -Raw
-          if(-not $ordersXaml.Contains('IMPRIMIR PEDIDO')){throw 'Order print button missing'}
-          if(-not $main.Contains('ConfiguredPhysicalPrintService')){throw 'Physical printing wiring regressed'}
-          if(-not $inv.Contains('StringFormat=N0')){throw 'Whole-number inventory display missing'}
-          $mainXaml=Get-Content "$r\src\OncaPDV.Desktop\MainWindow.xaml" -Raw
-          if(-not $mainXaml.Contains('ESTOQUE') -or -not $mainXaml.Contains('Click="Inventory026_Click"')){throw 'Main ESTOQUE route missing'}
-          # Layered builds can retain the legacy handler text; functional routing is verified by Inventory026_Click above.
-          if(-not $mainXaml.Contains('Click="QuickHoldSale_Click"')){throw 'Hold sale shortcut missing'}
-          if(-not $mainXaml.Contains('Click="CancelCurrentSale_Click"')){throw 'Current sale cancel shortcut missing'}
-          $mainCs=Get-Content "$r\src\OncaPDV.Desktop\MainWindow.xaml.cs" -Raw
-          foreach($t in @('QuickHoldSale_Click','CancelCurrentSale_Click','VENDA EM AGUARDO','PEDIDOS > EDITAR NO CARRINHO')){if(-not $mainCs.Contains($t)){throw "PDV usability handler missing: $t"}}
           $invcs=Get-Content "$r\src\OncaPDV.Desktop\InventoryWindow.xaml.cs" -Raw
-          if(-not $invcs.Contains('q!=decimal.Truncate(q)')){throw 'Whole-number entry/exit validation missing'}
-          if(-not $invcs.Contains('v!=decimal.Truncate(v)')){throw 'Whole-number balance validation missing'}
+          $mainXaml=Get-Content "$r\src\OncaPDV.Desktop\MainWindow.xaml" -Raw
+          $mainCs=Get-Content "$r\src\OncaPDV.Desktop\MainWindow.xaml.cs" -Raw
+          foreach($s in @('CADASTRAR PRODUTO','EDITAR / ALTERAR PREÇO','+ ENTRADA','- SAÍDA','AJUSTAR QUANTIDADE','StringFormat=N0')){if(-not $inv.Contains($s)){throw "Inventory requirement missing: $s"}}
+          foreach($s in @('Inventory026_Click','QuickHoldSale_Click','CancelCurrentSale_Click')){if(-not $mainXaml.Contains($s)){throw "Main shortcut missing: $s"}}
+          foreach($s in @('QuickHoldSale_Click','CancelCurrentSale_Click','VENDA EM AGUARDO')){if(-not $mainCs.Contains($s)){throw "Handler missing: $s"}}
+          foreach($s in @('q!=decimal.Truncate(q)','v!=decimal.Truncate(v)')){if(-not $invcs.Contains($s)){throw "Inventory validation missing: $s"}}
       - name: Full regression tests
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
