@@ -1,0 +1,92 @@
+name: ONCA 0.1.37 MULTIVENDAS
+on:
+  push:
+    paths:
+      - 'scripts/apply_multisale_037.py'
+      - '.github/workflows/onca-037-multisale.yml'
+  workflow_dispatch:
+jobs:
+  build-test-release:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Rebuild proven base
+        shell: pwsh
+        run: .\scripts\rebuild-onca-016-final.ps1
+      - name: Apply 0.1.18
+        shell: pwsh
+        run: python .\scripts\apply_ui_018.py
+      - name: Apply 0.1.19
+        shell: pwsh
+        run: python .\scripts\apply_ui_019.py
+      - name: Apply 0.1.20
+        shell: pwsh
+        run: python .\scripts\apply_ui_020.py
+      - name: Apply 0.1.21 physical print
+        shell: pwsh
+        run: python .\scripts\apply_print_021.py
+      - name: Apply 0.1.22 features
+        shell: pwsh
+        run: python .\scripts\apply_features_022.py
+      - name: Fix nullable product id
+        shell: pwsh
+        run: python .\scripts\fix_022_guid.py
+      - name: Apply proven 0.1.25 credit fix
+        shell: pwsh
+        run: python .\scripts\apply_ui_025.py
+      - name: Apply stable improvements
+        shell: pwsh
+        run: python .\scripts\apply_stable_plus_025.py
+      - name: Apply true simultaneous sales
+        shell: pwsh
+        run: python .\scripts\apply_multisale_037.py
+      - name: Verify multivendas UI and logic
+        shell: pwsh
+        run: |
+          $r='.\work-final\ONCA-PDV-PRO\src\OncaPDV.Desktop'
+          $x=Get-Content "$r\MainWindow.xaml" -Raw
+          $c=Get-Content "$r\MainWindow.xaml.cs" -Raw
+          foreach($t in @('MultiSaleTabsPanel','+ NOVA VENDA','FECHAR ABA')){if(-not $x.Contains($t)){throw "Missing multivendas UI: $t"}}
+          foreach($t in @('NewMultiSale_Click','SwitchMultiSale037','CloneCart037','SyncCurrentMultiSale037')){if(-not $c.Contains($t)){throw "Missing multivendas logic: $t"}}
+          if($x.Contains('Content="⏸   VENDA EM ESPERA"')){throw 'Old wait-sale shortcut is still visible'}
+      - name: Full regression tests
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          dotnet restore .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj --configfile .\NuGet.Config
+          dotnet test .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj -c Release --no-restore --logger "console;verbosity=minimal"
+      - name: Build Desktop warnings as errors
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          dotnet restore .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj --configfile .\NuGet.Config
+          dotnet build .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release --no-restore -warnaserror
+      - name: Publish portable EXE
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\portable037
+          Copy-Item '.\portable037\OncaPDV.Desktop.exe' '.\portable037\ONCA-PDV-PRO-0.1.37-MULTIVENDAS.exe' -Force
+      - name: Smoke launch portable EXE 5x
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          $exe=Resolve-Path '.\portable037\ONCA-PDV-PRO-0.1.37-MULTIVENDAS.exe'
+          1..5 | ForEach-Object {
+            $p=Start-Process -FilePath $exe -PassThru
+            Start-Sleep -Seconds 5
+            if($p.HasExited){throw "Smoke failed $_ - application exited early with code $($p.ExitCode)"}
+            try{$p.CloseMainWindow() | Out-Null}catch{}
+            Start-Sleep -Milliseconds 800
+            if(-not $p.HasExited){try{$p.Kill($true)}catch{}}
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.37-MULTIVENDAS.exe
+          path: work-final/ONCA-PDV-PRO/portable037/ONCA-PDV-PRO-0.1.37-MULTIVENDAS.exe
+          retention-days: 14
+          if-no-files-found: error
