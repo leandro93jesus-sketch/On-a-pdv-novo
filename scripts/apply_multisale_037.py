@@ -65,8 +65,10 @@ if 'private sealed class MultiSaleSlot037' not in c:
     pos=class_match.end()
     c=c[:pos]+fields+c[pos:]
 
-# Initialize tabs immediately after MainWindow InitializeComponent.
-if 'InitializeMultiSales037();' not in c:
+# Initialize tabs only after the constructor has finished wiring the workflow and
+# loading the active cart. Calling it immediately after InitializeComponent() accesses
+# _workflow while it is still null and can leave a modal startup error dialog.
+if 'Loaded += (_, _) => InitializeMultiSales037();' not in c:
     ctor=re.search(r'public\s+MainWindow\s*\([^)]*\)\s*\{',c)
     if not ctor:
         raise RuntimeError('MainWindow constructor not found')
@@ -74,7 +76,7 @@ if 'InitializeMultiSales037();' not in c:
     if init_pos<0:
         raise RuntimeError('MainWindow InitializeComponent not found')
     init_end=init_pos+len('InitializeComponent();')
-    c=c[:init_end]+'\n        InitializeMultiSales037();'+c[init_end:]
+    c=c[:init_end]+'\n        Loaded += (_, _) => InitializeMultiSales037();'+c[init_end:]
 
 # Add handlers/methods before the stable cancel handler.
 anchor='    private async void CancelCurrentStable_Click'
