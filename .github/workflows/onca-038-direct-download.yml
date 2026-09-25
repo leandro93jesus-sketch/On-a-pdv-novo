@@ -1,0 +1,36 @@
+name: Direct EXE download ONCA 0.1.38
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-038-direct-download.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  release-exe:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.38-MULTIVENDAS-CORRIGIDO.exe
+          run-id: 36180579005
+          github-token: ${{ github.token }}
+          path: release-files
+      - name: Verify file and publish direct EXE
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $asset = Join-Path (Resolve-Path 'release-files').Path 'ONCA-PDV-PRO-0.1.38-MULTIVENDAS-CORRIGIDO.exe'
+          if (-not (Test-Path $asset)) { throw 'Compiled EXE is missing' }
+          if ((Get-Item $asset).Length -lt 100MB) { throw 'EXE size is unexpectedly small' }
+          $fs = [System.IO.File]::OpenRead($asset)
+          try { if ($fs.ReadByte() -ne 77 -or $fs.ReadByte() -ne 90) { throw 'File does not have an EXE header' } } finally { $fs.Dispose() }
+          Get-FileHash $asset -Algorithm SHA256 | Format-List
+          gh release create v0.1.38-multivendas $asset --repo leandro93jesus-sketch/On-a-pdv-novo --target f97d92b29b6dd7e454e5785c614199a259fc69f9 --title 'ONCA PDV PRO 0.1.38 MULTIVENDAS - INICIALIZACAO CORRIGIDA' --notes 'EXE portatil Windows 64 bits, sem instalacao. Corrige erro de abertura da 0.1.37. Verificados 126 testes de regressao, tres aberturas reais da tela principal, criacao de nova aba e alternancia entre Venda 1 e Venda 2. Faca backup antes de usar em producao.'
+          if ($LASTEXITCODE -ne 0) { throw "Release creation failed: $LASTEXITCODE" }
+          gh release view v0.1.38-multivendas --repo leandro93jesus-sketch/On-a-pdv-novo --json assets,url
+          if ($LASTEXITCODE -ne 0) { throw "Release verification failed: $LASTEXITCODE" }
