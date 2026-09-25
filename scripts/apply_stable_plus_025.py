@@ -67,6 +67,21 @@ if 'Click="Inventory026_Click"' not in x:
     x=x.replace(orders,orders+'\n                    <Button Style="{StaticResource NavButton}" Content="▦   ESTOQUE" Click="Inventory026_Click"/>',1)
 p.write_text(x,encoding='utf-8')
 
+# Guarantee a visible completed-sale cancellation button in the existing sales manager.
+p=d/'SalesManagementWindow.xaml'
+sx=p.read_text(encoding='utf-8-sig')
+if 'Click="Cancel_Click"' not in sx:
+    pay='<Button Content="ALTERAR PAGAMENTO" Click="Payment_Click"/>'
+    if pay not in sx: raise RuntimeError('Sales payment button anchor missing')
+    sx=sx.replace(pay,pay+'<Button Content="CANCELAR VENDA REALIZADA" Click="Cancel_Click" Foreground="#B42318"/>',1)
+else:
+    sx=sx.replace('Content="EXCLUIR / CANCELAR VENDA"','Content="CANCELAR VENDA REALIZADA"')
+p.write_text(sx,encoding='utf-8')
+
+p=d/'SalesManagementWindow.xaml.cs'
+sc=p.read_text(encoding='utf-8-sig')
+if 'Cancel_Click(' not in sc: raise RuntimeError('Completed-sale cancel handler missing in proven base')
+
 # Re-enable the original held-sales tab that 0.1.22 had hidden.
 p=d/'FinalOperationsWindow.xaml'
 x=p.read_text(encoding='utf-8-sig')
