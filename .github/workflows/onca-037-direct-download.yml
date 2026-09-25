@@ -1,0 +1,34 @@
+name: Public direct EXE download ONCA 0.1.37
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-037-direct-download.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  release-exe:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.37-MULTIVENDAS.exe
+          run-id: 36081020966
+          github-token: ${{ github.token }}
+          path: release-files
+      - name: Verify artifact and publish direct EXE
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $asset = Join-Path (Resolve-Path 'release-files').Path 'ONCA-PDV-PRO-0.1.37-MULTIVENDAS.exe'
+          if (-not (Test-Path $asset)) { throw 'Compiled EXE is missing' }
+          $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne 'd0acebbcda12f7e9663709b58549ba46e2a2421948194b5d109764404cd9dbc7') { throw "EXE integrity check failed: $hash" }
+          gh release create v0.1.37-multivendas $asset --target 5569fd50ba4741c44ecf77ee17c6d87cf284529e --title 'ONCA PDV PRO 0.1.37 MULTIVENDAS - EXE PORTATIL' --notes 'EXE portatil Windows x64. Sem instalacao. Abas de vendas simultaneas. Compilacao e 5 aberturas automaticas aprovadas. Versao experimental: faca backup antes de usar em producao.'
+          if ($LASTEXITCODE -ne 0) { throw "Release creation failed: $LASTEXITCODE" }
+          gh release view v0.1.37-multivendas --json assets,url
+          if ($LASTEXITCODE -ne 0) { throw "Release verification failed: $LASTEXITCODE" }
