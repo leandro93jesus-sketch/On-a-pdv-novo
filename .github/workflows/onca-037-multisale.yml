@@ -1,8 +1,9 @@
-name: ONCA 0.1.37 MULTIVENDAS
+name: ONCA 0.1.38 MULTIVENDAS STARTUP FIX
 on:
   push:
     paths:
       - 'scripts/apply_multisale_037.py'
+      - 'scripts/test_multisale_startup_038.ps1'
       - '.github/workflows/onca-037-multisale.yml'
   workflow_dispatch:
 jobs:
@@ -53,6 +54,8 @@ jobs:
           foreach($t in @('MultiSaleTabsPanel','+ NOVA VENDA','FECHAR ABA')){if(-not $x.Contains($t)){throw "Missing multivendas UI: $t"}}
           foreach($t in @('NewMultiSale_Click','SwitchMultiSale037','CloneCart037','SyncCurrentMultiSale037')){if(-not $c.Contains($t)){throw "Missing multivendas logic: $t"}}
           if($x.Contains('Content="⏸   VENDA EM ESPERA"')){throw 'Old wait-sale shortcut is still visible'}
+          if(-not $c.Contains('Loaded += (_, _) => InitializeMultiSales037();')){throw 'Tabs must initialize only after constructor finishes'}
+          if($c.Contains('InitializeComponent();' + [Environment]::NewLine + '        InitializeMultiSales037();')){throw 'Unsafe early tabs initialization found'}
       - name: Full regression tests
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
@@ -69,24 +72,15 @@ jobs:
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
         run: |
-          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\portable037
-          Copy-Item '.\portable037\OncaPDV.Desktop.exe' '.\portable037\ONCA-PDV-PRO-0.1.37-MULTIVENDAS.exe' -Force
-      - name: Smoke launch portable EXE 5x
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o .\portable038
+          Copy-Item '.\portable038\OncaPDV.Desktop.exe' '.\portable038\ONCA-PDV-PRO-0.1.38-MULTIVENDAS-CORRIGIDO.exe' -Force
+      - name: Real UI startup and tab navigation test
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
-        run: |
-          $exe=Resolve-Path '.\portable037\ONCA-PDV-PRO-0.1.37-MULTIVENDAS.exe'
-          1..5 | ForEach-Object {
-            $p=Start-Process -FilePath $exe -PassThru
-            Start-Sleep -Seconds 5
-            if($p.HasExited){throw "Smoke failed $_ - application exited early with code $($p.ExitCode)"}
-            try{$p.CloseMainWindow() | Out-Null}catch{}
-            Start-Sleep -Milliseconds 800
-            if(-not $p.HasExited){try{$p.Kill($true)}catch{}}
-          }
+        run: ..\..\scripts\test_multisale_startup_038.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: ONCA-PDV-PRO-0.1.37-MULTIVENDAS.exe
-          path: work-final/ONCA-PDV-PRO/portable037/ONCA-PDV-PRO-0.1.37-MULTIVENDAS.exe
+          name: ONCA-PDV-PRO-0.1.38-MULTIVENDAS-CORRIGIDO.exe
+          path: work-final/ONCA-PDV-PRO/portable038/ONCA-PDV-PRO-0.1.38-MULTIVENDAS-CORRIGIDO.exe
           retention-days: 14
           if-no-files-found: error
