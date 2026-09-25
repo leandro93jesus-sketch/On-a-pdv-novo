@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'scripts/apply_fix_026_stock_cash.py'
+      - 'scripts/build_installer_034.ps1'
       - '.github/workflows/onca-026-stock-cash-fix.yml'
   workflow_dispatch:
 jobs:
