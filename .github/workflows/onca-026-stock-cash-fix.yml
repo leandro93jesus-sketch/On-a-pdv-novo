@@ -1,4 +1,4 @@
-name: ONCA 0.1.32 HOLD CANCEL INVENTORY FIX
+name: ONCA 0.1.33 INSTALLER HOLD CANCEL INVENTORY
 on:
   push:
     paths:
@@ -73,6 +73,91 @@ jobs:
             if(-not $p.HasExited){try{$p.Kill($true)}catch{}}
             Write-Host "Smoke $_ OK - application stayed open"
           }
+      - name: Build Windows installer
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          $iscc=(Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source
+          if(-not $iscc){
+            $candidates=@(
+              'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
+              'C:\Program Files\Inno Setup 6\ISCC.exe'
+            )
+            $iscc=$candidates | Where-Object {Test-Path $_} | Select-Object -First 1
+          }
+          if(-not $iscc){
+            choco install innosetup --no-progress -y
+            $iscc='C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          }
+          if(-not (Test-Path $iscc)){throw 'Inno Setup compiler not found'}
+
+          $src=(Resolve-Path '.\portable032\ONCA-PDV-PRO-0.1.32-AGUARDO-CANCELAR-ESTOQUE-TESTADO.exe').Path
+          $out=(Resolve-Path '.\portable032').Path
+          $iss=@"
+[Setup]
+AppId={{B8C299D8-C4D4-4E57-991B-ONCAPDVPRO133}}
+AppName=ONCA PDV PRO
+AppVersion=0.1.33
+AppPublisher=Onça Produtos de Limpeza
+DefaultDirName={localappdata}\Programs\ONCA PDV PRO
+DefaultGroupName=ONCA PDV PRO
+DisableProgramGroupPage=yes
+OutputDir=$out
+OutputBaseFilename=ONCA-PDV-PRO-Setup-0.1.33
+Compression=lzma2
+SolidCompression=yes
+WizardStyle=modern
+PrivilegesRequired=lowest
+UninstallDisplayName=ONCA PDV PRO
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+CloseApplications=yes
+RestartApplications=no
+
+[Files]
+Source: "$src"; DestDir: "{app}"; DestName: "ONCA-PDV-PRO.exe"; Flags: ignoreversion
+
+[Icons]
+Name: "{autoprograms}\ONCA PDV PRO"; Filename: "{app}\ONCA-PDV-PRO.exe"
+Name: "{autodesktop}\ONCA PDV PRO"; Filename: "{app}\ONCA-PDV-PRO.exe"; Tasks: desktopicon
+
+[Tasks]
+Name: "desktopicon"; Description: "Criar atalho na Área de Trabalho"; GroupDescription: "Atalhos:"; Flags: checkedonce
+
+[Run]
+Filename: "{app}\ONCA-PDV-PRO.exe"; Description: "Abrir ONCA PDV PRO"; Flags: nowait postinstall skipifsilent
+"@
+          Set-Content -Path '.\portable032\onca-pdv.iss' -Value $iss -Encoding UTF8
+          & $iscc '.\portable032\onca-pdv.iss'
+          if($LASTEXITCODE -ne 0){throw "ISCC failed with code $LASTEXITCODE"}
+          if(-not (Test-Path '.\portable032\ONCA-PDV-PRO-Setup-0.1.33.exe')){throw 'Installer was not generated'}
+
+      - name: Test installer and installed EXE
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: |
+          $setup=Resolve-Path '.\portable032\ONCA-PDV-PRO-Setup-0.1.33.exe'
+          $dir=Join-Path $env:TEMP 'ONCA-PDV-PRO-INSTALL-TEST'
+          if(Test-Path $dir){Remove-Item $dir -Recurse -Force}
+          $p=Start-Process -FilePath $setup -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR=`"$dir`"" -PassThru -Wait
+          if($p.ExitCode -ne 0){throw "Installer failed with code $($p.ExitCode)"}
+          $exe=Join-Path $dir 'ONCA-PDV-PRO.exe'
+          if(-not (Test-Path $exe)){throw 'Installed EXE missing'}
+          $app=Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 6
+          if($app.HasExited){throw "Installed PDV exited early with code $($app.ExitCode)"}
+          try{$app.CloseMainWindow() | Out-Null}catch{}
+          Start-Sleep -Milliseconds 700
+          if(-not $app.HasExited){try{$app.Kill($true)}catch{}}
+          Write-Host 'Installer + installed EXE test OK'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-Setup-0.1.33.exe
+          path: work-final/ONCA-PDV-PRO/portable032/ONCA-PDV-PRO-Setup-0.1.33.exe
+          retention-days: 14
+          if-no-files-found: error
+
       - uses: actions/upload-artifact@v4
         with:
           name: ONCA-PDV-PRO-0.1.32-AGUARDO-CANCELAR-ESTOQUE-TESTADO.exe
