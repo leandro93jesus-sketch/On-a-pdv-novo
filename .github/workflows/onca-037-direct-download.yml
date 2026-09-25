@@ -28,7 +28,7 @@ jobs:
           if (-not (Test-Path $asset)) { throw 'Compiled EXE is missing' }
           $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($hash -ne 'd0acebbcda12f7e9663709b58549ba46e2a2421948194b5d109764404cd9dbc7') { throw "EXE integrity check failed: $hash" }
-          gh release create v0.1.37-multivendas $asset --target 5569fd50ba4741c44ecf77ee17c6d87cf284529e --title 'ONCA PDV PRO 0.1.37 MULTIVENDAS - EXE PORTATIL' --notes 'EXE portatil Windows x64. Sem instalacao. Abas de vendas simultaneas. Compilacao e 5 aberturas automaticas aprovadas. Versao experimental: faca backup antes de usar em producao.'
+          gh release create v0.1.37-multivendas $asset --repo leandro93jesus-sketch/On-a-pdv-novo --target 5569fd50ba4741c44ecf77ee17c6d87cf284529e --title 'ONCA PDV PRO 0.1.37 MULTIVENDAS - EXE PORTATIL' --notes 'EXE portatil Windows x64. Sem instalacao. Abas de vendas simultaneas. Compilacao e 5 aberturas automaticas aprovadas. Versao experimental: faca backup antes de usar em producao.'
           if ($LASTEXITCODE -ne 0) { throw "Release creation failed: $LASTEXITCODE" }
-          gh release view v0.1.37-multivendas --json assets,url
+          gh release view v0.1.37-multivendas --repo leandro93jesus-sketch/On-a-pdv-novo --json assets,url
           if ($LASTEXITCODE -ne 0) { throw "Release verification failed: $LASTEXITCODE" }
