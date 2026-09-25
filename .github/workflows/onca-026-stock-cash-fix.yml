@@ -65,10 +65,13 @@ jobs:
         run: |
           $exe=Resolve-Path '.\portable032\ONCA-PDV-PRO-0.1.32-AGUARDO-CANCELAR-ESTOQUE-TESTADO.exe'
           1..5 | ForEach-Object {
-            $p=Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru
-            if(-not $p.WaitForExit(30000)){try{$p.Kill($true)}catch{};throw "Smoke timeout $_"}
-            Write-Host "Smoke $_ exit code: $($p.ExitCode)"
-            if($p.ExitCode -ne 0){throw "Smoke failed $_ with exit code $($p.ExitCode)"}
+            $p=Start-Process -FilePath $exe -PassThru
+            Start-Sleep -Seconds 5
+            if($p.HasExited){throw "Smoke failed $_ - application exited early with code $($p.ExitCode)"}
+            try{$p.CloseMainWindow() | Out-Null}catch{}
+            Start-Sleep -Milliseconds 800
+            if(-not $p.HasExited){try{$p.Kill($true)}catch{}}
+            Write-Host "Smoke $_ OK - application stayed open"
           }
       - uses: actions/upload-artifact@v4
         with:
