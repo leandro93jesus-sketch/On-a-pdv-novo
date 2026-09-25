@@ -51,7 +51,7 @@ jobs:
           $s=Get-Content "$r\SalesManagementWindow.xaml" -Raw
           foreach($t in @('VENDA EM ESPERA','CANCELAR VENDA ATUAL','VENDAS REALIZADAS','Inventory026_Click')){if(-not $x.Contains($t)){throw "Missing requested action: $t"}}
           if($f.Contains('Header="VENDAS EM ESPERA" Visibility="Collapsed"')){throw 'Held sales tab is still hidden'}
-          if(-not $s.Contains('EXCLUIR / CANCELAR VENDA')){throw 'Completed sale cancel action missing'}
+          if(-not $s.Contains('Click="Cancel_Click"')){throw 'Completed sale cancel action missing'}
           foreach($t in @('CancelCurrentStable_Click','CompletedSalesStable_Click')){if(-not $c.Contains($t)){throw "Missing handler: $t"}}
       - name: Full regression tests
         shell: pwsh
