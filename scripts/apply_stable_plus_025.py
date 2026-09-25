@@ -60,10 +60,11 @@ if 'Click="CancelCurrentStable_Click"' not in x:
     if orders not in x: raise RuntimeError('Orders navigation anchor missing')
     x=x.replace(orders,orders+'\n                    '+extras,1)
 
-# Route the existing product button to the inventory screen, avoiding two confusing stock areas.
-x=x.replace('Content="▦   Produtos" Click="Product_Click"','Content="▦   ESTOQUE" Click="Inventory026_Click"',1)
-# Remove only the extra inventory button inserted by the reused segment if present.
-x=re.sub(r'\s*<Button Style="\{StaticResource NavButton\}" Content="📦\s+Produtos / Estoque" Click="Inventory026_Click"/>','',x)
+# Keep the original product button untouched. Guarantee one explicit ESTOQUE entry.
+x=x.replace('Content="📦   Produtos / Estoque" Click="Inventory026_Click"','Content="▦   ESTOQUE" Click="Inventory026_Click"')
+if 'Click="Inventory026_Click"' not in x:
+    if orders not in x: raise RuntimeError('Orders navigation anchor missing for inventory')
+    x=x.replace(orders,orders+'\n                    <Button Style="{StaticResource NavButton}" Content="▦   ESTOQUE" Click="Inventory026_Click"/>',1)
 p.write_text(x,encoding='utf-8')
 
 # Re-enable the original held-sales tab that 0.1.22 had hidden.
