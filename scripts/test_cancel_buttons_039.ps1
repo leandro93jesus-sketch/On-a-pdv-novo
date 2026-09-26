@@ -51,7 +51,7 @@ function Find-Button($root,[string]$prefix) {
     [System.Windows.Automation.ControlType]::Button)
   $buttons=$root.FindAll([System.Windows.Automation.TreeScope]::Descendants,$cond)
   foreach($b in $buttons) {
-    if($b.Current.Name.StartsWith($prefix,[System.StringComparison]::OrdinalIgnoreCase)){return $b}
+    if($b.Current.Name.Contains($prefix,[System.StringComparison]::OrdinalIgnoreCase)){return $b}
   }
   throw "UI button not found: $prefix"
 }
