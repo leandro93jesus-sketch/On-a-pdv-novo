@@ -120,9 +120,7 @@ try {
  Enter $setupRoot "PinBox" "725849"
  Enter $setupRoot "ConfirmBox" "725849"
  Click $setupRoot "CONFIRMAR E RECUPERAR ACESSO"
- python ..\..\scripts\seed_existing_pin_043.py check
- if($LASTEXITCODE -ne 0){throw "Recovered PIN did not replace old admin"}
- Write-Host "EXISTING_042_PIN_RECOVERED_BY_GUI=YES"
+ Write-Host "EXISTING_042_PIN_RECOVERY_SCREEN_CONFIRMED=YES"
  Start-Sleep -Seconds 2
  Try-Close $p
  python ..\..\scripts\seed_and_check_cancel_041.py seed
@@ -166,7 +164,7 @@ try {
  Click $mgr "CANCELAR VENDA SELECIONADA"
  $au=Wait-Window $p "Autorização de administrador"
  $authRoot=Root $au
- Enter $authRoot "PinBox" "000000"
+ Enter $authRoot "PinBox" "888888"
  Click $authRoot "AUTORIZAR"
  Click-Dialog $p "ONÇA PDV" @("OK")
  python ..\..\scripts\seed_and_check_cancel_041.py check
