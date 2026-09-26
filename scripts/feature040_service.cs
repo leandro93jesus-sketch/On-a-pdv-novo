@@ -24,7 +24,7 @@ public sealed class MultiSaleRecovery040
         if(string.IsNullOrWhiteSpace(_terminal))throw new ArgumentException("Terminal obrigatório.",nameof(terminal));
         using var c=_db.Open();
         using var q=c.CreateCommand();
-        q.CommandText="""CREATE TABLE IF NOT EXISTS multivendas_recovery_040(terminal_id TEXT PRIMARY KEY, snapshot_json TEXT NOT NULL, updated_at TEXT NOT NULL);""";
+        q.CommandText="CREATE TABLE IF NOT EXISTS multivendas_recovery_040(terminal_id TEXT PRIMARY KEY, snapshot_json TEXT NOT NULL, updated_at TEXT NOT NULL);";
         q.ExecuteNonQuery();
     }
 
@@ -45,8 +45,8 @@ public sealed class MultiSaleRecovery040
         var json=JsonSerializer.Serialize(state);
         using var c=_db.Open();using var tx=c.BeginTransaction();
         using var q=c.CreateCommand();q.Transaction=tx;
-        q.CommandText="""INSERT INTO multivendas_recovery_040(terminal_id,snapshot_json,updated_at) VALUES($t,$j,$at)
-ON CONFLICT(terminal_id) DO UPDATE SET snapshot_json=excluded.snapshot_json,updated_at=excluded.updated_at""";
+        q.CommandText=@"INSERT INTO multivendas_recovery_040(terminal_id,snapshot_json,updated_at) VALUES($t,$j,$at)
+ON CONFLICT(terminal_id) DO UPDATE SET snapshot_json=excluded.snapshot_json,updated_at=excluded.updated_at";
         q.Parameters.AddWithValue("$t",_terminal);q.Parameters.AddWithValue("$j",json);
         q.Parameters.AddWithValue("$at",DateTimeOffset.UtcNow.ToString("O"));
         if(q.ExecuteNonQuery()!=1)throw new IOException("Não foi possível salvar as vendas abertas.");
@@ -71,10 +71,10 @@ public sealed class AdminPinService040
     public AdminPinService040(OncaDatabase db)
     {
         _db=db;using var c=db.Open();using var q=c.CreateCommand();
-        q.CommandText="""CREATE TABLE IF NOT EXISTS administrator_pin_040(
+        q.CommandText=@"CREATE TABLE IF NOT EXISTS administrator_pin_040(
 id INTEGER PRIMARY KEY CHECK(id=1), administrator TEXT NOT NULL,salt BLOB NOT NULL, hash BLOB NOT NULL,
 iterations INTEGER NOT NULL, failed_attempts INTEGER NOT NULL DEFAULT 0, locked_until TEXT,
-created_at TEXT NOT NULL);""";
+created_at TEXT NOT NULL);";
         q.ExecuteNonQuery();
     }
     public bool IsConfigured
@@ -94,8 +94,8 @@ created_at TEXT NOT NULL);""";
         var salt=RandomNumberGenerator.GetBytes(24);
         var hash=Rfc2898DeriveBytes.Pbkdf2(pin,salt,Iterations,HashAlgorithmName.SHA256,32);
         using var c=_db.Open();using var tx=c.BeginTransaction();using var q=c.CreateCommand();q.Transaction=tx;
-        q.CommandText="""INSERT OR IGNORE INTO administrator_pin_040(id,administrator,salt,hash,iterations,created_at)
-VALUES(1,$name,$salt,$hash,$iterations,$at)""";
+        q.CommandText=@"INSERT OR IGNORE INTO administrator_pin_040(id,administrator,salt,hash,iterations,created_at)
+VALUES(1,$name,$salt,$hash,$iterations,$at)";
         q.Parameters.AddWithValue("$name",name);q.Parameters.AddWithValue("$salt",salt);q.Parameters.AddWithValue("$hash",hash);
         q.Parameters.AddWithValue("$iterations",Iterations);q.Parameters.AddWithValue("$at",DateTimeOffset.UtcNow.ToString("O"));
         if(q.ExecuteNonQuery()!=1)throw new InvalidOperationException("O PIN do administrador já foi configurado.");
