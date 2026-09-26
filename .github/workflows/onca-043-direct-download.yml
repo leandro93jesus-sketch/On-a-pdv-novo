@@ -1,0 +1,37 @@
+name: Direct EXE ONCA 0.1.43 Owner PIN Recovery
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-043-direct-download.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  release-exe:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.43-PIN-RECUPERADO.exe
+          run-id: 36262133842
+          github-token: ${{ github.token }}
+          path: release-files
+      - name: Publish verified portable EXE
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $asset=Join-Path (Resolve-Path 'release-files').Path 'ONCA-PDV-PRO-0.1.43-PIN-RECUPERADO.exe'
+          if(-not (Test-Path $asset)){throw 'Compiled EXE missing'}
+          if((Get-Item $asset).Length -lt 100MB){throw 'EXE size too small'}
+          $fs=[System.IO.File]::OpenRead($asset)
+          try{if($fs.ReadByte() -ne 77 -or $fs.ReadByte() -ne 90){throw 'Not a Windows EXE'}}finally{$fs.Dispose()}
+          $hash=(Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "EXE_SHA256=$hash"
+          gh release create v0.1.43-pin-recuperado $asset --repo leandro93jesus-sketch/On-a-pdv-novo --target 06b0b89ed18ce2f12f6e8f783d905ba2fc2733d9 --title 'ONCA PDV PRO 0.1.43 - RECUPERACAO DE PIN' --notes 'EXE portatil Windows x64. Corrige erro de PIN preexistente, mesmo se o banco ja tiver marcador de configuracao da 0.1.42. Na primeira abertura desta atualizacao, o responsavel define novo PIN duas vezes (sem PIN anterior); sera lembrado nas aberturas seguintes. 134 testes aprovados. Interface real confirmou recuperacao sobre banco anterior, bloqueio do PIN antigo, cancelamento de duas vendas com estorno, preservacao multivendas. Nao apague o banco; faca backup antes de atualizar.'
+          if($LASTEXITCODE -ne 0){throw "Release failed: $LASTEXITCODE"}
+          gh release view v0.1.43-pin-recuperado --repo leandro93jesus-sketch/On-a-pdv-novo --json assets,url
+          if($LASTEXITCODE -ne 0){throw "Release verification failed: $LASTEXITCODE"}
