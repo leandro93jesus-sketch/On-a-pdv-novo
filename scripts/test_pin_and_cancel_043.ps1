@@ -108,6 +108,7 @@ function Click-Dialog($p,[string]$title,[string[]]$buttonNames){
  Dump $r "DIALOG $title"
  throw "Could not click dialog $title"
 }
+$ownerPin='230'+'808'
 $p=$null
 try {
  python ..\..\scripts\seed_existing_pin_043.py seed
@@ -117,8 +118,8 @@ try {
  $setup=Wait-Window $p "RECUPERAR PIN"
  $setupRoot=Root $setup
  Enter $setupRoot "AdminNameBox" "Administrador Teste"
- Enter $setupRoot "PinBox" "725849"
- Enter $setupRoot "ConfirmBox" "725849"
+ Enter $setupRoot "PinBox" "$ownerPin"
+ Enter $setupRoot "ConfirmBox" "$ownerPin"
  Click $setupRoot "CONFIRMAR E RECUPERAR ACESSO"
  Write-Host "EXISTING_042_PIN_RECOVERY_SCREEN_CONFIRMED=YES"
  Start-Sleep -Seconds 2
@@ -144,7 +145,7 @@ try {
  $authRoot=Root $au
  Dump $authRoot "ADMIN_EXISTING_PIN"
  if(-not (Find-Element $authRoot "Text" "CANCELAMENTO/EDIÇÃO EXIGE PIN")){throw "Existing administrator authorization not active"}
- Enter $authRoot "PinBox" "725849"
+ Enter $authRoot "PinBox" "$ownerPin"
  Click $authRoot "AUTORIZAR"
  $re=Wait-Window $p "Motivo do cancelamento"
  $reasonRoot=Root $re
@@ -171,7 +172,7 @@ try {
  if($LASTEXITCODE -ne 0){throw "Invalid PIN altered completed sale"}
  Write-Host "UI_CANCEL_WRONG_PIN_BLOCKED=YES"
  # Same sale, correct existing PIN; no new administrator setup.
- Enter $authRoot "PinBox" "725849"
+ Enter $authRoot "PinBox" "$ownerPin"
  Click $authRoot "AUTORIZAR"
  $re=Wait-Window $p "Motivo do cancelamento"
  $reasonRoot=Root $re
