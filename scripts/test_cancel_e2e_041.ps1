@@ -64,6 +64,7 @@ function Click($r,[string]$name) {
 }
 function Enter($r,[string]$id,[string]$value,[string]$type="Edit"){
  $el=Find-Element $r $type $id $true
+ $pattern=$null
  if($el.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern,[ref]$pattern)){$pattern.SetValue($value)}
  else {
   $el.SetFocus();[System.Windows.Forms.SendKeys]::SendWait($value)
