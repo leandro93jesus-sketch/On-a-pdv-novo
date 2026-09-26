@@ -39,6 +39,21 @@ def check():
         assert a=="Cancelled" and b=="Completed" and stock==8 and amount==30 and events==1 and pin==1
         assert "ADMIN:" in reason and "MOTIVO:" in reason and "Teste de cancelamento UI" in reason
     print("UI_CANCEL_END_TO_END_DB_OK")
+def check_second():
+    with open(path) as f: s1,s2,pid,cash=[x.strip() for x in f]
+    with sqlite3.connect(db) as c:
+        def one(sql,value):return c.execute(sql,(value,)).fetchone()[0]
+        assert one("SELECT status FROM sales WHERE id=?",s1)=="Cancelled"
+        assert one("SELECT status FROM sales WHERE id=?",s2)=="Cancelled"
+        assert one("SELECT stock FROM products WHERE id=?",pid)==10
+        assert one("SELECT COALESCE(SUM(amount),0) FROM cash_movements WHERE session_id=?",cash)==0
+        assert one("SELECT COUNT(*) FROM sale_events WHERE sale_id=? AND event_type='Cancelled'",s1)==1
+        assert one("SELECT COUNT(*) FROM sale_events WHERE sale_id=? AND event_type='Cancelled'",s2)==1
+        reason=one("SELECT reason FROM sale_events WHERE sale_id=? AND event_type='Cancelled'",s2)
+        assert "ADMIN: Administrador Teste" in reason and "Segunda venda com PIN correto" in reason
+    print("UI_CANCEL_SECOND_PIN_END_TO_END_DB_OK")
 if __name__=="__main__":
     if sys.argv[1]=="seed":seed()
-    if sys.argv[1]=="check":check()
+    elif sys.argv[1]=="check":check()
+    elif sys.argv[1]=="check_second":check_second()
+    else:raise SystemExit("Unknown test command")
