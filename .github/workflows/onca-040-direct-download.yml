@@ -1,0 +1,37 @@
+name: Direct EXE ONCA 0.1.40 Multivendas Seguras
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-040-direct-download.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  release-exe:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.40-MULTIVENDAS-SEGURO.exe
+          run-id: 36256338184
+          github-token: ${{ github.token }}
+          path: release-files
+      - name: Publish portable EXE with verified binary
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $asset=Join-Path (Resolve-Path 'release-files').Path 'ONCA-PDV-PRO-0.1.40-MULTIVENDAS-SEGURO.exe'
+          if(-not (Test-Path $asset)){throw 'EXE ausente'}
+          if((Get-Item $asset).Length -lt 100MB){throw 'EXE incompleto'}
+          $fs=[System.IO.File]::OpenRead($asset)
+          try{if($fs.ReadByte() -ne 77 -or $fs.ReadByte() -ne 90){throw 'Cabecalho EXE invalido'}}finally{$fs.Dispose()}
+          $sha=(Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "EXE_SHA256=$sha"
+          gh release create v0.1.40-multivendas-seguras $asset --repo leandro93jesus-sketch/On-a-pdv-novo --target f4b1a9f8746d9a5f96d5afcba33b64686c3c6c7c --title 'ONCA PDV PRO 0.1.40 - MULTIVENDAS SEGURAS' --notes 'Mesmo EXE portatil Windows x64, sem instalador. Evolucao incremental da 0.1.39: recuperacao de todas as abas, finalizacao somente da aba ativa, PIN administrativo para cancelamento/edicao de venda concluida, identificacao da aba, bloqueio de finalizacao concorrente. 130 testes aprovados, interface e recuperacao apos reinicio validadas. Na primeira autorizacao o responsavel deve configurar o PIN. Faca backup dos dados antes de uso em producao.'
+          if($LASTEXITCODE -ne 0){throw "Falha publicacao: $LASTEXITCODE"}
+          gh release view v0.1.40-multivendas-seguras --repo leandro93jesus-sketch/On-a-pdv-novo --json assets,url
+          if($LASTEXITCODE -ne 0){throw "Falha verificacao: $LASTEXITCODE"}
