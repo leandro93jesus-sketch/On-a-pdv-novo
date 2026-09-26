@@ -7,6 +7,7 @@ on:
       - 'scripts/feature041_reason.xaml.cs'
       - 'scripts/seed_and_check_cancel_041.py'
       - 'scripts/test_cancel_e2e_041.ps1'
+      - 'scripts/test_features_041.ps1'
       - 'scripts/feature040_service.cs'
       - 'scripts/feature040_admin.xaml'
       - 'scripts/feature040_admin.xaml.cs'
@@ -99,7 +100,7 @@ jobs:
       - name: Real UI startup and tab navigation test
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
-        run: ..\..\scripts\test_features_040.ps1
+        run: ..\..\scripts\test_features_041.ps1
       - name: End-to-end cancel through actual GUI and SQLite verification
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
