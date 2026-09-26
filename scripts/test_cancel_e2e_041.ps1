@@ -145,6 +145,33 @@ try {
  Click-Dialog $p "Impressão opcional" @("No","Não")
  python ..\..\scripts\seed_and_check_cancel_041.py check
  if($LASTEXITCODE -ne 0){throw "Completed-sale DB assertions failed"}
+ Write-Host "UI_CANCEL_FIRST_PIN_FLOW_PASS=YES"
+ # Existing administrator: wrong PIN must neither show a reason dialog nor mutate the sale.
+ Enter $mgr "SearchBox" "94102"
+ Click $mgr "PESQUISAR"
+ Start-Sleep -Milliseconds 800
+ Select-OnlyDataRow $mgr
+ Click $mgr "CANCELAR VENDA SELECIONADA"
+ $au=Wait-Window $p "Autorização de administrador"
+ $authRoot=Root $au
+ Enter $authRoot "PinBox" "000000"
+ Click $authRoot "AUTORIZAR"
+ Click-Dialog $p "ONÇA PDV" @("OK")
+ python ..\..\scripts\seed_and_check_cancel_041.py check
+ if($LASTEXITCODE -ne 0){throw "Invalid PIN altered completed sale"}
+ Write-Host "UI_CANCEL_WRONG_PIN_BLOCKED=YES"
+ # Same sale, correct existing PIN; no new administrator setup.
+ Enter $authRoot "PinBox" "725849"
+ Click $authRoot "AUTORIZAR"
+ $re=Wait-Window $p "Motivo do cancelamento"
+ $reasonRoot=Root $re
+ Enter $reasonRoot "ReasonBox" "Segunda venda com PIN correto"
+ Click $reasonRoot "CONFIRMAR MOTIVO"
+ Click-Dialog $p "Confirmar cancelamento" @("Yes","Sim")
+ Click-Dialog $p "ONÇA PDV" @("OK")
+ Click-Dialog $p "Impressão opcional" @("No","Não")
+ python ..\..\scripts\seed_and_check_cancel_041.py check_second
+ if($LASTEXITCODE -ne 0){throw "Second cancellation reconciliation failed"}
  Write-Host "UI_CANCEL_041_FULL_FLOW_PASS=YES"
 }
 finally {Try-Close $p}
