@@ -24,7 +24,7 @@ public partial class AdminAuthorization040Window : Window
             AdminNameBox.IsReadOnly=true;
             ConfirmPanel.Visibility=Visibility.Collapsed;
         }
-        Loaded+=(_,_)=> (_firstSetup ? AdminNameBox : PinBox).Focus();
+        Loaded+=(_,_)=> { if(_firstSetup) AdminNameBox.Focus(); else PinBox.Focus(); };
     }
     private void Cancel_Click(object s,RoutedEventArgs e)=>DialogResult=false;
     private void Authorize_Click(object s,RoutedEventArgs e)
