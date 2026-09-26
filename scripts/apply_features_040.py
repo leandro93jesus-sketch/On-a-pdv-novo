@@ -14,6 +14,7 @@ def replace_exact(s,old,new,label,count=1):
 service=Path('scripts/feature040_service.cs').read_text(encoding='utf-8')
 service=service.replace('if(locked>DateTimeOffset.UtcNow)', 'if(string.IsNullOrWhiteSpace(name))throw new InvalidOperationException("Administrador não configurado.");\n        if(locked>DateTimeOffset.UtcNow)')
 (i/'MultiSaleRecovery040.cs').write_text(service,encoding='utf-8')
+(t/'Feature040Tests.cs').write_text(Path('scripts/feature040_tests.cs').read_text(encoding='utf-8'),encoding='utf-8')
 (d/'AdminAuthorization040Window.xaml').write_text(Path('scripts/feature040_admin.xaml').read_text(encoding='utf-8'),encoding='utf-8')
 (d/'AdminAuthorization040Window.xaml.cs').write_text(Path('scripts/feature040_admin.xaml.cs').read_text(encoding='utf-8'),encoding='utf-8')
 
@@ -218,8 +219,9 @@ while depth and j<len(c):
     j+=1
 if depth:raise RuntimeError('Unbalanced CompletePaymentAsync')
 body=c[brace+1:j-1]
-body=replace_exact(body,'            await RefreshSales();',
-  '            FinalizeActiveTab040();\n            await RefreshSales();','paid tab clear')
+body=replace_exact(body,'try { sale = await _workflow.CompleteAsync(dialog.Payments, OperatorId); }',
+  'try { sale = await _workflow.CompleteAsync(dialog.Payments, OperatorId); FinalizeActiveTab040(); }',
+  'clear paid tab immediately after committed sale')
 c=c[:brace+1]+'''
         if(_finalizing040 || _multiSaleSwitching037) return;
         _finalizing040=true;
