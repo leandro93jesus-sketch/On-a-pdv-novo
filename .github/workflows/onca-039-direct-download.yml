@@ -1,0 +1,37 @@
+name: Direct portable EXE ONCA 0.1.39
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-039-direct-download.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  release-exe:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.39-CANCELAMENTO-CORRIGIDO.exe
+          run-id: 36241975948
+          github-token: ${{ github.token }}
+          path: release-files
+      - name: Publish verified portable file
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $asset=Join-Path (Resolve-Path 'release-files').Path 'ONCA-PDV-PRO-0.1.39-CANCELAMENTO-CORRIGIDO.exe'
+          if(-not (Test-Path $asset)){throw 'Compiled EXE missing'}
+          if((Get-Item $asset).Length -lt 100MB){throw 'EXE unexpectedly small'}
+          $fs=[System.IO.File]::OpenRead($asset)
+          try {if($fs.ReadByte() -ne 77 -or $fs.ReadByte() -ne 90){throw 'Not a Windows EXE'}} finally {$fs.Dispose()}
+          $hash=(Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "EXE_SHA256=$hash"
+          gh release create v0.1.39-cancelamento $asset --repo leandro93jesus-sketch/On-a-pdv-novo --target b2ef8526d7058e5194f2943b0c824124b47b992d --title 'ONCA PDV PRO 0.1.39 - CANCELAMENTO CORRIGIDO' --notes 'EXE portatil Windows x64; mesma base 0.1.38 funcional. Correcao restrita a cancelar carrinho na aba ativa e cancelamento de venda realizada. 127 testes aprovados, interface multivendas e cancelamento validados. Backup recomendado antes de uso em producao.'
+          if($LASTEXITCODE -ne 0){throw "Release failed: $LASTEXITCODE"}
+          gh release view v0.1.39-cancelamento --repo leandro93jesus-sketch/On-a-pdv-novo --json assets,url
+          if($LASTEXITCODE -ne 0){throw "Release verification failed: $LASTEXITCODE"}
