@@ -1,0 +1,37 @@
+name: Direct EXE ONCA 0.1.41 Cancelamento Validado
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-041-direct-download.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  release-exe:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.41-CANCELAMENTO-TESTADO.exe
+          run-id: 36258058572
+          github-token: ${{ github.token }}
+          path: release-files
+      - name: Publish checked portable Windows EXE
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $asset=Join-Path (Resolve-Path 'release-files').Path 'ONCA-PDV-PRO-0.1.41-CANCELAMENTO-TESTADO.exe'
+          if(-not (Test-Path $asset)){throw 'Compiled EXE missing'}
+          if((Get-Item $asset).Length -lt 100MB){throw 'Portable EXE unexpectedly small'}
+          $fs=[System.IO.File]::OpenRead($asset)
+          try{if($fs.ReadByte() -ne 77 -or $fs.ReadByte() -ne 90){throw 'Invalid Windows EXE header'}}finally{$fs.Dispose()}
+          $sha=(Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "EXE_SHA256=$sha"
+          gh release create v0.1.41-cancelamento-validado $asset --repo leandro93jesus-sketch/On-a-pdv-novo --target 8fecd04e10d138b47a0322f3d494f4041232773e --title 'ONCA PDV PRO 0.1.41 - CANCELAMENTO VALIDADO' --notes 'EXE portatil Windows 64 bits, sem instalacao. Correcao pontual da janela de autorizacao e motivo, mantendo as funcionalidades multivendas da 0.1.40. 130 testes de regressao aprovados; GUI real confirmou cancelamento da primeira venda, estorno de caixa/estoque/auditoria e preservacao da segunda, rejeicao de PIN incorreto, e cancelamento com PIN ja cadastrado. Testado em Windows de CI com banco isolado. Fazer backup antes de testar na loja; manter versao 0.1.40 guardada.'
+          if($LASTEXITCODE -ne 0){throw "GitHub release creation failed: $LASTEXITCODE"}
+          gh release view v0.1.41-cancelamento-validado --repo leandro93jesus-sketch/On-a-pdv-novo --json assets,url
+          if($LASTEXITCODE -ne 0){throw "Release verification failed: $LASTEXITCODE"}
