@@ -1,0 +1,37 @@
+name: Direct EXE ONCA 0.1.42 Owner PIN Reset
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-042-direct-download.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  release-exe:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.42-REDEFINIR-PIN.exe
+          run-id: 36260587580
+          github-token: ${{ github.token }}
+          path: release-files
+      - name: Publish verified portable EXE
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $asset=Join-Path (Resolve-Path 'release-files').Path 'ONCA-PDV-PRO-0.1.42-REDEFINIR-PIN.exe'
+          if(-not (Test-Path $asset)){throw 'Compiled EXE missing'}
+          if((Get-Item $asset).Length -lt 100MB){throw 'EXE size too small'}
+          $fs=[System.IO.File]::OpenRead($asset)
+          try{if($fs.ReadByte() -ne 77 -or $fs.ReadByte() -ne 90){throw 'Not a Windows EXE'}}finally{$fs.Dispose()}
+          $hash=(Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "EXE_SHA256=$hash"
+          gh release create v0.1.42-pin-reset $asset --repo leandro93jesus-sketch/On-a-pdv-novo --target 9a4935e844ae0c4980377bd296df58d368f47b55 --title 'ONCA PDV PRO 0.1.42 - REDEFINICAO DE PIN' --notes 'EXE portatil Windows x64. Na primeira abertura permite redefinir PIN mesmo com PIN antigo desconhecido; o responsavel informa e confirma seu novo PIN uma unica vez. 132 testes aprovados e cancelamento real de duas vendas pelo fluxo UI, PIN incorreto bloqueado, caixa/estoque/auditoria validados; recuperacao de abas mantida. Faca backup antes da primeira abertura e mantenha 0.1.41 guardada.'
+          if($LASTEXITCODE -ne 0){throw "Release failed: $LASTEXITCODE"}
+          gh release view v0.1.42-pin-reset --repo leandro93jesus-sketch/On-a-pdv-novo --json assets,url
+          if($LASTEXITCODE -ne 0){throw "Release verification failed: $LASTEXITCODE"}
