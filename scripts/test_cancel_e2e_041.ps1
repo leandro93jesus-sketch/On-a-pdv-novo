@@ -94,7 +94,7 @@ function Click-Dialog($p,[string]$title,[string[]]$buttonNames){
  if(-not $w){throw "Native dialog not found: $title; windows=$((Windows $p|ForEach-Object {$_.Title+' / '+$_.Class})-join ' ; ')"}
  $r=Root $w
  foreach($name in $buttonNames){
-  $id=switch ($name.ToLowerInvariant()) {'yes' {6} 'sim' {6} 'no' {7} 'não' {7} 'ok' {1} default {0}}
+  $id=switch ($name.ToLowerInvariant()) {'yes' {6} 'sim' {6} 'no' {7} 'não' {7} 'ok' {2} default {0}}
   if($id -ne 0){
    $h=[OncaWindows041]::GetDlgItem($w.Handle,$id)
    if($h -ne [IntPtr]::Zero) {
