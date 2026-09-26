@@ -17,6 +17,8 @@ public static class OncaWindows041 {
  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
  [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr h,StringBuilder s,int n);
  [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr h,StringBuilder s,int n);
+ [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr h,int id);
+ [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h,uint msg,IntPtr wp,IntPtr lp);
  public sealed class W {public IntPtr Handle; public string Title;public string Class;}
  public static W[] Get(int pid) {
   var list=new List<W>();
@@ -92,6 +94,15 @@ function Click-Dialog($p,[string]$title,[string[]]$buttonNames){
  if(-not $w){throw "Native dialog not found: $title; windows=$((Windows $p|ForEach-Object {$_.Title+' / '+$_.Class})-join ' ; ')"}
  $r=Root $w
  foreach($name in $buttonNames){
+  $id=switch ($name.ToLowerInvariant()) {'yes' {6} 'sim' {6} 'no' {7} 'não' {7} 'ok' {1} default {0}}
+  if($id -ne 0){
+   $h=[OncaWindows041]::GetDlgItem($w.Handle,$id)
+   if($h -ne [IntPtr]::Zero) {
+    [OncaWindows041]::SendMessage($h,[uint32]0xF5,[IntPtr]::Zero,[IntPtr]::Zero)|Out-Null
+    Write-Host "NATIVE_DIALOG_ACTION=$title / $name / id=$id"
+    return
+   }
+  }
   try{Click $r $name;Write-Host "DIALOG_ACTION=$title / $name";return}catch{continue}
  }
  Dump $r "DIALOG $title"
