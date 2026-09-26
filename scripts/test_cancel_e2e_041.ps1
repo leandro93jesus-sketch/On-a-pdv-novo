@@ -82,7 +82,13 @@ function Select-OnlyDataRow($r){
 }
 function Try-Close($p){if($p -and -not $p.HasExited){try{$p.CloseMainWindow()|Out-Null}catch{};Start-Sleep -Milliseconds 700;$p.Refresh();if(-not $p.HasExited){try{$p.Kill($true)}catch{}}}}
 function Click-Dialog($p,[string]$title,[string[]]$buttonNames){
- $w=Wait-Window $p $title
+ $w=$null
+ for($attempt=0;$attempt -lt 60;$attempt++){
+  $w=@(Windows $p|Where-Object {$_.Class -eq '#32770' -and $_.Title.Contains($title,[System.StringComparison]::OrdinalIgnoreCase)})|Select-Object -First 1
+  if($w){break}
+  Start-Sleep -Milliseconds 200
+ }
+ if(-not $w){throw "Native dialog not found: $title; windows=$((Windows $p|ForEach-Object {$_.Title+' / '+$_.Class})-join ' ; ')"}
  $r=Root $w
  foreach($name in $buttonNames){
   try{Click $r $name;Write-Host "DIALOG_ACTION=$title / $name";return}catch{continue}
