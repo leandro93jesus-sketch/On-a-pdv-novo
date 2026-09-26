@@ -1,0 +1,11 @@
+<Window x:Class="OncaPDV.Desktop.CancellationReason041Window" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Motivo do cancelamento — ONÇA PDV PRO" Width="470" Height="275" MinWidth="440" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="#F7F9F8">
+<Grid Margin="20">
+<Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+<TextBlock x:Name="SaleTitleText" Grid.Row="0" Text="CANCELAR VENDA REALIZADA" FontSize="18" FontWeight="Bold" Foreground="#B42318" Margin="0,0,0,12"/>
+<TextBlock Grid.Row="1" Text="Informe o motivo obrigatório do cancelamento:" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+<TextBox x:Name="ReasonBox" Grid.Row="2" MinHeight="78" MaxLength="500" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Padding="8"/>
+<StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+<Button Content="VOLTAR" Padding="18,9" Margin="4" Click="Back_Click"/>
+<Button Content="CONFIRMAR MOTIVO" Padding="18,9" Margin="4" Background="#B42318" Foreground="White" FontWeight="Bold" Click="Confirm_Click"/>
+</StackPanel>
+</Grid></Window>
