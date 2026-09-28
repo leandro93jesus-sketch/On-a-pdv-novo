@@ -22,6 +22,8 @@ on:
       - 'scripts/test_multisale_startup_038.ps1'
       - 'scripts/apply_sales_integrity_044.py'
       - 'scripts/feature044_tests.cs'
+      - 'scripts/verify_delete_044.py'
+      - 'scripts/generate_delete_ui_test_044.py'
       - 'scripts/test_features_044.ps1'
       - '.github/workflows/onca-044-sales-integrity.yml'
   workflow_dispatch:
@@ -127,6 +129,13 @@ jobs:
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
         run: ..\..\scripts\test_features_044.ps1
+      - name: Generate delete-sale GUI regression from proven UI harness
+        shell: pwsh
+        run: python .\scripts\generate_delete_ui_test_044.py
+      - name: Delete a real test sale through UI and verify database + search
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: ..\..\scripts\test_delete_e2e_044.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: ONCA-PDV-PRO-0.1.44-VENDAS-CORRIGIDAS.exe
