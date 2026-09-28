@@ -145,9 +145,6 @@ s=once(s,'<ComboBoxItem Content="Cancelled"/></ComboBox>',
 s=once(s,'<Button Content="CANCELAR VENDA SELECIONADA" Click="Cancel_Click" Background="#B42318" Foreground="White" FontWeight="Bold"/>',
        '<Button Content="CANCELAR VENDA SELECIONADA" Click="Cancel_Click" Background="#B42318" Foreground="White" FontWeight="Bold"/><Button Content="EXCLUIR VENDA" Click="Delete044_Click" Background="#892A20" Foreground="White" FontWeight="Bold"/>',
        'visible delete button')
-s=once(s,'<Button Content="CANCELAR VENDA REALIZADA" Click="Cancel_Click" Foreground="#B42318"/>',
-       '<Button Content="🗑 CANCELAR VENDA FINALIZADA" Click="Cancel_Click" Foreground="#B42318"/><Button Content="EXCLUIR VENDA" Click="Delete044_Click" Foreground="#892A20"/>',
-       'bottom delete button')
 p.write_text(s,encoding='utf-8')
 
 p=d/'SalesManagementWindow.xaml.cs';s=p.read_text(encoding='utf-8-sig')
