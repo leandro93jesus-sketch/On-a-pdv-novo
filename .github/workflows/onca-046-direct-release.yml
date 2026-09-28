@@ -2,7 +2,7 @@ name: Direct Release ONCA 0.1.46 Final
 on:
   push:
     paths:
-      - '.github/workflows/onca-045-direct-release.yml'
+      - '.github/workflows/onca-046-direct-release.yml'
   workflow_dispatch:
 permissions:
   contents: write
@@ -42,22 +42,13 @@ jobs:
           $zip=[IO.Compression.ZipFile]::OpenRead($src)
           try{
             if(-not ($zip.Entries.FullName -contains 'AI-HANDOFF.md')){throw 'AI-HANDOFF missing from source ZIP'}
-            if(-not ($zip.Entries.FullName -contains 'AI-HANDOFF-046.md')){throw 'AI-HANDOFF-046 missing from source ZIP'}
-            if(-not ($zip.Entries | Where-Object {$_.FullName -match 'CreditSafety046\.cs
+            if(-not ($zip.Entries.FullName -contains 'AI-HANDOFF-046.md')){throw 'AI-HANDOFF-046 missing'}
+            if(-not ($zip.Entries | Where-Object { $_.FullName.EndsWith('CreditSafety046.cs') })){throw 'CreditSafety046 source missing'}
             if(-not ($zip.Entries | Where-Object {$_.FullName -like 'src/OncaPDV.Desktop/*' -or $_.FullName -like 'src\OncaPDV.Desktop\*'})){throw 'Desktop source missing'}
             if(-not ($zip.Entries | Where-Object {$_.FullName -like 'tests/OncaPDV.Tests/*' -or $_.FullName -like 'tests\OncaPDV.Tests\*'})){throw 'Tests missing'}
           }finally{$zip.Dispose()}
           Write-Host "EXE_SHA256=$((Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant())"
           Write-Host "SOURCE_SHA256=$((Get-FileHash $src -Algorithm SHA256).Hash.ToLowerInvariant())"
-          gh release create v0.1.46-crediario-seguro $exe $src --repo leandro93jesus-sketch/On-a-pdv-novo --target de5e0e93b32bb4d7f5cab329c8beb99c9f87c902 --title 'ONCA PDV PRO 0.1.46 - EXCLUIR CREDIARIO E CAIXA CONFERIDO' --notes 'Windows x64 portatil. Excluir crediario com PIN e motivo: baixa administrativa apenas do saldo devido; preserva pagamentos e caixa, venda e auditoria. Filtro Excluidos e botao Conferir recebimentos/caixa. Recebimento possui intencao persistente antes da transacao; apos queda detecta recibo e caixa anteriores e evita segunda baixa. 152 testes gerais aprovados, seis testes especificos 046 aprovados, compilacao 0 erros, interface WPF validada para exclusao de crediario, cancelamento/exclusao de venda e MULTIVENDAS. SOURCE-COMPLETO.zip inclui AI-HANDOFF.md e AI-HANDOFF-046.md. Faça backup antes de atualizar. Mantenha 0.1.45 como rollback. Banco real e credenciais nao inclusos.'
+          gh release create v0.1.46-crediario-seguro $exe $src --repo leandro93jesus-sketch/On-a-pdv-novo --target de5e0e93b32bb4d7f5cab329c8beb99c9f87c902 --title 'ONCA PDV PRO 0.1.46 - EXCLUIR CREDIARIO E CAIXA CONFERIDO' --notes 'Windows x64 portatil. Excluir crediario com PIN e motivo: baixa administrativa apenas do saldo devido, preservando pagamentos e caixa, venda e auditoria. Filtro Excluidos e Conferir recebimentos/caixa. Intencao de baixa persistente antes da transacao; apos queda identifica recibo e caixa anteriores. 152 testes gerais aprovados, seis especificos 046 aprovados, compilacao zero erros, testes WPF de exclusao de crediario, cancelamento/exclusao de venda e MULTIVENDAS. Codigo fonte inclui AI-HANDOFF e AI-HANDOFF-046. Faca backup; mantenha 0.1.45 como fallback. Sem banco real ou credenciais.'
           if($LASTEXITCODE -ne 0){throw "Release failed: $LASTEXITCODE"}
           gh release view v0.1.46-crediario-seguro --repo leandro93jesus-sketch/On-a-pdv-novo --json assets,url
-})){throw 'CreditSafety046 source missing'}
-            if(-not ($zip.Entries | Where-Object {$_.FullName -like 'src/OncaPDV.Desktop/*' -or $_.FullName -like 'src\OncaPDV.Desktop\*'})){throw 'Desktop source missing'}
-            if(-not ($zip.Entries | Where-Object {$_.FullName -like 'tests/OncaPDV.Tests/*' -or $_.FullName -like 'tests\OncaPDV.Tests\*'})){throw 'Tests missing'}
-          }finally{$zip.Dispose()}
-          Write-Host "EXE_SHA256=$((Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant())"
-          Write-Host "SOURCE_SHA256=$((Get-FileHash $src -Algorithm SHA256).Hash.ToLowerInvariant())"
-          gh release create v0.1.46-final $exe $src --repo leandro93jesus-sketch/On-a-pdv-novo --target de5e0e93b32bb4d7f5cab329c8beb99c9f87c902 --title 'ONCA PDV PRO 0.1.46 - FINAL CREDIARIO E CODIGO FONTE' --notes 'Versao portatil Windows x64. Protecao 0.1.44 contra venda duplicada mantida. Crediario endurecido: uma conta por venda, repeticao do mesmo request de recebimento nao baixa saldo/caixa duas vezes, vinculo exato recebimento-caixa, estorno auditavel, relatorios liquidos de estorno e contas canceladas fora da divida ativa. 146 testes gerais aprovados + 6 testes dedicados de crediario, build 0 erros, GUI de cancelamento, exclusao e MULTIVENDAS validada em Windows CI. Inclui SOURCE-COMPLETO.zip com AI-HANDOFF.md para outra IA/desenvolvedor continuar. O pacote nao contem banco real da loja nem credenciais. Faca backup antes de testar no caixa e mantenha 0.1.44 como rollback.'
-          if($LASTEXITCODE -ne 0){throw "Release failed: $LASTEXITCODE"}
-          gh release view v0.1.46-final --repo leandro93jesus-sketch/On-a-pdv-novo --json assets,url
