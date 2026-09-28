@@ -130,7 +130,7 @@ jobs:
           $prior=Get-Content ..\..\scripts\test_pin_and_cancel_043.ps1 -Raw
           $adjusted=$prior.Replace('portable043\ONCA-PDV-PRO-0.1.43-PIN-RECUPERADO.exe','portable045\ONCA-PDV-PRO-0.1.45-CREDIARIO-CORRIGIDO.exe')
           Set-Content .\test-cancel045.ps1 $adjusted -Encoding UTF8
-          .\test-cancel044.ps1
+          .\test-cancel045.ps1
       - name: Multivendas user interface regression
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
@@ -186,13 +186,8 @@ jobs:
           $archive=[System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip).Path)
           try{
             if($archive.Entries.Count -lt 60){throw 'Source archive unexpectedly small'}
-            if(@($archive.Entries|Where-Object {$_.FullName -match '/bin/|/obj/|\.db
-        with:
-          name: ONCA-PDV-PRO-0.1.45-CREDIARIO-CORRIGIDO.exe
-          path: work-final/ONCA-PDV-PRO/portable045/ONCA-PDV-PRO-0.1.45-CREDIARIO-CORRIGIDO.exe
-          retention-days: 14
-          if-no-files-found: error
-}).Count -gt 0){throw 'Binary or DB leaked into source'}
+            $unsafe=@($archive.Entries|Where-Object {$_.FullName.Contains('/bin/') -or $_.FullName.Contains('/obj/') -or $_.FullName.EndsWith('.db')})
+            if($unsafe.Count -gt 0){throw 'Binary or customer database leaked into source'}
             Write-Host "SOURCE_ARCHIVE_ENTRIES=$($archive.Entries.Count)"
             Write-Host "SOURCE_ARCHIVE_SHA256=$((Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant())"
           }finally{$archive.Dispose()}
