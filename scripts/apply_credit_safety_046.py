@@ -87,7 +87,7 @@ p=d/"CreditWindow.xaml.cs";s=p.read_text(encoding="utf-8-sig")
 a=s.index("    private async void Receive_Click(")
 b=s.index("    private async void Pdf_Click(",a)
 replacement=r'''    private bool _adminAction046;
-    private async Task ProcessReceipt046(CreditIntent046 intent,decimal previousBalance)
+    private async Task ProcessReceipt046(CreditIntent046 intent,Guid customerId,decimal previousBalance)
     {
         var repository=new SqliteCreditRepository(_db,new SystemClock());
         var receipt=await repository.ReceiveOnceAsync(intent.AccountId,intent.Amount,intent.Method,
@@ -96,7 +96,7 @@ replacement=r'''    private bool _adminAction046;
         var cash=await safety.CheckAsync(intent)
             ??throw new InvalidOperationException("O recebimento ainda não aparece no caixa. Não lance outra baixa; confira a operação pendente.");
         await Refresh();
-        var updated=(await _ops.CreditsAsync("Todos",intent.AccountId==Guid.Empty?null:_customer))
+        var updated=(await _ops.CreditsAsync("Todos",customerId))
             .First(x=>x.Id==intent.AccountId);
         var summary=await safety.ReconcileAsync(intent.AccountId);
         if(!summary.Matches)
@@ -151,7 +151,7 @@ replacement=r'''    private bool _adminAction046;
                     "Deseja RETOMAR o mesmo identificador? Isso impede um segundo lançamento se o anterior já tiver sido gravado.",
                     "Recebimento pendente",MessageBoxButton.YesNo,MessageBoxImage.Question)==MessageBoxResult.Yes)
                 {
-                    await ProcessReceipt046(pending,account.Balance);
+                    await ProcessReceipt046(pending,account.CustomerId,account.Balance);
                     return;
                 }
                 if(MessageBox.Show("Descartar somente esta operação ainda NÃO GRAVADA? Não será removido qualquer recebimento já registrado.","Pendência",MessageBoxButton.YesNo,MessageBoxImage.Warning)==MessageBoxResult.Yes)
@@ -167,7 +167,7 @@ replacement=r'''    private bool _adminAction046;
             if(window.ShowDialog()!=true)return;
             var session=await new SqliteCashSessionRepository(_db,new SystemClock()).GetOrOpenAsync(_operator);
             var intent=await safety.PrepareAsync(account.Id,window.Amount,window.Method,_operator,session.Id,window.Notes);
-            await ProcessReceipt046(intent,account.Balance);
+            await ProcessReceipt046(intent,account.CustomerId,account.Balance);
         }
         catch(Exception ex)
         {
