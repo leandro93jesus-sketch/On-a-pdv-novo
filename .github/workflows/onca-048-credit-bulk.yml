@@ -33,9 +33,9 @@ jobs:
           $hash=(Get-FileHash $patch -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "SOURCE_PATCH_SHA256=$hash"
           if($hash -ne '029bdd47400cdd0c8a3a7ef70133535b231562e457b322148f71b78d8768023d'){throw 'Patch SHA256 mismatch'}
-          git -C source apply --check --whitespace=nowarn $patch
+          git apply --check --directory=source --whitespace=nowarn $patch
           if($LASTEXITCODE -ne 0){throw 'Patch incompatible with baseline; refusing to publish'}
-          git -C source apply --whitespace=nowarn $patch
+          git apply --directory=source --whitespace=nowarn $patch
           if($LASTEXITCODE -ne 0){throw 'Patch apply failed'}
           foreach($f in @('src/OncaPDV.Infrastructure/CreditBulk048.cs','AI-HANDOFF-048.md','tests/OncaPDV.Tests/CreditSafety046Tests.cs')) {
             if(-not (Test-Path (Join-Path source $f))){throw "Missing required source: $f"}
