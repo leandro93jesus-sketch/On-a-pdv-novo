@@ -1,0 +1,157 @@
+name: ONCA 0.1.49 credit removal Windows verified
+on:
+  push:
+    branches: [feature/credit-bulk-049]
+    paths:
+      - '.github/workflows/onca-049-credit-bulk.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  build-and-release:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download exact 0.1.48 release source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item input -ItemType Directory -Force | Out-Null
+          gh release download v0.1.48-crediario-lote --repo leandro93jesus-sketch/On-a-pdv-novo --pattern 'ONCA-PDV-PRO-0.1.48-CODIGO-FONTE.zip' --dir input --clobber
+          if($LASTEXITCODE -ne 0){throw 'Could not download exact 0.1.48 release source'}
+      - name: Restore and apply reviewed 049 source patch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $zip=(Resolve-Path 'input/ONCA-PDV-PRO-0.1.48-CODIGO-FONTE.zip').Path
+          Expand-Archive $zip source -Force
+          python -c "import base64,gzip,pathlib; src=pathlib.Path('patches/onca-049-from-048.patch.gz.b64'); pathlib.Path('onca049.patch').write_bytes(gzip.decompress(base64.b64decode(src.read_text().strip())))"
+          if($LASTEXITCODE -ne 0){throw 'Patch unpack failed'}
+          $patch=(Resolve-Path onca049.patch).Path
+          $hash=(Get-FileHash $patch -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "SOURCE_PATCH_SHA256=$hash"
+          if($hash -ne '1fb05a5928105532de98d66639f863088afd1c728ff10c5118ce38c6c4838cb8'){throw 'Patch SHA256 mismatch'}
+          git apply --check --directory=source --whitespace=nowarn $patch
+          if($LASTEXITCODE -ne 0){throw 'Patch incompatible with baseline; refusing to publish'}
+          git apply --directory=source --whitespace=nowarn $patch
+          if($LASTEXITCODE -ne 0){throw 'Patch apply failed'}
+          foreach($f in @('src/OncaPDV.Infrastructure/CreditBulk048.cs','src/OncaPDV.Infrastructure/CreditRemovalVerification049.cs','src/OncaPDV.Desktop/CreditAudit049Window.xaml','AI-HANDOFF-049.md','tests/OncaPDV.Tests/CreditSafety046Tests.cs')) {
+            if(-not (Test-Path (Join-Path source $f))){throw "Missing required source: $f"}
+          }
+          Write-Host 'EXACT_049_PATCH_APPLIED=YES'
+      - name: Restore .NET 10 test dependencies
+        shell: pwsh
+        working-directory: source
+        run: |
+          dotnet restore tests/OncaPDV.Tests/OncaPDV.Tests.csproj --configfile NuGet.Config
+          if($LASTEXITCODE -ne 0){throw 'NuGet restore failed'}
+      - name: Full regression including atomic bulk credit tests
+        shell: pwsh
+        working-directory: source
+        run: |
+          dotnet test tests/OncaPDV.Tests/OncaPDV.Tests.csproj -c Release --no-restore --logger 'console;verbosity=minimal' --results-directory test-results
+          if($LASTEXITCODE -ne 0){throw 'Regression tests failed; no release'}
+      - name: Build all WPF code and XAML with warnings as errors
+        shell: pwsh
+        working-directory: source
+        run: |
+          dotnet restore src/OncaPDV.Desktop/OncaPDV.Desktop.csproj --configfile NuGet.Config
+          if($LASTEXITCODE -ne 0){throw 'Desktop restore failed'}
+          dotnet build src/OncaPDV.Desktop/OncaPDV.Desktop.csproj -c Release --no-restore -warnaserror
+          if($LASTEXITCODE -ne 0){throw 'Desktop build failed; no release'}
+      - name: Verify all new GUI actions are wired to handlers
+        shell: pwsh
+        working-directory: source
+        run: |
+          $x=Get-Content src/OncaPDV.Desktop/CreditWindow.xaml -Raw
+          $code=Get-Content src/OncaPDV.Desktop/CreditWindow.xaml.cs -Raw
+          foreach($handler in @('MarkChanged049_Click','MarkAll049_Click','ClearMarks049_Click','DeleteMarked049_Click')) {
+            if(-not $x.Contains($handler) -or -not $code.Contains('void '+$handler+'(')){throw "Missing credit bulk GUI handler $handler"}
+          }
+          Write-Host 'GUI_BULK_BUTTON_WIRING=YES'
+      - name: Publish self-contained Windows folder and direct EXE
+        shell: pwsh
+        working-directory: source
+        run: |
+          dotnet publish src/OncaPDV.Desktop/OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false -o package/ONCA-PDV-PRO-0.1.49-WIN64
+          if($LASTEXITCODE -ne 0){throw 'Folder publish failed'}
+          dotnet publish src/OncaPDV.Desktop/OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false -o package/single
+          if($LASTEXITCODE -ne 0){throw 'Single EXE publish failed'}
+          foreach($p in @('package/ONCA-PDV-PRO-0.1.49-WIN64/OncaPDV.Desktop.exe','package/single/OncaPDV.Desktop.exe')) {
+            if(-not (Test-Path $p)){throw "Missing EXE: $p"}
+            $v=[Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $p).Path)
+            Write-Host "$p : FileVersion=$($v.FileVersion) Product=$($v.ProductName)"
+            if($v.FileVersion -ne '0.1.49.0'){throw 'Wrong version metadata'}
+          }
+      - name: Start both Windows builds with isolated databases
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach($kind in @('ONCA-PDV-PRO-0.1.49-WIN64','single')) {
+            $exe=(Resolve-Path "package/$kind/OncaPDV.Desktop.exe").Path
+            $env:ONCA_PDV_DATA_ROOT=Join-Path $env:RUNNER_TEMP ('onca049-'+$kind+'-'+[Guid]::NewGuid().ToString('N'))
+            New-Item $env:ONCA_PDV_DATA_ROOT -ItemType Directory -Force | Out-Null
+            $start=Get-Date
+            $p=Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+            Start-Sleep -Seconds 9
+            $p.Refresh()
+            if($p.HasExited){throw "$kind crashed at startup. Exit: $($p.ExitCode)"}
+            $db=Join-Path $env:ONCA_PDV_DATA_ROOT 'data/onca-pdv-pro.db'
+            if(-not (Test-Path $db)){throw "$kind did not initialize isolated DB"}
+            $p.CloseMainWindow()|Out-Null
+            Start-Sleep -Seconds 2
+            $p.Refresh()
+            if(-not $p.HasExited){$p.Kill($true)}
+            $errors=@(Get-WinEvent -FilterHashtable @{LogName='Application';StartTime=$start;Level=2} -ErrorAction SilentlyContinue | Where-Object {$_.Message -like '*ONCA-PDV*' -or $_.Message -like '*OncaPDV*'})
+            if($errors.Count){throw "Application errors in $kind startup"}
+            Write-Host "$kind : WINDOWS_STARTUP_AND_ISOLATED_DB=PASS"
+          }
+      - name: Package source, folder and direct EXE
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          @'
+          ONÇA PDV PRO 0.1.49 — EXCLUSÃO DE CREDIÁRIO CONFERIDA
+          Windows 10/11 de 64 bits; Windows 7/8.1 não compatível com .NET 10.
+          Extraia a pasta completa e abra OncaPDV.Desktop.exe dentro dela.
+          Botões: MARCAR, MARCAR TODAS VISÍVEIS, LIMPAR MARCAÇÕES, RETIRAR MARCADAS DO CREDIÁRIO.
+          Requer PIN do administrador, motivo e confirmação. As contas deixam todos os filtros operacionais. AUDITORIA abre em janela separada.
+          Pagamentos e movimentos de caixa já registrados são preservados. Após excluir confira o aviso de verificação no banco.
+          Faça backup de %LOCALAPPDATA%\Onca PDV Pro antes de atualizar.
+          Nunca substitua o banco comercial por um banco novo/de testes.
+          Se o Windows reportar ameaça real, não desative o Defender.
+          '@ | Set-Content package/ONCA-PDV-PRO-0.1.49-WIN64/LEIA-ME.txt -Encoding UTF8
+          Compress-Archive -Path package/ONCA-PDV-PRO-0.1.49-WIN64 -DestinationPath ONCA-PDV-PRO-0.1.49-WINDOWS-PORTATIL.zip -CompressionLevel Optimal -Force
+          Copy-Item package/single/OncaPDV.Desktop.exe ONCA-PDV-PRO-0.1.49-EXCLUSAO-CONFERIDA.exe
+          New-Item source-clean -ItemType Directory -Force|Out-Null
+          foreach($dir in @('src','tests','docs')){Copy-Item $dir source-clean/$dir -Recurse -Force}
+          foreach($file in @('NuGet.Config','OncaPDV.slnx','AI-HANDOFF.md','AI-HANDOFF-046.md','AI-HANDOFF-049.md','README.md')){Copy-Item $file source-clean/$file -Force}
+          Get-ChildItem source-clean -Directory -Recurse | Where-Object {$_.Name -in @('bin','obj','TestResults','test-results','package')} | Sort-Object FullName -Descending | Remove-Item -Recurse -Force
+          Get-ChildItem source-clean -File -Recurse | Where-Object {$_.Extension -in @('.exe','.db','.pdb')} | Remove-Item -Force
+          Compress-Archive -Path source-clean/* -DestinationPath ONCA-PDV-PRO-0.1.49-CODIGO-FONTE.zip -CompressionLevel Optimal -Force
+          Write-Host "DIRECT_EXE_SHA256=$((Get-FileHash ONCA-PDV-PRO-0.1.49-EXCLUSAO-CONFERIDA.exe -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host "FOLDER_ZIP_SHA256=$((Get-FileHash ONCA-PDV-PRO-0.1.49-WINDOWS-PORTATIL.zip -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host "SOURCE_ZIP_SHA256=$((Get-FileHash ONCA-PDV-PRO-0.1.49-CODIGO-FONTE.zip -Algorithm SHA256).Hash.ToLowerInvariant())"
+      - name: Upload artifact for recovery
+        uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.49-EXCLUSAO-CONFERIDA
+          path: |
+            source/ONCA-PDV-PRO-0.1.49-EXCLUSAO-CONFERIDA.exe
+            source/ONCA-PDV-PRO-0.1.49-WINDOWS-PORTATIL.zip
+            source/ONCA-PDV-PRO-0.1.49-CODIGO-FONTE.zip
+          retention-days: 30
+      - name: Publish only the tested source and binaries as new release
+        shell: pwsh
+        working-directory: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.1.49-exclusao-conferida ONCA-PDV-PRO-0.1.49-EXCLUSAO-CONFERIDA.exe ONCA-PDV-PRO-0.1.49-WINDOWS-PORTATIL.zip ONCA-PDV-PRO-0.1.49-CODIGO-FONTE.zip --repo leandro93jesus-sketch/On-a-pdv-novo --target ${{ github.sha }} --title "ONCA PDV PRO 0.1.49 - EXCLUSAO CONFERIDA" --notes "Corrige exclusao de crediario em lote e individual: contas excluidas nao aparecem em consultas ativas nem por cliente; auditoria em janela separada; verificacao apos gravacao no banco; identifica a versao no titulo. 159 testes e smoke Windows em base isolada. Registros financeiros e caixa preservados. Faca backup antes de atualizar. Windows 10/11 x64. Sem assinatura."
+          if($LASTEXITCODE -ne 0){throw 'Release creation failed'}
+          gh release view v0.1.49-exclusao-conferida --repo leandro93jesus-sketch/On-a-pdv-novo --json url,assets
