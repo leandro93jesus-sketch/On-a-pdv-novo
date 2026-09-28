@@ -1,0 +1,103 @@
+name: ONCA 0.1.45 CREDIT AUDIT
+on:
+  push:
+    paths:
+      - 'scripts/apply_owner_recovery_043.py'
+      - 'scripts/feature043_recovery.xaml'
+      - 'scripts/feature043_recovery.xaml.cs'
+      - 'scripts/feature043_tests.cs'
+      - 'scripts/seed_existing_pin_043.py'
+      - 'scripts/test_pin_and_cancel_043.ps1'
+      - 'scripts/test_features_043.ps1'
+      - 'scripts/feature041_reason.xaml'
+      - 'scripts/feature041_reason.xaml.cs'
+      - 'scripts/seed_and_check_cancel_041.py'
+      - 'scripts/test_cancel_e2e_041.ps1'
+      - 'scripts/test_features_041.ps1'
+      - 'scripts/feature040_service.cs'
+      - 'scripts/feature040_admin.xaml'
+      - 'scripts/feature040_admin.xaml.cs'
+      - 'scripts/feature040_tests.cs'
+      - 'scripts/test_features_040.ps1'
+      - 'scripts/test_multisale_startup_038.ps1'
+      - 'scripts/apply_sales_integrity_044.py'
+      - 'scripts/feature044_tests.cs'
+      - 'scripts/verify_delete_044.py'
+      - 'scripts/generate_delete_ui_test_044.py'
+      - 'scripts/test_features_044.ps1'
+      - '.github/workflows/onca-045-credit-audit.yml'
+  workflow_dispatch:
+jobs:
+  build-test-release:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Rebuild proven base
+        shell: pwsh
+        run: .\scripts\rebuild-onca-016-final.ps1
+      - name: Apply 0.1.18
+        shell: pwsh
+        run: python .\scripts\apply_ui_018.py
+      - name: Apply 0.1.19
+        shell: pwsh
+        run: python .\scripts\apply_ui_019.py
+      - name: Apply 0.1.20
+        shell: pwsh
+        run: python .\scripts\apply_ui_020.py
+      - name: Apply 0.1.21 physical print
+        shell: pwsh
+        run: python .\scripts\apply_print_021.py
+      - name: Apply 0.1.22 features
+        shell: pwsh
+        run: python .\scripts\apply_features_022.py
+      - name: Fix nullable product id
+        shell: pwsh
+        run: python .\scripts\fix_022_guid.py
+      - name: Apply proven 0.1.25 credit fix
+        shell: pwsh
+        run: python .\scripts\apply_ui_025.py
+      - name: Apply stable improvements
+        shell: pwsh
+        run: python .\scripts\apply_stable_plus_025.py
+      - name: Apply true simultaneous sales
+        shell: pwsh
+        run: python .\scripts\apply_multisale_037.py
+      - name: Apply isolated cancellation UI patch and regression
+        shell: pwsh
+        run: python .\scripts\apply_cancel_039.py
+      - name: Apply five safety improvements to proven 0.1.39
+        shell: pwsh
+        run: python .\scripts\apply_features_040.py
+      - name: Apply owned cancellation dialogs
+        shell: pwsh
+        run: python .\scripts\apply_cancel_ui_041.py
+      - name: Apply owner PIN reset UI
+        shell: pwsh
+        run: python .\scripts\apply_owner_pin_042.py
+      - name: Apply owner PIN recovery after 0.1.42
+        shell: pwsh
+        run: python .\scripts\apply_owner_recovery_043.py
+      - name: Apply durable checkout and audited deletion
+        shell: pwsh
+        run: python .\scripts\apply_sales_integrity_044.py
+      - name: Inspect all credit write paths in fully reconstructed source
+        shell: pwsh
+        run: |
+          $files=Get-ChildItem '.\work-final\ONCA-PDV-PRO\src' -Recurse -Filter *.cs
+          foreach($f in $files){
+            $lines=Get-Content $f.FullName
+            if(($lines -join [Environment]::NewLine) -match 'class SqliteCreditRepository|class CreditWindow|ReceiveAsync\(|ReverseCreditReceiptAsync|credit_receipts|credit_entries|StoreCreditReceipt|StoreCreditGenerated'){
+              Write-Host "### CREDIT FILE: $($f.FullName)"
+              for($n=0;$n -lt $lines.Length;$n++){
+                if($lines[$n] -match 'class SqliteCreditRepository|class CreditWindow|ReceiveAsync\(|ReverseCreditReceiptAsync|credit_receipts|credit_entries|StoreCreditReceipt|StoreCreditGenerated|Receive_Click|CreditMovementsAsync'){
+                  $a=[Math]::Max(0,$n-7);$b=[Math]::Min($lines.Length-1,$n+35)
+                  for($v=$a;$v -le $b;$v++){Write-Host ("{0,4}: {1}" -f ($v+1),$lines[$v])}
+                  $n=$b
+                }
+              }
+            }
+          }
