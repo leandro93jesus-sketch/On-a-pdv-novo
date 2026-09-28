@@ -30,11 +30,9 @@ FOREIGN KEY(cash_movement_id) REFERENCES cash_movements(id));";
 s=once(s,needle,replacement,"add only credit migration")
 # Multiple credit components in one payment must create a SINGLE account for that sale,
 # while preserving separate payment rows for the tender audit.
-old='''                 else await Exec(c,tx,"INSERT INTO credit_entries VALUES($id,$customer,$sale,'Debit',$amount,NULL,$at,'VENDA CREDIÁRIO')",ct,("$id",Guid.NewGuid()),("$customer",cart.CustomerId!.Value),("$sale",sale.Id),("$amount",p.Amount),("$at",sale.CreatedAt.ToString("O")));
-                 if(p.Method==PaymentMethod.StoreCredit)await Exec(c,tx,"INSERT INTO credit_accounts VALUES($id,$customer,$sale,$amount,$amount,$at,$due,'Open',1,NULL)",ct,("$id",Guid.NewGuid()),("$customer",cart.CustomerId!.Value),("$sale",sale.Id),("$amount",p.Amount),("$at",sale.CreatedAt.ToString("O")),("$due",sale.CreatedAt.AddDays(30).ToString("O")));
-            }
-            await Exec(c,tx,"INSERT INTO checkout_keys_044'''
-new='''            }
+a=s.index('else await Exec(c,tx,"INSERT INTO credit_entries')
+b=s.index('            await Exec(c,tx,"INSERT INTO checkout_keys_044',a)
+s=s[:a]+'''\n            }
             var creditTotal=payments.Where(x=>x.Method==PaymentMethod.StoreCredit).Sum(x=>x.Amount);
             if(creditTotal>0)
             {
@@ -43,8 +41,8 @@ new='''            }
                 await Exec(c,tx,"INSERT INTO credit_accounts VALUES($id,$customer,$sale,$amount,$amount,$at,$due,'Open',1,NULL)",ct,
                     ("$id",Guid.NewGuid()),("$customer",cart.CustomerId!.Value),("$sale",sale.Id),("$amount",creditTotal),("$at",sale.CreatedAt.ToString("O")),("$due",sale.CreatedAt.AddDays(30).ToString("O")));
             }
-            await Exec(c,tx,"INSERT INTO checkout_keys_044'''
-s=once(s,old,new,"single consolidated credit account")
+''' + s[b:]
+
 p.write_text(s,encoding="utf-8")
 
 p=i/"CustomerCredit.cs";s=p.read_text(encoding="utf-8-sig")
