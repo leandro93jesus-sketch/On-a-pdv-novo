@@ -1,0 +1,83 @@
+name: ONCA Windows error and security diagnostic
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-046-windows-diagnostic.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose-exact-release:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.46-CREDIARIO-SEGURO.exe
+          run-id: 36487855763
+          github-token: ${{ github.token }}
+          path: input
+      - name: Verify binary identity signature and Defender status
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $exe=Join-Path (Resolve-Path input).Path 'ONCA-PDV-PRO-0.1.46-CREDIARIO-SEGURO.exe'
+          $hash=(Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "RELEASE_FILE_SIZE=$((Get-Item $exe).Length)"
+          Write-Host "RELEASE_EXE_SHA256=$hash"
+          if($hash -ne 'd6d442688d588058aad894dabe6db98241e4edcc14f996e7cba2b23199ddec75'){throw 'Published file hash differs from tested source'}
+          $sig=Get-AuthenticodeSignature $exe
+          Write-Host "AUTHENTICODE_STATUS=$($sig.Status)"
+          Write-Host "AUTHENTICODE_SIGNER=$($sig.SignerCertificate.Subject)"
+          $v=[Diagnostics.FileVersionInfo]::GetVersionInfo($exe)
+          Write-Host "FILE_VERSION=$($v.FileVersion)"
+          Write-Host "PRODUCT_NAME=$($v.ProductName)"
+          Write-Host "PRODUCT_VERSION=$($v.ProductVersion)"
+          if(Get-Command Get-MpComputerStatus -ErrorAction SilentlyContinue){
+            try {
+              $st=Get-MpComputerStatus -ErrorAction Stop
+              Write-Host "DEFENDER_AVAILABLE=YES"
+              Write-Host "DEFENDER_SERVICE=$($st.AMServiceEnabled)"
+              Write-Host "DEFENDER_REALTIME=$($st.RealTimeProtectionEnabled)"
+              Write-Host "DEFENDER_SIGNATURE_VERSION=$($st.AntivirusSignatureVersion)"
+              if($st.AMServiceEnabled){
+                $scanStart=Get-Date
+                try{Start-MpScan -ScanType CustomScan -ScanPath $exe -ErrorAction Stop;Write-Host 'DEFENDER_CUSTOM_SCAN_REQUEST=OK'}catch{Write-Host "DEFENDER_CUSTOM_SCAN_REQUEST=FAILED: $($_.Exception.Message)"}
+                try{
+                  $dets=@(Get-MpThreatDetection -ErrorAction Stop|Where-Object {($_.Resources -join ';') -like "*ONCA-PDV-PRO-0.1.46-CREDIARIO-SEGURO.exe*"})
+                  Write-Host "DEFENDER_DETECTIONS_FOR_RELEASE=$($dets.Count)"
+                  foreach($d in $dets){Write-Host "DETECTION_NAME=$($d.ThreatName) ID=$($d.ThreatID) STATUS=$($d.ActionSuccess)"}
+                  if($dets.Count -gt 0){throw 'Windows Defender reports detection for released binary'}
+                }catch{if($_.Exception.Message -like '*Windows Defender reports*'){throw};Write-Host "DEFENDER_DETECTIONS_READ=UNAVAILABLE: $($_.Exception.Message)"}
+              }
+            }catch{Write-Host "DEFENDER_STATUS=UNAVAILABLE: $($_.Exception.Message)"}
+          }else{Write-Host 'DEFENDER_AVAILABLE=NO'}
+      - name: Launch exact released EXE with fresh isolated data
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $exe=Join-Path (Resolve-Path input).Path 'ONCA-PDV-PRO-0.1.46-CREDIARIO-SEGURO.exe'
+          $env:ONCA_PDV_DATA_ROOT=Join-Path $env:RUNNER_TEMP ('onca-release-smoke-'+[Guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $env:ONCA_PDV_DATA_ROOT -Force|Out-Null
+          $at=Get-Date
+          $p=Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 8
+          $p.Refresh()
+          Write-Host "EXE_PROCESS_ALIVE=$(-not $p.HasExited)"
+          if($p.HasExited){throw "Released EXE exited early, code $($p.ExitCode)"}
+          $db=Join-Path $env:ONCA_PDV_DATA_ROOT 'data\onca-pdv-pro.db'
+          Write-Host "DATABASE_CREATED=$(Test-Path $db)"
+          if(-not (Test-Path $db)){throw 'No SQLite database initialized in fresh test'}
+          $p.CloseMainWindow()|Out-Null
+          Start-Sleep -Seconds 2
+          $p.Refresh()
+          if(-not $p.HasExited){$p.Kill($true)}
+          $errors=Get-WinEvent -FilterHashtable @{LogName='Application';StartTime=$at;Level=2} -ErrorAction SilentlyContinue |
+            Where-Object {$_.Message -like '*ONCA-PDV*' -or $_.Message -like '*OncaPDV*'}
+          Write-Host "APPLICATION_EVENT_ERRORS=$(@($errors).Count)"
+          foreach($e in @($errors)|Select-Object -First 3){Write-Host "APPLICATION_ERROR_ID=$($e.Id) SOURCE=$($e.ProviderName) MESSAGE=$($e.Message)"}
+          if(@($errors).Count){throw 'Windows Application event error during smoke test'}
+      - name: Summary
+        shell: pwsh
+        run: Write-Host 'DIAGNOSTIC_COMPLETE: signature and Defender findings must be interpreted separately from SmartScreen reputation on downloaded files'
