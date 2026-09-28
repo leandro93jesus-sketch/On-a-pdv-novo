@@ -9,6 +9,7 @@ start=source.index(' Click $mgr "CANCELAR VENDA SELECIONADA"')
 end=source.index(' # Existing administrator: wrong PIN',start)
 part=source[start:end]
 part=part.replace('Click $mgr "CANCELAR VENDA SELECIONADA"','Click $mgr "EXCLUIR VENDA"',1)
+part=part.replace('Wait-Window $p "Motivo do cancelamento"','Wait-Window $p "Motivo da exclusão"',1)
 part=part.replace('Enter $reasonRoot "ReasonBox" "Teste de cancelamento UI"',
                   'Enter $reasonRoot "ReasonBox" "Excluir venda duplicada 044"',1)
 part=part.replace('Click-Dialog $p "Confirmar cancelamento" @("Yes","Sim")',
