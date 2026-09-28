@@ -33,7 +33,7 @@ jobs:
           $patch=(Resolve-Path onca049.patch).Path
           $hash=(Get-FileHash $patch -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "SOURCE_PATCH_SHA256=$hash"
-          if($hash -ne '1fb05a5928105532de98d66639f863088afd1c728ff10c5118ce38c6c4838cb8'){throw 'Patch SHA256 mismatch'}
+          if($hash -ne '3a562607309b0b4fb1ea24e0ff99d039c057822ddf586f0cff38a9401feca57d'){throw 'Patch SHA256 mismatch'}
           git apply --check --directory=source --whitespace=nowarn $patch
           if($LASTEXITCODE -ne 0){throw 'Patch incompatible with baseline; refusing to publish'}
           git apply --directory=source --whitespace=nowarn $patch
