@@ -1,0 +1,152 @@
+name: ONCA 0.1.47 Windows distribution verification
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-047-windows-distribution.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  build-and-verify:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.46-SOURCE-COMPLETO.zip
+          run-id: 36487855763
+          github-token: ${{ github.token }}
+          path: input
+      - name: Expand exact proven source and set accurate version metadata
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $zip=Join-Path (Resolve-Path input).Path 'ONCA-PDV-PRO-0.1.46-SOURCE-COMPLETO.zip'
+          New-Item -ItemType Directory -Path source -Force|Out-Null
+          Expand-Archive -Path $zip -DestinationPath source -Force
+          $root=(Resolve-Path source).Path
+          $project=Join-Path $root 'src\OncaPDV.Desktop\OncaPDV.Desktop.csproj'
+          if(-not (Test-Path $project)){throw 'Desktop project absent from source artifact'}
+          foreach($needed in @('src\OncaPDV.Infrastructure\CreditSafety046.cs','tests\OncaPDV.Tests\CreditSafety046Tests.cs','AI-HANDOFF.md','AI-HANDOFF-046.md')){
+            if(-not (Test-Path (Join-Path $root $needed))){throw "Required source missing: $needed"}
+          }
+          $csproj=Get-Content $project -Raw
+          if($csproj -notmatch '</Project>'){throw 'Invalid csproj'}
+          $properties=@'
+            <PropertyGroup>
+              <Version>0.1.47</Version>
+              <AssemblyVersion>0.1.47.0</AssemblyVersion>
+              <FileVersion>0.1.47.0</FileVersion>
+              <InformationalVersion>0.1.47-windows</InformationalVersion>
+              <Product>ONÇA PDV PRO</Product>
+              <Company>Onça Produtos de Limpeza</Company>
+              <Description>ONÇA PDV PRO - Controle de vendas e crediário</Description>
+            </PropertyGroup>
+          '@
+          $csproj=$csproj.Replace('</Project>',$properties+[Environment]::NewLine+'</Project>')
+          Set-Content -Path $project -Value $csproj -Encoding UTF8
+          Write-Host 'SOURCE_VERIFIED_AND_VERSION_METADATA_CORRECTED=YES'
+      - name: Full 0.1.46 source regression tests
+        shell: pwsh
+        working-directory: .\source
+        run: |
+          dotnet restore .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj --configfile .\NuGet.Config
+          if($LASTEXITCODE -ne 0){throw 'Test restore failed'}
+          dotnet test .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj -c Release --no-restore --logger 'console;verbosity=minimal'
+          if($LASTEXITCODE -ne 0){throw 'Regression tests failed'}
+      - name: Compile Desktop warnings as errors
+        shell: pwsh
+        working-directory: .\source
+        run: |
+          dotnet restore .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj --configfile .\NuGet.Config
+          if($LASTEXITCODE -ne 0){throw 'Desktop restore failed'}
+          dotnet build .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release --no-restore -warnaserror
+          if($LASTEXITCODE -ne 0){throw 'Desktop build failed'}
+      - name: Publish Windows x64 as ordinary multi-file self-contained folder
+        shell: pwsh
+        working-directory: .\source
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet publish .\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false -o .\package\ONCA-PDV-PRO-0.1.47-WIN64
+          if($LASTEXITCODE -ne 0){throw 'Folder-based publish failed'}
+          $exe='.\package\ONCA-PDV-PRO-0.1.47-WIN64\OncaPDV.Desktop.exe'
+          if(-not (Test-Path $exe)){throw 'Published Desktop EXE missing'}
+          $v=[Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $exe).Path)
+          Write-Host "PUBLISHED_FILE_VERSION=$($v.FileVersion)"
+          Write-Host "PUBLISHED_PRODUCT=$($v.ProductName)"
+          Write-Host "PUBLISHED_COMPANY=$($v.CompanyName)"
+          if($v.FileVersion -ne '0.1.47.0'){throw 'Wrong Windows FileVersion'}
+          if($v.ProductName -ne 'ONÇA PDV PRO'){throw 'Wrong Windows ProductName'}
+          if(-not (Test-Path '.\package\ONCA-PDV-PRO-0.1.47-WIN64\OncaPDV.Desktop.dll')){throw 'Expected unpacked managed DLL missing'}
+          $signature=Get-AuthenticodeSignature $exe
+          Write-Host "SIGNATURE_STATUS=$($signature.Status)"
+          if($signature.Status -eq 'Valid'){Write-Host 'Existing trusted publisher signature found'}else{Write-Host 'UNSIGNED: SmartScreen can still warn; do not bypass or disable Windows protection.'}
+      - name: Start resulting folder-based EXE with new isolated database
+        shell: pwsh
+        working-directory: .\source
+        run: |
+          $ErrorActionPreference='Stop'
+          $exe=(Resolve-Path '.\package\ONCA-PDV-PRO-0.1.47-WIN64\OncaPDV.Desktop.exe').Path
+          $env:ONCA_PDV_DATA_ROOT=Join-Path $env:RUNNER_TEMP ('onca-multifile-'+[Guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $env:ONCA_PDV_DATA_ROOT -Force|Out-Null
+          $start=Get-Date
+          $p=Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+          Start-Sleep -Seconds 10
+          $p.Refresh()
+          Write-Host "FOLDER_APP_RUNNING=$(-not $p.HasExited)"
+          if($p.HasExited){throw "Folder app exited unexpectedly: $($p.ExitCode)"}
+          if(-not (Test-Path (Join-Path $env:ONCA_PDV_DATA_ROOT 'data\onca-pdv-pro.db'))){throw 'Isolated database not initialized'}
+          Write-Host 'FOLDER_APP_INITIALIZED_DB=YES'
+          $p.CloseMainWindow()|Out-Null
+          Start-Sleep -Seconds 2
+          $p.Refresh()
+          if(-not $p.HasExited){$p.Kill($true)}
+          $errors=@(Get-WinEvent -FilterHashtable @{LogName='Application';StartTime=$start;Level=2} -ErrorAction SilentlyContinue | Where-Object {$_.Message -like '*ONCA-PDV*' -or $_.Message -like '*OncaPDV*'})
+          Write-Host "APP_EVENT_ERRORS=$($errors.Count)"
+          if($errors.Count){throw 'Windows application error during folder build smoke test'}
+      - name: Package redistributable ZIP and source with handoff
+        shell: pwsh
+        working-directory: .\source
+        run: |
+          $ErrorActionPreference='Stop'
+          $app=(Resolve-Path '.\package\ONCA-PDV-PRO-0.1.47-WIN64').Path
+          @'
+          ONÇA PDV PRO 0.1.47 — Windows x64
+          Compatibilidade: Windows 10/11 de 64 bits. Não funciona em Windows 7/8.1.
+          Esta distribuição não usa empacotamento single-file: abra a pasta inteira e execute OncaPDV.Desktop.exe.
+          NÃO execute apenas o .exe isolado nem apague DLLs e arquivos auxiliares.
+          O projeto não possui assinatura de editor confiável. O SmartScreen pode mostrar aviso de reputação;
+          NÃO desligue o Defender e não marque como seguro se houver detecção concreta de ameaça.
+          Confirme a origem do arquivo no repositório privado oficial.
+          Os arquivos de produtos, vendas, caixa e crediário existentes ficam em %LOCALAPPDATA%\Onca PDV Pro\data.
+          Faça backup antes da atualização. A pasta de distribuição não substitui nem apaga o banco.
+          Se houver erro, anote texto/código e envie a captura de tela. Para diagnósticos, confira Visualizador de Eventos > Logs do Windows > Aplicativo.
+          '@ | Set-Content (Join-Path $app 'LEIA-ME-WINDOWS.txt') -Encoding UTF8
+          @'
+          ONÇA PDV PRO 0.1.47:
+          - Mesma lógica comercial comprovada na versão 0.1.46.
+          - Corrigidos ProductName, Company e FileVersion do EXE.
+          - Distribuição alternativa em pasta com bibliotecas separadas (sem single-file).
+          - Sem certificado Authenticode, portanto um aviso de reputação do Windows ainda é possível.
+          - Windows 7/8.1 não são compatíveis com .NET 10.
+          - Alteração somente de versão/empacotamento: não modifica banco/migrações.
+          '@ | Set-Content (Join-Path $app 'ALTERACOES-047.txt') -Encoding UTF8
+          $zip=Join-Path (Get-Location) 'ONCA-PDV-PRO-0.1.47-WINDOWS-PORTATIL.zip'
+          Compress-Archive -Path (Join-Path (Get-Location) 'package\ONCA-PDV-PRO-0.1.47-WIN64') -DestinationPath $zip -CompressionLevel Optimal -Force
+          if((Get-Item $zip).Length -lt 15MB){throw 'Distribution zip unexpectedly small'}
+          Copy-Item (Join-Path (Get-Location) 'AI-HANDOFF.md') (Join-Path (Get-Location) 'AI-HANDOFF-047-original.md')
+          Compress-Archive -Path '.\src','.\tests','.\NuGet.Config','.\AI-HANDOFF.md','.\AI-HANDOFF-046.md' -DestinationPath '.\ONCA-PDV-PRO-0.1.47-CODIGO-FONTE.zip' -CompressionLevel Optimal -Force
+          if((Get-Item '.\ONCA-PDV-PRO-0.1.47-CODIGO-FONTE.zip').Length -lt 20KB){throw 'Source zip unexpectedly small'}
+          Write-Host "DISTRIBUTION_SHA256=$((Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant())"
+      - name: Publish verified portable folder and full source
+        shell: pwsh
+        working-directory: .\source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          gh release create v0.1.47-windows-pasta '.\ONCA-PDV-PRO-0.1.47-WINDOWS-PORTATIL.zip' '.\ONCA-PDV-PRO-0.1.47-CODIGO-FONTE.zip' --repo leandro93jesus-sketch/On-a-pdv-novo --title 'ONCA PDV PRO 0.1.47 - DISTRIBUICAO WINDOWS EM PASTA' --notes 'Mesmo codigo comercial da 0.1.46; metadados de versao Windows corrigidos e empacotamento alternativo sem single-file para isolar problemas de extracao. Self-contained Windows 10/11 x64; nao compativel com Windows 7/8.1. O executavel continua sem assinatura de editor; SmartScreen pode mostrar aviso. NAO desative o Defender. Regressao completa e inicializacao com banco isolado testadas. Nao houve acesso ao banco da loja. Contem codigo-fonte para outra IA.'
+          if($LASTEXITCODE -ne 0){throw 'GitHub release publish failed'}
+          gh release view v0.1.47-windows-pasta --repo leandro93jesus-sketch/On-a-pdv-novo --json url,assets
+          if($LASTEXITCODE -ne 0){throw 'Published release validation failed'}
