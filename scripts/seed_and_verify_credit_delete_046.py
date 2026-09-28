@@ -5,7 +5,7 @@ fixture=os.path.join(root,"credit-046-fixture.txt")
 now=datetime.datetime.now(datetime.timezone.utc).isoformat()
 if len(sys.argv)<2:raise SystemExit("mode required")
 if sys.argv[1]=="seed":
-    customer=str(uuid.uuid4());product=str(uuid.uuid4());sale=str(uuid.uuid4());account=str(uuid.uuid4())
+    customer=str(uuid.uuid4());product=str(uuid.uuid4());sale=str(uuid.uuid4());account=str(uuid.uuid4());session=str(uuid.uuid4())
     op="10000000-0000-0000-0000-000000000001"
     with sqlite3.connect(db) as c:
         c.execute("PRAGMA foreign_keys=ON")
@@ -16,7 +16,7 @@ if sys.argv[1]=="seed":
                   (sale,98101,now,op,customer,0,100))
         c.execute("INSERT INTO sale_items(id,sale_id,product_id,code,name,quantity,unit_price,subtotal) VALUES(?,?,?,?,?,?,?,?)",
                   (str(uuid.uuid4()),sale,product,"CREDITGUI046","Item credit test",1,100,100))
-        c.execute("INSERT INTO payments(id,sale_id,method,amount) VALUES(?,?,?,?)",(str(uuid.uuid4()),sale,"StoreCredit",100))
+        c.execute("INSERT INTO payments(id,sale_id,method,amount,change_amount) VALUES(?,?,?,?,0)",(str(uuid.uuid4()),sale,"StoreCredit",100))
         c.execute("INSERT INTO credit_entries(id,customer_id,sale_id,type,amount,created_at,reason) VALUES(?,?,?,'Debit',?,?,'VENDA CREDIARIO')",
                   (str(uuid.uuid4()),customer,sale,100,now))
         c.execute("INSERT INTO credit_accounts(id,customer_id,sale_id,original_amount,balance,created_at,due_at,status,installments) VALUES(?,?,?,?,?,?,?,'Open',1)",
