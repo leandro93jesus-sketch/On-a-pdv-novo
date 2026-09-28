@@ -46,8 +46,9 @@ s=s[:a]+'''\n            }
 p.write_text(s,encoding="utf-8")
 
 p=i/"CustomerCredit.cs";s=p.read_text(encoding="utf-8-sig")
-m=re.search(r"  public async Task<CreditReceipt> ReceiveAsync\(.*?\n  private static async Task Exec",s,re.S)
-if not m:raise RuntimeError("credit ReceiveAsync anchor absent")
+start=s.find("public async Task<CreditReceipt> ReceiveAsync(")
+end=s.find("private static async Task Exec",start)
+if start<0 or end<0:raise RuntimeError("credit ReceiveAsync anchor absent")
 replacement=r'''  // API compatibility: ordinary legitimate payments obtain a fresh request ID.
   public Task<CreditReceipt> ReceiveAsync(Guid accountId,decimal amount,PaymentMethod method,Guid operatorId,
       Guid sessionId,string? notes,CancellationToken ct=default)
@@ -125,7 +126,7 @@ VALUES($request,$receipt,$account,$amount,$method,$session,$at)",
   }
 
   private static async Task Exec'''
-s=s[:m.start()]+replacement+s[m.end():]
+s=s[:start]+replacement+s[end:]
 p.write_text(s,encoding="utf-8")
 
 # Exact receipt-to-cash matching: do not put a reversal into whichever
