@@ -47,7 +47,7 @@ p.write_text(s,encoding="utf-8")
 
 p=i/"CustomerCredit.cs";s=p.read_text(encoding="utf-8-sig")
 start=s.find("public async Task<CreditReceipt> ReceiveAsync(")
-end=s.find("private static async Task Exec",start)
+end=s.find("private static async Task Exec",start)\nif end>=0:end+=len("private static async Task Exec")
 if start<0 or end<0:raise RuntimeError("credit ReceiveAsync anchor absent")
 replacement=r'''  // API compatibility: ordinary legitimate payments obtain a fresh request ID.
   public Task<CreditReceipt> ReceiveAsync(Guid accountId,decimal amount,PaymentMethod method,Guid operatorId,
