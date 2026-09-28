@@ -201,35 +201,38 @@ s=once(s,
  "managerial report net receipts")
 p.write_text(s,encoding="utf-8")
 
-# UI: one confirmation cannot start a second operation while the first runs.
+# UI: find the existing method bounds BEFORE inserting the outer try/finally,
+# otherwise a brace scan would accidentally include the rest of the class.
 p=d/"CreditWindow.xaml.cs";s=p.read_text(encoding="utf-8-sig")
-s=once(s,"    private async void Receive_Click(object sender, RoutedEventArgs e)\n    {",
-'''    private bool _receiving045;
-    private async void Receive_Click(object sender, RoutedEventArgs e)
-    {
+a=s.index("    private async void Receive_Click(")
+brace=s.index("{",a)
+depth=1;j=brace+1
+while depth and j<len(s):
+    if s[j]=="{":depth+=1
+    elif s[j]=="}":depth-=1
+    j+=1
+if depth:raise RuntimeError("original Receive_Click unbalanced")
+part=s[a:j]
+inner=part[brace-a+1:-1]
+inner=once(inner,
+    "            var receipt = await new SqliteCreditRepository(_db, new SystemClock())",
+    "            var requestId=Guid.NewGuid();\n            var receipt = await new SqliteCreditRepository(_db, new SystemClock())",
+    "capture one receipt request identity")
+inner=once(inner,
+    "                .ReceiveAsync(account.Id, window.Amount, window.Method, _operator, session.Id, window.Notes);",
+    "                .ReceiveOnceAsync(account.Id, window.Amount, window.Method, _operator, session.Id, window.Notes, requestId);",
+    "credit UI uses idempotent repository")
+part=part[:brace-a+1]+'''
         if(_receiving045)return;
         _receiving045=true;
         try
-        {''',
-"receive reentrancy guard")
-s=once(s,
-  '                .ReceiveAsync(account.Id, window.Amount, window.Method, _operator, session.Id, window.Notes);',
-  '                .ReceiveOnceAsync(account.Id, window.Amount, window.Method, _operator, session.Id, window.Notes, requestId);',
-  "credit unique request ID on actual UI")
-s=once(s,'            var receipt = await new SqliteCreditRepository(_db, new SystemClock())',
-         '            var requestId=Guid.NewGuid();\n            var receipt = await new SqliteCreditRepository(_db, new SystemClock())',
-         "capture request identity once")
-# Insert outer finally at the end of Receive_Click using next member anchor (brace balance).
-a=s.index('    private async void Receive_Click(')
-brace=s.index('{',a)
-depth=1;j=brace+1
-while depth and j<len(s):
-    if s[j]=='{':depth+=1
-    elif s[j]=='}':depth-=1
-    j+=1
-if depth:raise RuntimeError("receive braces")
-body=s[brace+1:j-1]
-s=s[:brace+1]+body+'\n        }\n        finally{_receiving045=false;}\n    '+s[j-1:]
+        {
+'''+inner+'''
+        }
+        finally{_receiving045=false;}
+    }'''
+s=s[:a]+'''    private bool _receiving045;
+'''+part+s[j:]
 p.write_text(s,encoding="utf-8")
 
 (t/"CreditIntegrity045Tests.cs").write_text(Path("scripts/feature045_credit_tests.cs").read_text(encoding="utf-8"),encoding="utf-8")
