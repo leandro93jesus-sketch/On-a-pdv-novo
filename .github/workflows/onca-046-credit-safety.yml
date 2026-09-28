@@ -34,6 +34,8 @@ on:
       - 'scripts/feature046_credit_delete.xaml'
       - 'scripts/feature046_credit_delete.xaml.cs'
       - 'scripts/feature046_credit_tests.cs'
+      - 'scripts/seed_and_verify_credit_delete_046.py'
+      - 'scripts/test_credit_delete_gui_046.ps1'
       - '.github/workflows/onca-046-credit-safety.yml'
   workflow_dispatch:
 jobs:
@@ -185,6 +187,10 @@ jobs:
         shell: pwsh
         working-directory: .\work-final\ONCA-PDV-PRO
         run: dotnet test .\tests\OncaPDV.Tests\OncaPDV.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~CreditSafety046Tests --logger "console;verbosity=normal"
+      - name: Credit deletion through real WPF UI and audit filter
+        shell: pwsh
+        working-directory: .\work-final\ONCA-PDV-PRO
+        run: ..\..\scripts\test_credit_delete_gui_046.ps1
       - name: Package complete source for AI continuation
         shell: pwsh
         run: |
