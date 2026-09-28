@@ -80,4 +80,5 @@ jobs:
           if(@($errors).Count){throw 'Windows Application event error during smoke test'}
       - name: Summary
         shell: pwsh
-        run: Write-Host 'DIAGNOSTIC_COMPLETE: signature and Defender findings must be interpreted separately from SmartScreen reputation on downloaded files'
+        run: |
+          Write-Host 'DIAGNOSTIC_COMPLETE: signature and Defender findings must be interpreted separately from SmartScreen reputation on downloaded files'
