@@ -1,0 +1,443 @@
+diff --git a/src/OncaPDV.Desktop/CreditExclusion046Window.xaml.cs b/src/OncaPDV.Desktop/CreditExclusion046Window.xaml.cs
+index e43e7c7..a518316 100644
+--- a/src/OncaPDV.Desktop/CreditExclusion046Window.xaml.cs
++++ b/src/OncaPDV.Desktop/CreditExclusion046Window.xaml.cs
+@@ -9,6 +9,12 @@ public partial class CreditExclusion046Window:Window
+         AccountText.Text=$"Cliente: {customer}  |  Venda {saleNumber:000000}\nSaldo a excluir: {balance:C}  |  Pagamentos preservados: {paid:C}";
+         Loaded+=(_,_)=>ReasonBox.Focus();
+     }
++    public CreditExclusion046Window(int count,decimal balance,decimal paid)
++        : this("CONTAS MARCADAS",0,balance,paid)
++    {
++        Title="Excluir crediário em lote — ONÇA PDV PRO";
++        AccountText.Text=$"{count} contas selecionadas\nSaldo a excluir: {balance:C}  |  Recebimentos preservados: {paid:C}";
++    }
+     private void Back_Click(object s,RoutedEventArgs e)=>DialogResult=false;
+     private void Confirm_Click(object s,RoutedEventArgs e)
+     {
+diff --git a/src/OncaPDV.Desktop/CreditWindow.xaml b/src/OncaPDV.Desktop/CreditWindow.xaml
+index 7c53032..afda5a7 100644
+--- a/src/OncaPDV.Desktop/CreditWindow.xaml
++++ b/src/OncaPDV.Desktop/CreditWindow.xaml
+@@ -116,10 +116,21 @@
+             <Grid.ColumnDefinitions><ColumnDefinition Width="2.25*"/><ColumnDefinition Width="0.95*"/></Grid.ColumnDefinitions>
+ 
+             <Grid Margin="0,0,12,0">
+-                <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="220"/></Grid.RowDefinitions>
+-                <Border Background="White" BorderBrush="#DCE4E0" BorderThickness="1" CornerRadius="10" Padding="8">
++                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="220"/></Grid.RowDefinitions>
++                <WrapPanel Grid.Row="0" Margin="0,0,0,7">
++                    <Button Style="{StaticResource SoftButton}" Content="MARCAR TODAS VISÍVEIS" Click="MarkAll048_Click"/>
++                    <Button Style="{StaticResource SoftButton}" Content="LIMPAR MARCAÇÕES" Click="ClearMarks048_Click"/>
++                    <Button Style="{StaticResource RoundedButton}" Content="RETIRAR MARCADAS DO CREDIÁRIO" Background="#9C2820" Click="DeleteMarked048_Click"/>
++                    <TextBlock x:Name="MarkedCount048" Text="0 marcadas" VerticalAlignment="Center" Margin="10,0" FontWeight="Bold"/>
++                </WrapPanel>
++                <Border Grid.Row="1" Background="White" BorderBrush="#DCE4E0" BorderThickness="1" CornerRadius="10" Padding="8">
+                     <DataGrid x:Name="Accounts" AutoGenerateColumns="False" IsReadOnly="True" SelectionChanged="Account_Changed">
+                         <DataGrid.Columns>
++                            <DataGridTemplateColumn Header="MARCAR" Width="68">
++                                <DataGridTemplateColumn.CellTemplate><DataTemplate>
++                                    <CheckBox HorizontalAlignment="Center" VerticalAlignment="Center" Focusable="False" IsChecked="{Binding MarkedForBulk048,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}" Click="MarkChanged048_Click"/>
++                                </DataTemplate></DataGridTemplateColumn.CellTemplate>
++                            </DataGridTemplateColumn>
+                             <DataGridTextColumn Header="CLIENTE" Binding="{Binding Customer}" Width="*"/>
+                             <DataGridTextColumn Header="VENDA" Binding="{Binding SaleNumber,StringFormat=000000}" Width="90"/>
+                             <DataGridTextColumn Header="ORIGINAL" Binding="{Binding Original,StringFormat=C}" Width="110"/>
+@@ -131,7 +142,7 @@
+                     </DataGrid>
+                 </Border>
+ 
+-                <Border Grid.Row="1" Background="White" BorderBrush="#DCE4E0" BorderThickness="1" CornerRadius="10" Padding="10" Margin="0,12,0,0">
++                <Border Grid.Row="2" Background="White" BorderBrush="#DCE4E0" BorderThickness="1" CornerRadius="10" Padding="10" Margin="0,12,0,0">
+                     <Grid><Grid.RowDefinitions><RowDefinition Height="36"/><RowDefinition/></Grid.RowDefinitions>
+                         <TextBlock Text="ÚLTIMOS RECEBIMENTOS / MOVIMENTOS" FontWeight="Bold" Foreground="#2A3731" VerticalAlignment="Center" Margin="5,0"/>
+                         <DataGrid Grid.Row="1" x:Name="Movements" IsReadOnly="True" AutoGenerateColumns="True" RowHeight="35" FontSize="13"/>
+diff --git a/src/OncaPDV.Desktop/CreditWindow.xaml.cs b/src/OncaPDV.Desktop/CreditWindow.xaml.cs
+index 031a025..d517b17 100644
+--- a/src/OncaPDV.Desktop/CreditWindow.xaml.cs
++++ b/src/OncaPDV.Desktop/CreditWindow.xaml.cs
+@@ -40,6 +40,9 @@ public partial class CreditWindow : Window
+     private void ApplySearch()
+     {
+         if (Accounts is null) return;
++        // Never silently carry a checked account across filter/search changes.
++        foreach (var account in _current) account.MarkedForBulk048 = false;
++        if (MarkedCount048 is not null) MarkedCount048.Text = "0 marcadas";
+         var term = SearchBox?.Text?.Trim() ?? string.Empty;
+         Accounts.ItemsSource = string.IsNullOrWhiteSpace(term)
+             ? _current
+@@ -89,6 +92,74 @@ public partial class CreditWindow : Window
+         Movements.ItemsSource = await _ops.CreditMovementsAsync(account.Id);
+     }
+ 
++    private CreditView[] MarkedAccounts048() => Accounts.Items.OfType<CreditView>()
++        .Where(a=>a.MarkedForBulk048 && a.Status!=CreditStatus.Cancelled).ToArray();
++
++    private void UpdateMarkedCount048() => MarkedCount048.Text=$"{MarkedAccounts048().Length} marcadas";
++
++    private void MarkChanged048_Click(object sender,RoutedEventArgs e)
++    {
++        if(_adminAction046||_receiving045)
++        {
++            if(sender is CheckBox cb && cb.DataContext is CreditView account) account.MarkedForBulk048=false;
++            Accounts.Items.Refresh();
++            return;
++        }
++        UpdateMarkedCount048();
++    }
++
++    private void MarkAll048_Click(object sender,RoutedEventArgs e)
++    {
++        if(_adminAction046||_receiving045)return;
++        foreach(var account in Accounts.Items.OfType<CreditView>())
++            account.MarkedForBulk048=account.Status!=CreditStatus.Cancelled;
++        Accounts.Items.Refresh();UpdateMarkedCount048();
++    }
++
++    private void ClearMarks048_Click(object sender,RoutedEventArgs e)
++    {
++        if(_adminAction046||_receiving045)return;
++        foreach(var account in _current)account.MarkedForBulk048=false;
++        Accounts.Items.Refresh();UpdateMarkedCount048();
++    }
++
++    private async void DeleteMarked048_Click(object sender,RoutedEventArgs e)
++    {
++        if(_adminAction046||_receiving045)return;
++        _adminAction046=true;
++        try
++        {
++            var selected=MarkedAccounts048();
++            if(selected.Length==0){MessageBox.Show("Marque as contas usando a primeira coluna.","Crediário");return;}
++            var total=selected.Sum(x=>x.Balance);
++            var paid=selected.Sum(x=>x.Paid);
++            var authorization=new AdminAuthorization040Window(_db){Owner=this};
++            if(authorization.ShowDialog()!=true)return;
++            var reasonWindow=new CreditExclusion046Window(selected.Length,total,paid){Owner=this};
++            if(reasonWindow.ShowDialog()!=true)return;
++            var review=string.Join("\n",selected.Take(12).Select(x=>$"Venda {x.SaleNumber:000000} - {x.Customer}: {x.Balance:C}"));
++            if(selected.Length>12)review+=$"\n... mais {selected.Length-12} conta(s)";
++            if(MessageBox.Show(
++                $"RETIRAR {selected.Length} CONTAS DO CREDIÁRIO?\n\n{review}\n\n"+
++                $"Saldo total a baixar: {total:C}\nPagamentos já recebidos preservados: {paid:C}\n\n"+
++                "As vendas, os recebimentos e o caixa permanecem. Todas as contas serão retiradas juntas, ou nenhuma será alterada se houver divergência.",
++                "CONFIRMAR EXCLUSÃO EM LOTE",MessageBoxButton.YesNo,MessageBoxImage.Warning)!=MessageBoxResult.Yes)return;
++            var result=await new CreditBulk048(_db).DeleteManyAsync(selected.Select(x=>x.Id),_operator,
++                $"ADMIN: {authorization.AuthorizedName} | MOTIVO: {reasonWindow.Reason}");
++            await Refresh();
++            MessageBox.Show($"{result.Count} contas retiradas da lista ativa.\n"+
++                $"Saldo baixado: {result.Forgiven:C}\nRecebimentos preservados: {result.Paid:C}\n"+
++                $"Lote de auditoria: {result.BatchId}\nConsulte EXCLUÍDOS para verificar as contas.",
++                "Crediário — operação concluída",MessageBoxButton.OK,MessageBoxImage.Information);
++        }
++        catch(Exception ex)
++        {
++            MessageBox.Show("Nenhuma conta do lote foi excluída.\n\n"+ex.Message,
++                "Crediário — operação bloqueada",MessageBoxButton.OK,MessageBoxImage.Warning);
++        }
++        finally{_adminAction046=false;UpdateMarkedCount048();}
++    }
++
+     private bool _receiving045;
+     private bool _adminAction046;
+     private async Task ProcessReceipt046(CreditIntent046 intent,Guid customerId,decimal previousBalance)
+diff --git a/src/OncaPDV.Desktop/OncaPDV.Desktop.csproj b/src/OncaPDV.Desktop/OncaPDV.Desktop.csproj
+index c20abac..905a82a 100644
+--- a/src/OncaPDV.Desktop/OncaPDV.Desktop.csproj
++++ b/src/OncaPDV.Desktop/OncaPDV.Desktop.csproj
+@@ -1,4 +1,4 @@
+-﻿<Project Sdk="Microsoft.NET.Sdk">
++<Project Sdk="Microsoft.NET.Sdk">
+ 
+   <PropertyGroup>
+     <OutputType>WinExe</OutputType>
+@@ -6,7 +6,7 @@
+     <Nullable>enable</Nullable>
+     <ImplicitUsings>enable</ImplicitUsings>
+     <UseWPF>true</UseWPF>
+-    <Version>0.1.3</Version>
++    <Version>0.1.48</Version>
+   </PropertyGroup>
+ 
+   <ItemGroup>
+@@ -21,4 +21,11 @@
+     <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+   </ItemGroup>
+ 
++  <PropertyGroup>
++    <AssemblyVersion>0.1.48.0</AssemblyVersion>
++    <FileVersion>0.1.48.0</FileVersion>
++    <InformationalVersion>0.1.48-bulk-credit</InformationalVersion>
++    <Product>ONÇA PDV PRO</Product>
++    <Company>Onça Produtos de Limpeza</Company>
++  </PropertyGroup>
+ </Project>
+diff --git a/src/OncaPDV.Infrastructure/CreditBulk048.cs b/src/OncaPDV.Infrastructure/CreditBulk048.cs
+new file mode 100644
+index 0000000..b2fdeb4
+--- /dev/null
++++ b/src/OncaPDV.Infrastructure/CreditBulk048.cs
+@@ -0,0 +1,132 @@
++using System;
++using System.Collections.Generic;
++using System.Linq;
++using System.Threading;
++using System.Threading.Tasks;
++using Microsoft.Data.Sqlite;
++
++namespace OncaPDV.Infrastructure;
++
++public sealed record CreditBulkResult048(Guid BatchId,IReadOnlyList<CreditDeletion046> Items)
++{
++    public int Count => Items.Count;
++    public decimal Forgiven => Items.Sum(x => x.Forgiven);
++    public decimal Paid => Items.Sum(x => x.Paid);
++}
++
++/// <summary>
++/// Removes several selected credit accounts atomically. An invalid account, pending
++/// receipt or cash mismatch cancels the ENTIRE batch; original sales and payments stay.
++/// </summary>
++public sealed class CreditBulk048(OncaDatabase db)
++{
++    private sealed record Row(Guid Account,Guid Customer,Guid Sale,decimal Balance,decimal Paid);
++    private static void Add(SqliteCommand q,string name,object? value)
++        => q.Parameters.AddWithValue(name,value is Guid id?id.ToString():value??DBNull.Value);
++
++    public async Task<CreditBulkResult048> DeleteManyAsync(IEnumerable<Guid> accountIds,
++        Guid operatorId,string reason,CancellationToken ct=default)
++    {
++        ArgumentNullException.ThrowIfNull(accountIds);
++        var ids=accountIds.Distinct().ToArray();
++        reason=(reason??"").Trim();
++        if(ids.Length==0)throw new InvalidOperationException("Marque pelo menos uma conta.");
++        if(ids.Length>500)throw new InvalidOperationException("Selecione até 500 contas por lote.");
++        if(reason.Length<4)throw new InvalidOperationException("Informe o motivo da exclusão (mínimo 4 caracteres).");
++
++        await using var c=db.Open();
++        await using var tx=(SqliteTransaction)await c.BeginTransactionAsync(ct);
++        var checkedRows=new List<Row>(ids.Length);
++        // Validate every account under the same write transaction before changing any row.
++        foreach(var id in ids)
++        {
++            Guid customer,sale;decimal balance;string accountStatus,saleStatus;
++            await using(var q=c.CreateCommand())
++            {
++                q.Transaction=tx;
++                q.CommandText=@"SELECT a.customer_id,a.sale_id,a.balance,a.status,s.status
++FROM credit_accounts a JOIN sales s ON s.id=a.sale_id WHERE a.id=$id";
++                Add(q,"$id",id);
++                await using var r=await q.ExecuteReaderAsync(ct);
++                if(!await r.ReadAsync(ct))throw new InvalidOperationException($"Conta {id} não encontrada. Nenhuma conta foi excluída.");
++                customer=Guid.Parse(r.GetString(0));sale=Guid.Parse(r.GetString(1));
++                balance=r.GetDecimal(2);accountStatus=r.GetString(3);saleStatus=r.GetString(4);
++            }
++            if(accountStatus=="Cancelled"||saleStatus!="Completed")
++                throw new InvalidOperationException("Há conta já excluída/cancelada ou venda não concluída no lote. Nenhuma conta foi excluída.");
++            if(balance<0)throw new InvalidOperationException("Saldo inválido no lote. Nenhuma conta foi excluída.");
++            await using(var q=c.CreateCommand())
++            {
++                q.Transaction=tx;
++                q.CommandText="SELECT COUNT(*) FROM credit_receipt_intents_046 WHERE account_id=$id AND acknowledged_at IS NULL";
++                Add(q,"$id",id);
++                if(Convert.ToInt32(await q.ExecuteScalarAsync(ct))!=0)
++                    throw new InvalidOperationException("Há recebimento pendente de conferência em uma das contas. Nenhuma conta foi excluída.");
++            }
++            decimal paid,cash;
++            await using(var q=c.CreateCommand())
++            {
++                q.Transaction=tx;
++                q.CommandText=@"SELECT COALESCE(SUM(r.amount),0) FROM credit_receipts r
++LEFT JOIN credit_receipt_reversals x ON x.receipt_id=r.id
++WHERE r.account_id=$id AND x.id IS NULL";
++                Add(q,"$id",id);paid=Convert.ToDecimal(await q.ExecuteScalarAsync(ct));
++            }
++            await using(var q=c.CreateCommand())
++            {
++                q.Transaction=tx;
++                q.CommandText="SELECT COALESCE(SUM(amount),0) FROM cash_movements WHERE origin_id=$id AND type='StoreCreditReceipt'";
++                Add(q,"$id",id);cash=Convert.ToDecimal(await q.ExecuteScalarAsync(ct));
++            }
++            if(paid!=cash)
++                throw new InvalidOperationException("Divergência entre caixa e recebimento em uma das contas. Nenhuma conta foi excluída; confira os lançamentos.");
++            checkedRows.Add(new(id,customer,sale,balance,paid));
++        }
++
++        var batch=Guid.NewGuid();var now=DateTimeOffset.UtcNow.ToString("O");
++        var auditReason=$"{reason} | LOTE 048: {batch}";
++        foreach(var row in checkedRows)
++        {
++            await using(var q=c.CreateCommand())
++            {
++                q.Transaction=tx;
++                q.CommandText=@"INSERT INTO credit_account_deletions_046
++(account_id,sale_id,removed_balance,net_paid,operator_id,reason,created_at)
++VALUES($account,$sale,$balance,$paid,$op,$reason,$at)";
++                Add(q,"$account",row.Account);Add(q,"$sale",row.Sale);Add(q,"$balance",row.Balance);
++                Add(q,"$paid",row.Paid);Add(q,"$op",operatorId);Add(q,"$reason",auditReason);Add(q,"$at",now);
++                await q.ExecuteNonQueryAsync(ct);
++            }
++            await using(var q=c.CreateCommand())
++            {
++                q.Transaction=tx;
++                q.CommandText=@"UPDATE credit_accounts SET balance=0,status='Cancelled',
++notes=COALESCE(notes,'')||$note WHERE id=$account AND status<>'Cancelled'";
++                Add(q,"$note",$" | EXCLUÍDO ADMINISTRATIVAMENTE: {auditReason}");Add(q,"$account",row.Account);
++                if(await q.ExecuteNonQueryAsync(ct)!=1)throw new InvalidOperationException("Conta alterada durante exclusão. Todo o lote foi desfeito.");
++            }
++            if(row.Balance>0)
++            {
++                await using var q=c.CreateCommand();q.Transaction=tx;
++                q.CommandText=@"INSERT INTO credit_entries
++(id,customer_id,sale_id,type,amount,due_at,created_at,reason)
++VALUES($id,$customer,$sale,'Credit',$amount,NULL,$at,'EXCLUSÃO ADMINISTRATIVA DE CREDIÁRIO')";
++                Add(q,"$id",Guid.NewGuid());Add(q,"$customer",row.Customer);Add(q,"$sale",row.Sale);
++                Add(q,"$amount",row.Balance);Add(q,"$at",now);await q.ExecuteNonQueryAsync(ct);
++            }
++            await using(var q=c.CreateCommand())
++            {
++                q.Transaction=tx;
++                q.CommandText=@"INSERT INTO sale_events(id,sale_id,event_type,operator_id,reason,details,created_at)
++VALUES($id,$sale,'CreditAccountDeleted',$op,$reason,$details,$at)";
++                Add(q,"$id",Guid.NewGuid());Add(q,"$sale",row.Sale);Add(q,"$op",operatorId);
++                Add(q,"$reason",auditReason);
++                Add(q,"$details",$"Lote {batch}; conta {row.Account}; saldo baixado {row.Balance}; pagamentos preservados {row.Paid}");
++                Add(q,"$at",now);await q.ExecuteNonQueryAsync(ct);
++            }
++        }
++        await tx.CommitAsync(ct);
++        return new(batch,checkedRows.Select(row=>new CreditDeletion046(
++            row.Account,row.Sale,row.Balance,row.Paid,operatorId,auditReason)).ToArray());
++    }
++}
+diff --git a/src/OncaPDV.Infrastructure/OperationalServices.cs b/src/OncaPDV.Infrastructure/OperationalServices.cs
+index 5a25b08..c063027 100644
+--- a/src/OncaPDV.Infrastructure/OperationalServices.cs
++++ b/src/OncaPDV.Infrastructure/OperationalServices.cs
+@@ -7,7 +7,11 @@ using OncaPDV.Application;
+ using OncaPDV.Domain;
+ namespace OncaPDV.Infrastructure;
+ 
+-public sealed record CreditView(Guid Id,Guid CustomerId,string Customer,long SaleNumber,decimal Original,decimal Paid,decimal Balance,DateTimeOffset DueAt,CreditStatus Status);
++public sealed record CreditView(Guid Id,Guid CustomerId,string Customer,long SaleNumber,decimal Original,decimal Paid,decimal Balance,DateTimeOffset DueAt,CreditStatus Status)
++{
++    // UI-only checkbox state; not stored in the database.
++    public bool MarkedForBulk048 { get; set; }
++}
+ public sealed record CreditMovement(Guid Id,decimal Amount,PaymentMethod Method,DateTimeOffset CreatedAt,string? Notes);
+ public sealed record SalesSummary(int Quantity,decimal Gross,decimal Discounts,decimal Net,decimal Cash,decimal Pix,decimal Debit,decimal Credit,decimal StoreCredit,decimal CreditReceipts);
+ public sealed record StockView(string Product,string Code,decimal Stock,decimal Minimum,decimal Cost,decimal Price,decimal Estimated);
+diff --git a/tests/OncaPDV.Tests/CreditSafety046Tests.cs b/tests/OncaPDV.Tests/CreditSafety046Tests.cs
+index ffc0a45..8e8f893 100644
+--- a/tests/OncaPDV.Tests/CreditSafety046Tests.cs
++++ b/tests/OncaPDV.Tests/CreditSafety046Tests.cs
+@@ -208,4 +208,109 @@ VALUES($id,$session,'StoreCreditReceipt',15,$account,'SIMULACAO ERRO ANTIGO',$at
+         }
+         finally{try{if(Directory.Exists(root))Directory.Delete(root,true);}catch{}}
+     }
++    private static async Task<Guid> AnotherAccount(OncaDatabase db,Guid customer,Guid product,Guid op,Guid session)
++    {
++        var cart=new Cart{CustomerId=customer};
++        cart.AddCustom(product,"CREDIT046","OUTRA VENDA",1,100);
++        var sale=await new SqliteSaleRepository(db,new SystemClock()).CompleteAsync(cart,
++            new[]{new Payment(PaymentMethod.StoreCredit,100)},op,session);
++        await using var c=db.Open();await using var q=c.CreateCommand();
++        q.CommandText="SELECT id FROM credit_accounts WHERE sale_id=$sale";
++        q.Parameters.AddWithValue("$sale",sale.Id.ToString());
++        return Guid.Parse(Convert.ToString(await q.ExecuteScalarAsync())!);
++    }
++
++    [Fact]
++    public async Task BulkRemovesTwoAccountsAtomicallyAndKeepsReceiptsCashSalesAndStock()
++    {
++        var root=Path.Combine(Path.GetTempPath(),"onca048-bulk-"+Guid.NewGuid().ToString("N"));
++        try
++        {
++            var f=await Fixture(root);
++            var other=await AnotherAccount(f.Db,f.Customer,f.Product,f.Operator,f.Session);
++            var guard=new CreditSafety046(f.Db);
++            var intent=await guard.PrepareAsync(f.Account,40,PaymentMethod.Pix,f.Operator,f.Session,"Parcial");
++            await new SqliteCreditRepository(f.Db,new SystemClock()).ReceiveOnceAsync(
++                f.Account,40,PaymentMethod.Pix,f.Operator,f.Session,"Parcial",intent.RequestId);
++            await guard.AcknowledgeAsync(intent);
++            var bulk=new CreditBulk048(f.Db);
++            var result=await bulk.DeleteManyAsync(new[]{f.Account,other},f.Operator,"ADMIN: teste | MOTIVO: baixa de contas");
++            Assert.Equal(2,result.Count);Assert.Equal(160m,result.Forgiven);Assert.Equal(40m,result.Paid);
++            Assert.Equal(2m,await Value(f.Db,"SELECT COUNT(*) FROM credit_account_deletions_046"));
++            Assert.Equal(2m,await Value(f.Db,"SELECT COUNT(*) FROM credit_accounts WHERE status='Cancelled' AND balance=0"));
++            Assert.Equal(2m,await Value(f.Db,"SELECT COUNT(*) FROM sales WHERE status='Completed'"));
++            Assert.Equal(18m,await Value(f.Db,$"SELECT stock FROM products WHERE id='{f.Product}'"));
++            Assert.Equal(1m,await Value(f.Db,"SELECT COUNT(*) FROM credit_receipts"));
++            Assert.Equal(40m,await Value(f.Db,"SELECT COALESCE(SUM(amount),0) FROM cash_movements WHERE type='StoreCreditReceipt'"));
++            Assert.Equal(160m,await Value(f.Db,"SELECT COALESCE(SUM(amount),0) FROM credit_entries WHERE reason='EXCLUSÃO ADMINISTRATIVA DE CREDIÁRIO'"));
++            Assert.Equal(2m,await Value(f.Db,"SELECT COUNT(*) FROM sale_events WHERE event_type='CreditAccountDeleted'"));
++            var ops=new OperationalService(f.Db,Paths(root));
++            Assert.Empty(await ops.CreditsAsync());
++            Assert.Equal(2,(await ops.CreditsAsync("Excluídos")).Count);
++            await Assert.ThrowsAsync<InvalidOperationException>(()=>bulk.DeleteManyAsync(new[]{f.Account,other},f.Operator,"Repetição"));
++            Assert.Equal(2m,await Value(f.Db,"SELECT COUNT(*) FROM credit_account_deletions_046"));
++        }
++        finally{try{if(Directory.Exists(root))Directory.Delete(root,true);}catch{}}
++    }
++
++    [Fact]
++    public async Task BulkWithPendingReceiptRollsBackAllAccounts()
++    {
++        var root=Path.Combine(Path.GetTempPath(),"onca048-pending-"+Guid.NewGuid().ToString("N"));
++        try
++        {
++            var f=await Fixture(root);
++            var other=await AnotherAccount(f.Db,f.Customer,f.Product,f.Operator,f.Session);
++            await new CreditSafety046(f.Db).PrepareAsync(other,20,PaymentMethod.Pix,f.Operator,f.Session,null);
++            await Assert.ThrowsAsync<InvalidOperationException>(()=>new CreditBulk048(f.Db)
++                .DeleteManyAsync(new[]{f.Account,other},f.Operator,"Motivo registrado"));
++            Assert.Equal(0m,await Value(f.Db,"SELECT COUNT(*) FROM credit_account_deletions_046"));
++            Assert.Equal(200m,await Value(f.Db,"SELECT SUM(balance) FROM credit_accounts"));
++            Assert.Equal(0m,await Value(f.Db,"SELECT COUNT(*) FROM sale_events WHERE event_type='CreditAccountDeleted'"));
++        }
++        finally{try{if(Directory.Exists(root))Directory.Delete(root,true);}catch{}}
++    }
++
++    [Fact]
++    public async Task BulkWithCashDifferenceRollsBackAllAccounts()
++    {
++        var root=Path.Combine(Path.GetTempPath(),"onca048-cash-"+Guid.NewGuid().ToString("N"));
++        try
++        {
++            var f=await Fixture(root);
++            var other=await AnotherAccount(f.Db,f.Customer,f.Product,f.Operator,f.Session);
++            await using(var c=f.Db.Open())await using(var q=c.CreateCommand())
++            {
++                q.CommandText=@"INSERT INTO cash_movements
++(id,session_id,type,amount,origin_id,reason,created_at)
++VALUES($id,$session,'StoreCreditReceipt',9,$account,'SIMULADO',$at)";
++                q.Parameters.AddWithValue("$id",Guid.NewGuid().ToString());
++                q.Parameters.AddWithValue("$session",f.Session.ToString());
++                q.Parameters.AddWithValue("$account",other.ToString());
++                q.Parameters.AddWithValue("$at",DateTimeOffset.Now.ToString("O"));
++                await q.ExecuteNonQueryAsync();
++            }
++            await Assert.ThrowsAsync<InvalidOperationException>(()=>new CreditBulk048(f.Db)
++                .DeleteManyAsync(new[]{f.Account,other},f.Operator,"Motivo registrado"));
++            Assert.Equal(0m,await Value(f.Db,"SELECT COUNT(*) FROM credit_account_deletions_046"));
++            Assert.Equal(200m,await Value(f.Db,"SELECT SUM(balance) FROM credit_accounts"));
++        }
++        finally{try{if(Directory.Exists(root))Directory.Delete(root,true);}catch{}}
++    }
++
++    [Fact]
++    public async Task BulkDeduplicatesIdsAndRejectsEmptySelection()
++    {
++        var root=Path.Combine(Path.GetTempPath(),"onca048-ids-"+Guid.NewGuid().ToString("N"));
++        try
++        {
++            var f=await Fixture(root);var bulk=new CreditBulk048(f.Db);
++            await Assert.ThrowsAsync<InvalidOperationException>(()=>bulk.DeleteManyAsync(Array.Empty<Guid>(),f.Operator,"Motivo registrado"));
++            var result=await bulk.DeleteManyAsync(new[]{f.Account,f.Account},f.Operator,"Motivo registrado");
++            Assert.Equal(1,result.Count);
++            Assert.Equal(1m,await Value(f.Db,"SELECT COUNT(*) FROM credit_account_deletions_046"));
++        }
++        finally{try{if(Directory.Exists(root))Directory.Delete(root,true);}catch{}}
++    }
++
+ }
