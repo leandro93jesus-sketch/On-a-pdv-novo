@@ -1,0 +1,69 @@
+name: Clean ONCA 0.1.47 source package
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-047-clean-source.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  source:
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.46-SOURCE-COMPLETO.zip
+          run-id: 36487855763
+          github-token: ${{ github.token }}
+          path: input
+      - name: Repackage only real source files and handoff
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $orig=Join-Path (Resolve-Path input).Path 'ONCA-PDV-PRO-0.1.46-SOURCE-COMPLETO.zip'
+          New-Item source -ItemType Directory -Force|Out-Null
+          Expand-Archive $orig source -Force
+          $p='source\src\OncaPDV.Desktop\OncaPDV.Desktop.csproj'
+          if(-not (Test-Path $p)){throw 'Project missing'}
+          $x=Get-Content $p -Raw
+          $meta=@'
+            <PropertyGroup>
+              <Version>0.1.47</Version>
+              <AssemblyVersion>0.1.47.0</AssemblyVersion>
+              <FileVersion>0.1.47.0</FileVersion>
+              <InformationalVersion>0.1.47-windows</InformationalVersion>
+              <Product>ONÇA PDV PRO</Product>
+              <Company>Onça Produtos de Limpeza</Company>
+              <Description>ONÇA PDV PRO - Controle de vendas e crediário</Description>
+            </PropertyGroup>
+          '@
+          if($x -notmatch '</Project>'){throw 'Invalid project'}
+          $x=$x.Replace('</Project>',$meta+[Environment]::NewLine+'</Project>')
+          Set-Content $p $x -Encoding UTF8
+          @'
+          Versao 0.1.47: mesmos arquivos comerciais da 0.1.46, apenas
+          metadados do executavel corrigidos e distribuicao em pasta sem single-file.
+          Consulte AI-HANDOFF.md e AI-HANDOFF-046.md antes de alterar.
+          Os testes gerais da arvore fonte anterior passaram (152).
+          Nao contem banco comercial, PIN ou credenciais.
+          '@ | Set-Content 'source\AI-HANDOFF-047.md' -Encoding UTF8
+          Get-ChildItem source -Directory -Recurse | Where-Object {$_.Name -in @('bin','obj','TestResults','package','portable046')} | Sort-Object FullName -Descending | Remove-Item -Recurse -Force
+          Get-ChildItem source -File -Recurse | Where-Object {$_.Extension -in @('.exe','.db','.pdb')} | Remove-Item -Force
+          if(-not (Test-Path 'source\src\OncaPDV.Infrastructure\CreditSafety046.cs')){throw 'Original credit source missing'}
+          if(-not (Test-Path 'source\tests\OncaPDV.Tests\CreditSafety046Tests.cs')){throw 'Credit tests missing'}
+          $zip='ONCA-PDV-PRO-0.1.47-CODIGO-FONTE.zip'
+          Compress-Archive -Path 'source\*' -DestinationPath $zip -CompressionLevel Optimal -Force
+          $bytes=(Get-Item $zip).Length
+          Write-Host "CLEAN_SOURCE_BYTES=$bytes"
+          if($bytes -gt 30000000 -or $bytes -lt 20000){throw 'Unexpected source package size'}
+          Write-Host "CLEAN_SOURCE_SHA256=$((Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant())"
+      - name: Replace source asset while keeping exact proven Windows binary
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload v0.1.47-windows-pasta '.\ONCA-PDV-PRO-0.1.47-CODIGO-FONTE.zip' --repo leandro93jesus-sketch/On-a-pdv-novo --clobber
+          if($LASTEXITCODE -ne 0){throw 'Source replacement failed'}
+          gh release view v0.1.47-windows-pasta --repo leandro93jesus-sketch/On-a-pdv-novo --json url,assets
