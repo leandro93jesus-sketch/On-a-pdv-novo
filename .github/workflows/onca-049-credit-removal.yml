@@ -1,9 +1,9 @@
 name: ONCA 0.1.49 credit removal Windows verified
 on:
   push:
-    branches: [feature/credit-bulk-049]
+    branches: [feature/credit-removal-049]
     paths:
-      - '.github/workflows/onca-049-credit-bulk.yml'
+      - '.github/workflows/onca-049-credit-removal.yml'
   workflow_dispatch:
 permissions:
   contents: write
@@ -68,7 +68,7 @@ jobs:
         run: |
           $x=Get-Content src/OncaPDV.Desktop/CreditWindow.xaml -Raw
           $code=Get-Content src/OncaPDV.Desktop/CreditWindow.xaml.cs -Raw
-          foreach($handler in @('MarkChanged049_Click','MarkAll049_Click','ClearMarks049_Click','DeleteMarked049_Click')) {
+          foreach($handler in @('MarkChanged048_Click','MarkAll048_Click','ClearMarks048_Click','DeleteMarked048_Click','Audit049_Click')) {
             if(-not $x.Contains($handler) -or -not $code.Contains('void '+$handler+'(')){throw "Missing credit bulk GUI handler $handler"}
           }
           Write-Host 'GUI_BULK_BUTTON_WIRING=YES'
