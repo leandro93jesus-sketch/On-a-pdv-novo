@@ -13,7 +13,7 @@ if sys.argv[1]=="seed":
         c.execute("INSERT INTO products(id,internal_code,name,cost_price,sale_price,stock,minimum_stock,unit,active) VALUES(?,?,?,?,?,?,?,?,?)",
                   (product,"CREDITGUI046","Item credit test",5,100,19,0,"UN",1))
         c.execute("INSERT INTO cash_sessions(id,operator_id,opened_at,opening_amount) VALUES(?,?,?,0)",(session,op,now))
-        c.execute("INSERT INTO sales(id,number,created_at,operator_id,customer_id,cash_session_id,discount,total,status) VALUES(?,?,?,?,?,?,?,'Completed')",
+        c.execute("INSERT INTO sales(id,number,created_at,operator_id,customer_id,cash_session_id,discount,total,status) VALUES(?,?,?,?,?,?,?,?,'Completed')",
                   (sale,98101,now,op,customer,session,0,100))
         c.execute("INSERT INTO sale_items(id,sale_id,product_id,code,name,quantity,unit_price,subtotal) VALUES(?,?,?,?,?,?,?,?)",
                   (str(uuid.uuid4()),sale,product,"CREDITGUI046","Item credit test",1,100,100))
