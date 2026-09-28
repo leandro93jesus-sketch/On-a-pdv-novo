@@ -134,8 +134,9 @@ p.write_text(s,encoding="utf-8")
 # session happened to be last for the customer account.
 p=i/"AdvancedOperations.cs";s=p.read_text(encoding="utf-8-sig")
 old='''var session=await ScalarText(c,tx,"SELECT session_id FROM cash_movements WHERE origin_id=$a AND type='StoreCreditReceipt' ORDER BY created_at DESC LIMIT 1",("$a",account),ct);'''
-s=once(s,old,'var session=await ReceiptCashSession045(c,tx,receipt.Id,ct);',"sale reversal cash session")
-s=once(s,old,'var session=await ReceiptCashSession045(c,tx,receiptId,ct);',"receipt reversal cash session")
+if s.count(old)!=2:raise RuntimeError("Expected two legacy account-wide receipt reversal lookups")
+s=s.replace(old,'var session=await ReceiptCashSession045(c,tx,receipt.Id,ct);',1)
+s=s.replace(old,'var session=await ReceiptCashSession045(c,tx,receiptId,ct);',1)
 helper=r'''
     private static async Task<string> ReceiptCashSession045(SqliteConnection c,SqliteTransaction tx,Guid receiptId,CancellationToken ct)
     {
