@@ -1,0 +1,52 @@
+name: Direct EXE and Complete Source ONCA 0.1.45
+on:
+  push:
+    paths:
+      - '.github/workflows/onca-045-direct-download.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.1.45-CREDIARIO-CORRIGIDO.exe
+          run-id: 36480406444
+          github-token: ${{ github.token }}
+          path: release-files/exe
+      - uses: actions/download-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-FONTE-COMPLETA-0.1.45.zip
+          run-id: 36480406444
+          github-token: ${{ github.token }}
+          path: release-files/source
+      - name: Release exactly verified build and complete source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $exe=Join-Path (Resolve-Path 'release-files/exe').Path 'ONCA-PDV-PRO-0.1.45-CREDIARIO-CORRIGIDO.exe'
+          $zip=Join-Path (Resolve-Path 'release-files/source').Path 'ONCA-PDV-PRO-FONTE-COMPLETA-0.1.45.zip'
+          if(-not (Test-Path $exe) -or (Get-Item $exe).Length -lt 100MB){throw 'Portable EXE missing or suspicious size'}
+          if(-not (Test-Path $zip) -or (Get-Item $zip).Length -lt 50KB){throw 'Source archive missing or suspicious size'}
+          $fs=[System.IO.File]::OpenRead($exe)
+          try{if($fs.ReadByte() -ne 77 -or $fs.ReadByte() -ne 90){throw 'Not a Windows executable'}}finally{$fs.Dispose()}
+          Add-Type -AssemblyName System.IO.Compression
+          $archive=[System.IO.Compression.ZipFile]::OpenRead($zip)
+          try{
+            $paths=@($archive.Entries|ForEach-Object {$_.FullName})
+            foreach($must in @('src/OncaPDV.Desktop/MainWindow.xaml.cs','src/OncaPDV.Infrastructure/CustomerCredit.cs','tests/OncaPDV.Tests/CreditIntegrity045Tests.cs','docs/HANDOFF-ONCA-PDV-0.1.45.md')){
+              if(-not @($paths|Where-Object {$_.EndsWith($must)}).Count){throw "Missing source: $must"}
+            }
+          }finally{$archive.Dispose()}
+          Write-Host "PORTABLE_EXE_SHA256=$((Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host "FULL_SOURCE_ZIP_SHA256=$((Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant())"
+          gh release create v0.1.45-crediario-fonte $exe $zip --repo leandro93jesus-sketch/On-a-pdv-novo --target 32d470e7f7ab8f2374e44f8b97da0cbe8dd0827e --title 'ONCA PDV PRO 0.1.45 - CREDIARIO E FONTE COMPLETA' --notes 'EXE portatil Windows x64 e ZIP completo de codigo-fonte independente. Revisao do crediario: criacao consolidada de divida por venda, recebimento idempotente com identificador de operacao, saldo parcial e total, estorno no caixa especifico e relatorios liquidos. Mantidos MULTIVENDAS, exclusao logica e cancelamento administrativo. 146 testes aprovados na build e apos extrair o ZIP em nova pasta; compilacao zero erros, testes de interface de PIN, cancelamento, exclusao e abas aprovados. Arquivo inclui src, tests, NuGet.Config, documentacao e prompt para outra IA; sem banco de clientes nem segredos. Faça backup antes de atualizar; mantenha 0.1.44 para retorno. Impressora fisica e banco real da loja nao foram testados.'
+          if($LASTEXITCODE -ne 0){throw 'Release upload failed'}
+          gh release view v0.1.45-crediario-fonte --repo leandro93jesus-sketch/On-a-pdv-novo --json assets,url
+          if($LASTEXITCODE -ne 0){throw 'Release verification failed'}
