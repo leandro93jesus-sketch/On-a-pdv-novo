@@ -34,7 +34,7 @@ jobs:
           $patch=(Resolve-Path onca052.patch).Path
           $hash=(Get-FileHash $patch -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "SOURCE_PATCH_SHA256=$hash"
-          if($hash -ne 'e7fe4547017bc39488c3117a3d9831470f422893d1d9686c7b821076f7845585'){throw 'Patch SHA256 mismatch'}
+          if($hash -ne 'b9df5db3ca6c639dbb6f90b30d074ea32aece75dda8c7ad6c7ac102be73695ef'){throw 'Patch SHA256 mismatch'}
           git apply --check --directory=source --whitespace=nowarn $patch
           if($LASTEXITCODE -ne 0){throw 'Patch incompatible with 0.1.50 source'}
           git apply --directory=source --whitespace=nowarn $patch
