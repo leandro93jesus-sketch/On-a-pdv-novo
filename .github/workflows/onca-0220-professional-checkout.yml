@@ -1,0 +1,201 @@
+name: ONCA 0.2.2 professional checkout Diversos preserved
+on:
+  push:
+    branches: [feature/pro-ui-0220]
+    paths:
+      - '.github/workflows/onca-0220-professional-checkout.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  build-release:
+    runs-on: windows-2025
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download exact 0.2.1 source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item input -ItemType Directory -Force | Out-Null
+          gh release download v0.2.1-profissional --repo leandro93jesus-sketch/On-a-pdv-novo --pattern 'ONCA-PDV-PRO-0.2.1-CODIGO-FONTE.zip' --dir input --clobber
+          if($LASTEXITCODE -ne 0){throw 'Could not download exact 0.2.1 source'}
+          Expand-Archive (Resolve-Path 'input/ONCA-PDV-PRO-0.2.1-CODIGO-FONTE.zip').Path source -Force
+
+      - name: Freeze printing and baseline main code
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $files=@(
+            'src/OncaPDV.Printing/OncaPDV.Printing.csproj',
+            'src/OncaPDV.Printing/PrinterDiscovery.cs',
+            'src/OncaPDV.Printing/Printing.cs',
+            'src/OncaPDV.Desktop/ConfiguredPhysicalPrintService.cs',
+            'src/OncaPDV.Desktop/PrinterSettingsWindow.xaml',
+            'src/OncaPDV.Desktop/PrinterSettingsWindow.xaml.cs',
+            'src/OncaPDV.Desktop/ReceiptPreviewWindow.xaml',
+            'src/OncaPDV.Desktop/ReceiptPreviewWindow.xaml.cs',
+            'src/OncaPDV.Desktop/PaymentWindow.xaml',
+            'src/OncaPDV.Desktop/PaymentWindow.xaml.cs'
+          )
+          $rows=@()
+          foreach($f in $files){
+            $p=Join-Path source $f
+            if(-not(Test-Path $p)){throw "Missing frozen printing file: $f"}
+            $rows += [pscustomobject]@{File=$f;Sha=(Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant()}
+          }
+          $rows|ConvertTo-Json|Set-Content printing-baseline.json -Encoding UTF8
+          Copy-Item source/src/OncaPDV.Desktop/MainWindow.xaml.cs mainwindow-baseline.cs
+
+      - name: Apply reviewed 0.2.2 patch
+        shell: pwsh
+        run: |
+          python -c "import base64,gzip,pathlib; p=pathlib.Path('patches/onca-0220-from-0210.patch.gz.b64'); pathlib.Path('onca0220.patch').write_bytes(gzip.decompress(base64.b64decode(p.read_text().strip())))"
+          if($LASTEXITCODE -ne 0){throw 'Patch unpack failed'}
+          $patch=(Resolve-Path onca0220.patch).Path
+          $hash=(Get-FileHash $patch -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "PATCH_SHA256=$hash"
+          if($hash -ne '9347515989fb2251c5e7f0bd28c21f58c0dcfeb00512a18f903dcaace2d812ef'){throw 'Patch SHA mismatch'}
+          git apply --check --directory=source --whitespace=nowarn $patch
+          if($LASTEXITCODE -ne 0){throw 'Patch incompatible with 0.2.1 source'}
+          git apply --directory=source --whitespace=nowarn $patch
+          if($LASTEXITCODE -ne 0){throw 'Patch apply failed'}
+          Write-Host 'EXACT_0220_PATCH_APPLIED=YES'
+
+      - name: Prove printing unchanged and MainWindow code narrowly changed
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $baseline=Get-Content printing-baseline.json -Raw|ConvertFrom-Json
+          foreach($row in $baseline){
+            $after=(Get-FileHash (Join-Path source $row.File) -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($after -ne $row.Sha){throw "PRINTING FREEZE VIOLATION: $($row.File)"}
+          }
+          @'
+          from pathlib import Path
+          before=Path('mainwindow-baseline.cs').read_bytes()
+          after=Path('source/src/OncaPDV.Desktop/MainWindow.xaml.cs').read_bytes()
+          allowed=b'        ProductEntryTabs.SelectedIndex = 1;\r\n'
+          if after.count(allowed)!=1:
+              raise SystemExit('Expected one allowed Diversos-tab line')
+          normalized=after.replace(allowed,b'',1)
+          if normalized!=before:
+              raise SystemExit('MainWindow.xaml.cs changed outside FocusDiversos')
+          print('MAINWINDOW_CODE_ONLY_DIVERSOS_FOCUS=PASS')
+          '@ | Set-Content verify_main.py -Encoding UTF8
+          python verify_main.py
+          if($LASTEXITCODE -ne 0){throw 'MainWindow code isolation failed'}
+          Write-Host 'PRINTING_FREEZE_0220=PASS'
+
+      - name: Audit professional checkout and Diversos
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach($f in @('src/OncaPDV.Desktop/MainWindow.xaml','src/OncaPDV.Desktop/DiversosWindow.xaml','src/OncaPDV.Desktop/CreditWindow.xaml','src/OncaPDV.Desktop/Finance052Window.xaml','src/OncaPDV.Desktop/IntegrityCenter151Window.xaml')){
+            try{[xml](Get-Content $f -Raw)|Out-Null}catch{throw "Invalid XAML: $f"}
+          }
+          $main=Get-Content src/OncaPDV.Desktop/MainWindow.xaml -Raw
+          foreach($required in @(
+            'x:Name="ProductEntryTabs"',
+            'Header="PRODUTOS / SCANNER"',
+            'Header="DIVERSOS  [F4]"',
+            'Content="Diversos" Click="Diversos_Click"',
+            'Content="SALVAR EM ESPERA" Click="HoldSale_Click"',
+            'Content="VENDAS CONCLUÍDAS" Click="CompletedSalesStable_Click"',
+            'Content="LIMPAR"',
+            '0.2.2'
+          )){
+            if(-not $main.Contains($required)){throw "Missing professional checkout element: $required"}
+          }
+          $div=Get-Content src/OncaPDV.Desktop/DiversosWindow.xaml -Raw
+          if(-not $div.Contains('Diversos — ONÇA PDV PRO 0.2.2')){throw 'Dedicated Diversos window version missing'}
+          if(-not $div.Contains('ADICIONAR AO CARRINHO')){throw 'Diversos primary action missing'}
+          Write-Host 'DIVERSOS_PRESERVED_AS_FIRST_CLASS_TAB=PASS'
+          Write-Host 'PRO_CHECKOUT_0220_STRUCTURE=PASS'
+
+      - name: Restore and run full regression
+        shell: pwsh
+        working-directory: source
+        run: |
+          dotnet restore tests/OncaPDV.Tests/OncaPDV.Tests.csproj --configfile NuGet.Config
+          if($LASTEXITCODE -ne 0){throw 'Restore failed'}
+          dotnet test tests/OncaPDV.Tests/OncaPDV.Tests.csproj -c Release --no-restore --logger 'console;verbosity=minimal'
+          if($LASTEXITCODE -ne 0){throw 'Tests failed'}
+
+      - name: Build WPF with warnings as errors
+        shell: pwsh
+        working-directory: source
+        run: |
+          dotnet restore src/OncaPDV.Desktop/OncaPDV.Desktop.csproj --configfile NuGet.Config
+          if($LASTEXITCODE -ne 0){throw 'Desktop restore failed'}
+          dotnet build src/OncaPDV.Desktop/OncaPDV.Desktop.csproj -c Release --no-restore -warnaserror
+          if($LASTEXITCODE -ne 0){throw 'Desktop build failed'}
+
+      - name: Publish both Windows formats
+        shell: pwsh
+        working-directory: source
+        run: |
+          dotnet publish src/OncaPDV.Desktop/OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false -o package/ONCA-PDV-PRO-0.2.2-WIN64
+          if($LASTEXITCODE -ne 0){throw 'Folder publish failed'}
+          dotnet publish src/OncaPDV.Desktop/OncaPDV.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false -o package/single
+          if($LASTEXITCODE -ne 0){throw 'Single EXE publish failed'}
+          foreach($p in @('package/ONCA-PDV-PRO-0.2.2-WIN64/OncaPDV.Desktop.exe','package/single/OncaPDV.Desktop.exe')){
+            if(-not(Test-Path $p)){throw "Missing EXE: $p"}
+            $v=[Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $p).Path)
+            if($v.FileVersion -ne '0.2.2.0'){throw "Wrong version metadata: $($v.FileVersion)"}
+          }
+
+      - name: Start both builds with isolated databases
+        shell: pwsh
+        working-directory: source
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach($kind in @('ONCA-PDV-PRO-0.2.2-WIN64','single')){
+            $exe=(Resolve-Path "package/$kind/OncaPDV.Desktop.exe").Path
+            $env:ONCA_PDV_DATA_ROOT=Join-Path $env:RUNNER_TEMP ('onca022-'+$kind+'-'+[Guid]::NewGuid().ToString('N'))
+            New-Item $env:ONCA_PDV_DATA_ROOT -ItemType Directory -Force|Out-Null
+            $p=Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+            Start-Sleep -Seconds 10
+            $p.Refresh()
+            if($p.HasExited){throw "$kind crashed at startup"}
+            if(-not(Test-Path (Join-Path $env:ONCA_PDV_DATA_ROOT 'data/onca-pdv-pro.db'))){throw "$kind did not initialize DB"}
+            $p.CloseMainWindow()|Out-Null
+            Start-Sleep -Seconds 2
+            $p.Refresh()
+            if(-not $p.HasExited){$p.Kill($true)}
+            Write-Host "$kind : WINDOWS_STARTUP_AND_ISOLATED_DB=PASS"
+          }
+
+      - name: Package and publish tested 0.2.2
+        shell: pwsh
+        working-directory: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          @'
+          ONÇA PDV PRO 0.2.2 — CHECKOUT PROFISSIONAL
+
+          DIVERSOS foi preservado e promovido a aba própria no Caixa.
+          Continua disponível no menu, no atalho F4 e em janela dedicada.
+          Venda em espera e vendas concluídas ficaram mais acessíveis.
+          Impressão permanece congelada e protegida pelo pipeline.
+
+          Faça backup de %LOCALAPPDATA%\Onca PDV Pro antes de atualizar.
+          Windows 10/11 x64. Sem assinatura digital.
+          '@ | Set-Content package/ONCA-PDV-PRO-0.2.2-WIN64/LEIA-ME.txt -Encoding UTF8
+          Compress-Archive -Path package/ONCA-PDV-PRO-0.2.2-WIN64 -DestinationPath ONCA-PDV-PRO-0.2.2-WINDOWS-PORTATIL.zip -CompressionLevel Optimal -Force
+          Copy-Item package/single/OncaPDV.Desktop.exe ONCA-PDV-PRO-0.2.2-PROFISSIONAL.exe
+          New-Item source-clean -ItemType Directory -Force|Out-Null
+          foreach($dir in @('src','tests','docs')){Copy-Item $dir source-clean/$dir -Recurse -Force}
+          foreach($file in @('NuGet.Config','OncaPDV.slnx','README.md','AI-HANDOFF.md','AI-HANDOFF-0200.md','AI-HANDOFF-0210.md','AI-HANDOFF-0220.md')){if(Test-Path $file){Copy-Item $file source-clean/$file -Force}}
+          Get-ChildItem source-clean -Directory -Recurse|Where-Object {$_.Name -in @('bin','obj','TestResults')}|Sort-Object FullName -Descending|Remove-Item -Recurse -Force
+          Compress-Archive -Path source-clean/* -DestinationPath ONCA-PDV-PRO-0.2.2-CODIGO-FONTE.zip -CompressionLevel Optimal -Force
+          Write-Host "DIRECT_EXE_SHA256=$((Get-FileHash ONCA-PDV-PRO-0.2.2-PROFISSIONAL.exe -Algorithm SHA256).Hash.ToLowerInvariant())"
+          gh release create v0.2.2-profissional ONCA-PDV-PRO-0.2.2-PROFISSIONAL.exe ONCA-PDV-PRO-0.2.2-WINDOWS-PORTATIL.zip ONCA-PDV-PRO-0.2.2-CODIGO-FONTE.zip --repo leandro93jesus-sketch/On-a-pdv-novo --target ${{ github.sha }} --title "ONCA PDV PRO 0.2.2 - CHECKOUT PROFISSIONAL" --notes "Melhora a frente de caixa sem retirar DIVERSOS: agora DIVERSOS e uma aba de primeira classe, permanece no menu, F4 e janela dedicada. Traz venda em espera e vendas concluidas para o fluxo principal. Impressao permanece congelada; MainWindow.xaml.cs so recebe a linha que seleciona a aba DIVERSOS no F4. Regressao completa, build WPF e smoke Windows obrigatorios."
+          if($LASTEXITCODE -ne 0){throw 'Release failed'}
