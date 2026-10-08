@@ -82,6 +82,20 @@ jobs:
           )){if(-not (Test-Path (Join-Path source $f))){throw "Missing 0.2.1 source: $f"}}
           Write-Host 'EXACT_0210_PATCH_APPLIED=YES'
 
+      - name: Merge professional resource dictionaries safely
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $fix=(Resolve-Path 'patches/0210/resource-dictionary-fix.patch').Path
+          $hash=(Get-FileHash $fix -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "RESOURCE_FIX_SHA256=$hash"
+          if($hash -ne 'f7372c36420ceecfe9aa958b7aed66bb3884b0f819e869766a6e837710dd50ad'){throw 'Resource fix SHA256 mismatch'}
+          git apply --check --directory=source --whitespace=nowarn $fix
+          if($LASTEXITCODE -ne 0){throw 'Resource dictionary fix incompatible'}
+          git apply --directory=source --whitespace=nowarn $fix
+          if($LASTEXITCODE -ne 0){throw 'Resource dictionary fix failed'}
+          Write-Host 'RESOURCE_DICTIONARY_FIX_0210=PASS'
+
       - name: Prove printing payment reprint code did not change
         shell: pwsh
         run: |
