@@ -4,6 +4,7 @@ on:
     branches: [feature/pro-ui-0210]
     paths:
       - '.github/workflows/onca-0210-professional-consistency.yml'
+      - 'patches/0210/**'
   workflow_dispatch:
 permissions:
   contents: write
