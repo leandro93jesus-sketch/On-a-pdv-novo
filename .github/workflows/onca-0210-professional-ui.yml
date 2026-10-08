@@ -53,7 +53,7 @@ jobs:
       - name: Apply reviewed 0.2.1 patch
         shell: pwsh
         run: |
-          python -c "import base64,gzip,pathlib; p=pathlib.Path('patches/onca-0210-from-0200.patch.gz.b64'); pathlib.Path('onca0210.patch').write_bytes(gzip.decompress(base64.b64decode(p.read_text().strip())))"
+          python -c "import base64,gzip,pathlib; parts=[pathlib.Path(f'patches/onca-0210-part{i:02d}.txt').read_text().strip() for i in range(1,5)]; pathlib.Path('onca0210.patch').write_bytes(gzip.decompress(base64.b64decode(''.join(parts))))"
           if($LASTEXITCODE -ne 0){throw 'Patch unpack failed'}
           $patch=(Resolve-Path onca0210.patch).Path
           $hash=(Get-FileHash $patch -Algorithm SHA256).Hash.ToLowerInvariant()
