@@ -87,9 +87,9 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           $fix=(Resolve-Path 'patches/0210/resource-dictionary-fix.patch').Path
-          $hash=(Get-FileHash $fix -Algorithm SHA256).Hash.ToLowerInvariant()
-          Write-Host "RESOURCE_FIX_SHA256=$hash"
-          if($hash -ne 'f7372c36420ceecfe9aa958b7aed66bb3884b0f819e869766a6e837710dd50ad'){throw 'Resource fix SHA256 mismatch'}
+          $hash=(python -c "import hashlib,pathlib; b=pathlib.Path(r'patches/0210/resource-dictionary-fix.patch').read_bytes().replace(b'\r\n',b'\n'); print(hashlib.sha256(b).hexdigest())").Trim()
+          Write-Host "RESOURCE_FIX_NORMALIZED_SHA256=$hash"
+          if($hash -ne 'f7372c36420ceecfe9aa958b7aed66bb3884b0f819e869766a6e837710dd50ad'){throw 'Resource fix normalized SHA256 mismatch'}
           git apply --check --directory=source --whitespace=nowarn $fix
           if($LASTEXITCODE -ne 0){throw 'Resource dictionary fix incompatible'}
           git apply --directory=source --whitespace=nowarn $fix
