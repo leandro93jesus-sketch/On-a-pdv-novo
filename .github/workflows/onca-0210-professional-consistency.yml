@@ -62,7 +62,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          python -c "import base64,gzip,pathlib; p=pathlib.Path('patches/onca-0210-from-0200.patch.gz.b64'); pathlib.Path('onca0210.patch').write_bytes(gzip.decompress(base64.b64decode(p.read_text().strip())))"
+          python -c "import base64,gzip,pathlib; parts=[pathlib.Path(f'patches/0210/part{i:02d}.b64').read_text().strip() for i in range(8)]; b64=''.join(parts); pathlib.Path('onca0210.patch').write_bytes(gzip.decompress(base64.b64decode(b64)))"
           if($LASTEXITCODE -ne 0){throw 'Patch unpack failed'}
           $patch=(Resolve-Path onca0210.patch).Path
           $hash=(Get-FileHash $patch -Algorithm SHA256).Hash.ToLowerInvariant()
