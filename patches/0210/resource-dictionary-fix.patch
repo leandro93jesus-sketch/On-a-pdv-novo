@@ -1,0 +1,60 @@
+diff --git a/src/OncaPDV.Desktop/CreditWindow.xaml b/src/OncaPDV.Desktop/CreditWindow.xaml
+index 831eea7..9567bc7 100644
+--- a/src/OncaPDV.Desktop/CreditWindow.xaml
++++ b/src/OncaPDV.Desktop/CreditWindow.xaml
+@@ -9,9 +9,9 @@
+         FontFamily="Segoe UI">
+     <Window.Resources>
+         <ResourceDictionary>
+-<ResourceDictionary.MergedDictionaries><ResourceDictionary Source="ProfessionalCompatibility0210.xaml"/></ResourceDictionary.MergedDictionaries>
+-            <ResourceDictionary.MergedDictionaries>
++<ResourceDictionary.MergedDictionaries>
+                 <ResourceDictionary Source="ProfessionalTheme0200.xaml"/>
++                <ResourceDictionary Source="ProfessionalCompatibility0210.xaml"/>
+             </ResourceDictionary.MergedDictionaries>
+             <Style x:Key="CreditStatusBadge" TargetType="Border">
+                 <Setter Property="Background" Value="#EEF2EF"/>
+diff --git a/src/OncaPDV.Desktop/Finance052Window.xaml b/src/OncaPDV.Desktop/Finance052Window.xaml
+index 197be96..1c9f521 100644
+--- a/src/OncaPDV.Desktop/Finance052Window.xaml
++++ b/src/OncaPDV.Desktop/Finance052Window.xaml
+@@ -5,8 +5,7 @@
+  WindowStartupLocation="CenterOwner" Background="#F3F6F4" FontFamily="Segoe UI">
+  <Window.Resources>
+   <ResourceDictionary>
+-<ResourceDictionary.MergedDictionaries><ResourceDictionary Source="ProfessionalCompatibility0210.xaml"/></ResourceDictionary.MergedDictionaries>
+-   <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="ProfessionalTheme0200.xaml"/></ResourceDictionary.MergedDictionaries>
++<ResourceDictionary.MergedDictionaries><ResourceDictionary Source="ProfessionalTheme0200.xaml"/><ResourceDictionary Source="ProfessionalCompatibility0210.xaml"/></ResourceDictionary.MergedDictionaries>
+   </ResourceDictionary>
+  </Window.Resources>
+  <Grid Margin="18">
+diff --git a/src/OncaPDV.Desktop/IntegrityCenter151Window.xaml b/src/OncaPDV.Desktop/IntegrityCenter151Window.xaml
+index 61474ea..d8f24ac 100644
+--- a/src/OncaPDV.Desktop/IntegrityCenter151Window.xaml
++++ b/src/OncaPDV.Desktop/IntegrityCenter151Window.xaml
+@@ -5,8 +5,7 @@
+  WindowStartupLocation="CenterOwner" Background="#F3F6F4" FontFamily="Segoe UI">
+  <Window.Resources>
+   <ResourceDictionary>
+-<ResourceDictionary.MergedDictionaries><ResourceDictionary Source="ProfessionalCompatibility0210.xaml"/></ResourceDictionary.MergedDictionaries>
+-   <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="ProfessionalTheme0200.xaml"/></ResourceDictionary.MergedDictionaries>
++<ResourceDictionary.MergedDictionaries><ResourceDictionary Source="ProfessionalTheme0200.xaml"/><ResourceDictionary Source="ProfessionalCompatibility0210.xaml"/></ResourceDictionary.MergedDictionaries>
+   </ResourceDictionary>
+  </Window.Resources>
+  <Grid Margin="18">
+diff --git a/src/OncaPDV.Desktop/MainWindow.xaml b/src/OncaPDV.Desktop/MainWindow.xaml
+index fcb947c..e0846d6 100644
+--- a/src/OncaPDV.Desktop/MainWindow.xaml
++++ b/src/OncaPDV.Desktop/MainWindow.xaml
+@@ -9,9 +9,9 @@
+         KeyDown="Window_KeyDown">
+     <Window.Resources>
+         <ResourceDictionary>
+-<ResourceDictionary.MergedDictionaries><ResourceDictionary Source="ProfessionalCompatibility0210.xaml"/></ResourceDictionary.MergedDictionaries>
+-            <ResourceDictionary.MergedDictionaries>
++<ResourceDictionary.MergedDictionaries>
+                 <ResourceDictionary Source="ProfessionalTheme0200.xaml"/>
++                <ResourceDictionary Source="ProfessionalCompatibility0210.xaml"/>
+             </ResourceDictionary.MergedDictionaries>
+             <Style x:Key="CheckoutMethodButton" TargetType="Button" BasedOn="{StaticResource ProSecondaryButton}">
+                 <Setter Property="MinHeight" Value="54"/>
