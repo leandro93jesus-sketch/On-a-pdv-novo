@@ -91,7 +91,7 @@ jobs:
           if($badVersions.Count){throw "Old visible versions remain: $($badVersions -join ', ')"}
           $main=Get-Content src/OncaPDV.Desktop/MainWindow.xaml -Raw
           if(-not $main.Contains('0.2.1')){throw 'Main window version 0.2.1 missing'}
-          foreach($f in @('CustomersWindow.xaml','PurchasesWindow.xaml','SuppliersWindow.xaml','OperationsWindow.xaml','DocumentsWindow.xaml','SalesWindow.xaml','CreditWindow.xaml','Finance052Window.xaml','IntegrityCenter151Window.xaml')){
+          foreach($f in @('CustomerEditWindow.xaml','CustomerHistoryWindow.xaml','CustomerSearchWindow.xaml','PurchasesWindow.xaml','OperationsWindow.xaml','DocumentsWindow.xaml','SalesManagementWindow.xaml','CreditWindow.xaml','Finance052Window.xaml','IntegrityCenter151Window.xaml','InventoryWindow.xaml','OrdersWindow.xaml','ProductWindow.xaml')){
             if(-not(Test-Path "src/OncaPDV.Desktop/$f")){throw "Expected reviewed window missing: $f"}
           }
           Write-Host 'PROFESSIONAL_CONSISTENCY_0210=PASS'
