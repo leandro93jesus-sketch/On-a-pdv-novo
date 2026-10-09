@@ -125,7 +125,7 @@ jobs:
             'Header="DIVERSOS  [F4]"',
             'Content="Diversos" Click="Diversos_Click"',
             'Content="CONSULTA PREÇO  [F5]"',
-            'Content="SALVAR EM ESPERA  [F6]"',
+            'Content="SALVAR EM ESPERA"',
             'Content="RECUPERAR ESPERA  [F7]"',
             'x:Name="HealthText"',
             'x:Name="CashPulseText"',
