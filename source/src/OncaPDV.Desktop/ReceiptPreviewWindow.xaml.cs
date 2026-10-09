@@ -1,0 +1,1 @@
+using System.Windows;namespace OncaPDV.Desktop;public partial class ReceiptPreviewWindow:Window{public ReceiptPreviewWindow(string text,string title){InitializeComponent();Title=title;ReceiptText.Text=text;}}

@@ -1,0 +1,327 @@
+<Window x:Class="OncaPDV.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="ONÇA PDV PRO 0.2.3 — Operação profissional"
+        Height="900" Width="1540" MinHeight="680" MinWidth="1080"
+        WindowStartupLocation="CenterScreen"
+        Background="#F3F6F4"
+        FontFamily="Segoe UI"
+        KeyDown="Window_KeyDown">
+    <Window.Resources>
+        <ResourceDictionary>
+<ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ProfessionalCompatibility0210.xaml"/>
+                <ResourceDictionary Source="ProfessionalTheme0200.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="CheckoutMethodButton" TargetType="Button" BasedOn="{StaticResource ProSecondaryButton}">
+                <Setter Property="MinHeight" Value="54"/>
+                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="Margin" Value="3"/>
+            </Style>
+            <Style x:Key="MiniActionButton" TargetType="Button" BasedOn="{StaticResource ProSecondaryButton}">
+                <Setter Property="Padding" Value="10,6"/>
+                <Setter Property="MinHeight" Value="32"/>
+                <Setter Property="FontSize" Value="11"/>
+                <Setter Property="Margin" Value="2"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="NavColumn" Width="220"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition x:Name="PaymentColumn" Width="370"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="64"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="42"/>
+        </Grid.RowDefinitions>
+
+        <!-- Navegação: operação separada de gestão e sistema -->
+        <Border Grid.Column="0" Grid.RowSpan="3" Background="White" BorderBrush="#DDE5E0" BorderThickness="0,0,1,0">
+            <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="94"/><RowDefinition/><RowDefinition Height="78"/></Grid.RowDefinitions>
+                <StackPanel Margin="20,17,14,8">
+                    <TextBlock Text="ONÇA" FontSize="27" FontWeight="Bold" Foreground="#0B6B3A"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="PDV PRO" FontSize="17" FontWeight="Bold" Foreground="#26342E"/>
+                        <Border Background="#E9F5ED" CornerRadius="5" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="0.2.3" FontSize="10" FontWeight="Bold" Foreground="#0B6B3A"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="Onça Produtos de Limpeza" FontSize="11" Foreground="#7A8780" Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="0,3,0,10">
+                        <TextBlock Text="OPERAÇÃO" FontSize="10" FontWeight="Bold" Foreground="#96A19B" Margin="20,8,0,5"/>
+                        <Button Style="{StaticResource ProNavActiveButton}" Content="Frente de Caixa"/>
+                        <Button Style="{StaticResource ProNavButton}" Content="Caixa" Click="Operations_Click"/>
+                        <Button Style="{StaticResource ProNavButton}" Content="Crediário" Click="Credit_Click"/>
+                        <Button Style="{StaticResource ProNavButton}" Content="Produtos" Click="Product_Click"/>
+                        <Button Style="{StaticResource ProNavButton}" Content="Diversos" Click="Diversos_Click" ToolTip="Item avulso sem cadastro — F4"/>
+                        <Button Style="{StaticResource ProNavButton}" Content="Estoque" Click="Inventory026_Click"/>
+                        <Button Style="{StaticResource ProNavButton}" Content="Clientes" Click="CustomerManagement_Click"/>
+
+                        <Expander Header="GESTÃO" IsExpanded="True" Margin="8,12,8,0" Foreground="#65736C" FontWeight="Bold">
+                            <StackPanel Margin="0,4,0,0">
+                                <Button Style="{StaticResource ProNavButton}" Content="Compras e fornecedores" Click="Purchases_Click"/>
+                                <Button Style="{StaticResource ProNavButton}" Content="Financeiro / contas a pagar" Click="Finance052_Click"/>
+                                <Button Style="{StaticResource ProNavButton}" Content="Vendas e pós-venda" Click="ManageSales_Click"/>
+                                <Button Style="{StaticResource ProNavButton}" Content="Relatórios" Click="Reports022_Click"/>
+                                <Button Style="{StaticResource ProNavButton}" Content="Orçamentos e documentos" Click="Documents_Click"/>
+                                <Button Style="{StaticResource ProNavButton}" Content="Pedidos" Click="Orders_Click"/>
+                                <Button Style="{StaticResource ProNavButton}" Content="Trocas / devoluções / despesas" Click="FinalOps_Click"/>
+                            </StackPanel>
+                        </Expander>
+
+                        <Expander Header="SISTEMA" IsExpanded="False" Margin="8,10,8,0" Foreground="#65736C" FontWeight="Bold">
+                            <StackPanel Margin="0,4,0,0">
+                                <Button Style="{StaticResource ProNavButton}" Content="Centro de Integridade" Click="Integrity151_Click"/>
+                                <Button Style="{StaticResource ProNavButton}" Content="Diagnóstico técnico" Click="Diagnostic_Click"/>
+                                <Button Style="{StaticResource ProNavButton}" Content="Backup" Click="BackupCenter_Click"/>
+                                <Button Style="{StaticResource ProNavButton}" Content="Tela / tamanho" Click="DisplaySettings_Click"/>
+                                <Button Style="{StaticResource ProNavButton}" Content="Impressora" Click="Printer_Click"/>
+                            </StackPanel>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Grid.Row="2" Background="#F1F7F3" CornerRadius="10" Padding="11" Margin="12,7,12,12">
+                    <StackPanel>
+                        <TextBlock Text="Operação protegida" FontSize="11" FontWeight="Bold" Foreground="#0B6B3A"/>
+                        <TextBlock Text="Venda, estoque e caixa integrados" FontSize="10" Foreground="#6C7A73" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- Cabeçalho operacional -->
+        <Border Grid.Column="1" Grid.ColumnSpan="2" Grid.Row="0" Background="White" BorderBrush="#DDE5E0" BorderThickness="0,0,0,1">
+            <Grid Margin="18,0">
+                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Frente de Caixa" FontSize="19" FontWeight="Bold" Foreground="#17231D"/>
+                    <TextBlock Text="Venda rápida • carrinho e pagamento em uma única tela" FontSize="11" Foreground="#76827C"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0">
+                    <Border Background="#FFF5E6" CornerRadius="7" Padding="9,5" Margin="3,0"><TextBlock x:Name="LastBackupText" Text="Backup: verificar" Foreground="#9A6200" FontSize="11" FontWeight="SemiBold"/></Border>
+                    <Border Background="#EAF8EF" CornerRadius="7" Padding="9,5" Margin="3,0"><TextBlock x:Name="HealthText" Text="SISTEMA: verificando" Foreground="#087233" FontSize="11" FontWeight="Bold"/></Border>
+                    <Button Style="{StaticResource ProSecondaryButton}" Content="TELA CHEIA  [F11]" Padding="9,5" MinHeight="30" Margin="3,0" Click="ToggleFocusMode_Click"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="14,0,0,0">
+                    <TextBlock x:Name="ClockText" FontSize="13" FontWeight="SemiBold" Foreground="#39463F" HorizontalAlignment="Right"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+        <Border x:Name="SaleToastBorder" Grid.Column="1" Grid.ColumnSpan="2" Grid.Row="0" Panel.ZIndex="20" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Background="#0B6B3A" CornerRadius="10" Padding="22,10">
+            <TextBlock x:Name="SaleToastText" Foreground="White" FontSize="15" FontWeight="Bold"/>
+        </Border>
+
+        <!-- Área central: busca, carrinho e histórico rápido -->
+        <Grid Grid.Column="1" Grid.Row="1" Margin="16,14,8,12">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition x:Name="SalesHistoryRow" Height="164"/></Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0">
+                <Border Background="White" BorderBrush="#DDE5E0" BorderThickness="1" CornerRadius="10" Padding="8" Margin="0,0,0,9">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" VerticalAlignment="Center">
+                            <WrapPanel x:Name="MultiSaleTabsPanel" VerticalAlignment="Center"/>
+                        </ScrollViewer>
+                        <Button Grid.Column="1" Style="{StaticResource ProPrimaryButton}" Content="+ NOVA VENDA" Padding="13,8" Margin="8,0,0,0" Click="NewMultiSale_Click"/>
+                        <Button Grid.Column="2" Style="{StaticResource ProSecondaryButton}" Content="RENOMEAR" Padding="11,8" Margin="6,0,0,0" Click="RenameMultiSale040_Click"/>
+                        <Button Grid.Column="3" Style="{StaticResource ProDangerButton}" Content="FECHAR / DESCARTAR" Padding="11,8" Margin="6,0,0,0" Click="CloseMultiSale_Click"/>
+                    </Grid>
+                </Border>
+
+                <Border Background="White" BorderBrush="#CFE0D6" BorderThickness="1" CornerRadius="11" Padding="8" Margin="0,0,0,9">
+                    <StackPanel><TabControl x:Name="ProductEntryTabs" SelectedIndex="0" Background="Transparent" BorderThickness="0" FontWeight="SemiBold">
+                        <TabItem Header="PRODUTOS / SCANNER" Padding="16,7">
+                            <Grid Margin="4,9,4,3">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="CÓDIGO DE BARRAS, CÓDIGO OU NOME" FontSize="10" FontWeight="Bold" Foreground="#7C8982" Margin="2,0,0,3"/>
+                                    <TextBox x:Name="SearchBox" Style="{StaticResource ProTextBox}" FontSize="21" Padding="8,5" KeyDown="SearchBox_KeyDown" ToolTip="Passe o código, digite nome ou use 3*código para quantidade"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" Style="{StaticResource ProPrimaryButton}" Content="ADICIONAR  [ENTER]" Margin="10,18,3,0" MinWidth="142" Click="Add_Click"/>
+                                <Button Grid.Column="2" Style="{StaticResource ProSecondaryButton}" Content="CONSULTAR PREÇO  [F5]" Margin="3,18,3,0" Click="PriceLookup_Click"/>
+                                <Button Grid.Column="3" Style="{StaticResource ProSecondaryButton}" Content="CADASTRO / PRODUTOS  [F2]" Margin="3,18,3,0" Click="Product_Click"/>
+                            </Grid>
+                        </TabItem>
+                        <TabItem Header="DIVERSOS  [F4]" Padding="16,7">
+                            <Grid Margin="4,9,4,3">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="155"/><ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,6,0">
+                                        <TextBlock Text="DESCRIÇÃO DO ITEM" FontSize="10" FontWeight="Bold" Foreground="#7C8982" Margin="2,0,0,3"/>
+                                        <TextBox x:Name="DiversosNameBox" Style="{StaticResource ProTextBox}" FontSize="17" ToolTip="Nome ou descrição do item"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="0,0,6,0">
+                                        <TextBlock Text="VALOR UNITÁRIO" FontSize="10" FontWeight="Bold" Foreground="#7C8982" Margin="2,0,0,3"/>
+                                        <TextBox x:Name="DiversosValueBox" Style="{StaticResource ProTextBox}" FontSize="17" ToolTip="Valor unitário em R$"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Margin="0,0,6,0">
+                                        <TextBlock Text="QTD" FontSize="10" FontWeight="Bold" Foreground="#7C8982" Margin="2,0,0,3"/>
+                                        <TextBox x:Name="DiversosQtyBox" Style="{StaticResource ProTextBox}" FontSize="17" Text="1" ToolTip="Quantidade"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="3" Style="{StaticResource ProPrimaryButton}" Content="ADICIONAR AO CARRINHO" Margin="4,18,0,0" MinWidth="174" Click="InlineDiversosAdd_Click"/>
+                                </Grid>
+                                <Grid Grid.Row="1" Margin="2,7,2,0">
+                                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Item avulso sem cadastro e sem movimentação de estoque." FontSize="11" Foreground="#77847D" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" Style="{StaticResource ProSecondaryButton}" Content="ABRIR TELA DIVERSOS" Padding="10,5" MinHeight="30" Click="Diversos_Click"/>
+                                </Grid>
+                            </Grid>
+                        </TabItem>
+                    </TabControl>
+                    <Border x:Name="StockAlertBorder" Visibility="Collapsed" Background="#FFF4E5" BorderBrush="#F0C36A" BorderThickness="1" CornerRadius="7" Padding="9,5" Margin="4,4,4,0">
+                        <TextBlock x:Name="StockAlertText" Foreground="#925B00" FontWeight="SemiBold" FontSize="11" TextWrapping="Wrap"/>
+                    </Border></StackPanel>
+                </Border>
+            </StackPanel>
+
+            <Border Grid.Row="1" Background="White" BorderBrush="#DDE5E0" BorderThickness="1" CornerRadius="11" Margin="0,0,0,10">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="50"/><RowDefinition/><RowDefinition Height="46"/></Grid.RowDefinitions>
+                    <Grid Margin="14,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Venda atual" Style="{StaticResource ProSectionTitle}"/>
+                            <Border Background="#EEF4F0" CornerRadius="6" Padding="8,3" Margin="10,0,0,0"><TextBlock x:Name="StatusText" Text="CAIXA LIVRE" Foreground="#0B6B3A" FontSize="11" FontWeight="Bold"/></Border>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource MiniActionButton}" Content="SALVAR EM ESPERA" Click="HoldSale_Click" ToolTip="Guarda o carrinho para atender outro cliente"/>
+                            <Button Style="{StaticResource MiniActionButton}" Content="VENDAS CONCLUÍDAS" Click="CompletedSalesStable_Click" ToolTip="Consultar vendas e pós-venda"/>
+                        </StackPanel>
+                    </Grid>
+                    <DataGrid Grid.Row="1" x:Name="CartGrid" Style="{StaticResource ProDataGrid}" ColumnHeaderStyle="{StaticResource ProDataGridHeader}" AutoGenerateColumns="False" CellEditEnding="CartGrid_CellEditEnding" Margin="10,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="CÓDIGO" Binding="{Binding Code}" IsReadOnly="True" Width="105"/>
+                            <DataGridTextColumn Header="PRODUTO" Binding="{Binding Name,UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                            <DataGridTextColumn Header="QTD" Binding="{Binding Quantity,UpdateSourceTrigger=PropertyChanged}" Width="78"/>
+                            <DataGridTextColumn Header="UNITÁRIO" Binding="{Binding UnitPrice,UpdateSourceTrigger=PropertyChanged,StringFormat=N2}" Width="105"/>
+                            <DataGridTextColumn Header="TOTAL" Binding="{Binding Subtotal,StringFormat=N2}" IsReadOnly="True" Width="105"/>
+                            <DataGridTemplateColumn Header="" Width="54">
+                                <DataGridTemplateColumn.CellTemplate><DataTemplate><Button Style="{StaticResource ProDangerButton}" Content="REMOVER" Padding="7,3" FontSize="9" Tag="{Binding Index}" Click="RemoveCartItem_Click" ToolTip="Remover item"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <Grid Grid.Row="2" Margin="12,3">
+                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <Button Style="{StaticResource ProDangerButton}" Content="CANCELAR VENDA  [ESC]" Click="Cancel_Click" HorizontalAlignment="Left" Padding="11,6" MinHeight="34"/>
+                        <Button Grid.Column="1" Style="{StaticResource ProSecondaryButton}" Content="CLIENTE" Click="Customer_Click" Padding="11,6" MinHeight="34"/>
+                        <Button Grid.Column="2" Style="{StaticResource ProSecondaryButton}" Content="VISUALIZAR CUPOM" Click="Preview_Click" Padding="11,6" MinHeight="34" Margin="6,0,0,0"/>
+                        <Button Grid.Column="3" Style="{StaticResource ProSecondaryButton}" Content="SALVAR ORÇAMENTO" Click="SaveQuote_Click" Padding="11,6" MinHeight="34" Margin="6,0,0,0"/>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <Border x:Name="LastSalesBorder" Grid.Row="2" Background="White" BorderBrush="#DDE5E0" BorderThickness="1" CornerRadius="11">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition/></Grid.RowDefinitions>
+                    <Grid Margin="14,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="Últimas vendas" FontSize="15" FontWeight="Bold" Foreground="#27342E" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="Consulta rápida" Foreground="#85918B" FontSize="11" VerticalAlignment="Center"/>
+                    </Grid>
+                    <DataGrid Grid.Row="1" x:Name="SalesGrid" Style="{StaticResource ProDataGrid}" ColumnHeaderStyle="{StaticResource ProDataGridHeader}" AutoGenerateColumns="False" IsReadOnly="True" RowHeight="32" FontSize="12" Margin="10,0,10,7">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="VENDA" Binding="{Binding Number,StringFormat=000000}" Width="85"/>
+                            <DataGridTextColumn Header="DATA / HORA" Binding="{Binding CreatedAt,StringFormat=dd/MM HH:mm}" Width="115"/>
+                            <DataGridTextColumn Header="TOTAL" Binding="{Binding Total,StringFormat=C}" Width="105"/>
+                            <DataGridTemplateColumn Header="AÇÕES" Width="*">
+                                <DataGridTemplateColumn.CellTemplate><DataTemplate><StackPanel Orientation="Horizontal">
+                                    <Button Style="{StaticResource MiniActionButton}" Content="VER" Tag="{Binding Id}" Click="ViewSale_Click"/>
+                                    <Button Style="{StaticResource MiniActionButton}" Content="REIMPRIMIR" Tag="{Binding Id}" Click="Reprint_Click"/>
+                                    <Button Style="{StaticResource MiniActionButton}" Content="PDF" Tag="{Binding Id}" Click="SalePdf_Click"/>
+                                </StackPanel></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Checkout persistente -->
+        <ScrollViewer Grid.Column="2" Grid.Row="1" Margin="8,14,16,12" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <Border Background="White" BorderBrush="#DDE5E0" BorderThickness="1" CornerRadius="11" Padding="15" Margin="0,0,0,10">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="CLIENTE" Style="{StaticResource ProLabel}"/>
+                                <TextBlock x:Name="CustomerText" Text="CONSUMIDOR" FontSize="18" FontWeight="Bold" Foreground="#17231D" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Style="{StaticResource ProSecondaryButton}" Content="ALTERAR" Padding="10,6" MinHeight="32" Click="Customer_Click"/>
+                            <Button Grid.Column="2" Style="{StaticResource ProSecondaryButton}" Content="HISTÓRICO" Padding="10,6" MinHeight="32" Margin="5,0,0,0" Click="CustomerHistoryQuick_Click"/>
+                            <Button Grid.Column="3" Style="{StaticResource ProSecondaryButton}" Content="LIMPAR" Padding="10,6" MinHeight="32" Margin="5,0,0,0" Click="RemoveCustomer_Click"/>
+                        </Grid>
+                        <TextBlock x:Name="CustomerPulseText" Grid.Row="1" Text="Compras e crediário aparecem aqui ao selecionar cliente." FontSize="11" Foreground="#52615A" Margin="0,7,0,0" TextWrapping="Wrap"/>
+                        <TextBlock Grid.Row="2" Text="Cliente da venda atual" FontSize="10" Foreground="#8A958F" Margin="0,3,0,0"/>
+                    </Grid>
+                </Border>
+
+                <Border Background="#0B6B3A" CornerRadius="12" Padding="18" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="TOTAL DA VENDA" FontSize="11" FontWeight="Bold" Foreground="#DDF2E4"/>
+                        <TextBlock x:Name="TotalText" Text="R$ 0,00" FontSize="45" FontWeight="Bold" Foreground="White" TextAlignment="Right" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="#F7FAF8" BorderBrush="#DDE5E0" BorderThickness="1" CornerRadius="11" Padding="11" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="RESUMO DE HOJE" Style="{StaticResource ProLabel}"/>
+                        <TextBlock x:Name="CashPulseText" Text="Atualizando caixa..." FontSize="11" Foreground="#48574F" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="PaymentPanel" Background="White" BorderBrush="#DDE5E0" BorderThickness="1" CornerRadius="11" Padding="12" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="Pagamento" Style="{StaticResource ProSectionTitle}" Margin="3,0,0,7"/>
+                        <TextBlock Text="Escolha a forma principal ou use pagamento misto." Foreground="#77847D" FontSize="11" Margin="3,0,0,8"/>
+                        <UniformGrid Columns="2">
+                            <Button Style="{StaticResource CheckoutMethodButton}" Background="#EAF8EF" Foreground="#087233" Content="DINHEIRO" Click="PayCash_Click"/>
+                            <Button Style="{StaticResource CheckoutMethodButton}" Background="#E9F7F7" Foreground="#087C80" Content="PIX" Click="PayPix_Click"/>
+                            <Button Style="{StaticResource CheckoutMethodButton}" Background="#EEF5FF" Foreground="#175CD3" Content="DÉBITO" Click="PayDebit_Click"/>
+                            <Button Style="{StaticResource CheckoutMethodButton}" Background="#FFF5E8" Foreground="#A76000" Content="CRÉDITO" Click="PayCredit_Click"/>
+                            <Button Style="{StaticResource CheckoutMethodButton}" Background="#F2EEFF" Foreground="#5D47A1" Content="CREDIÁRIO" Click="PayStoreCredit_Click"/>
+                            <Button Style="{StaticResource CheckoutMethodButton}" Content="MISTO" Click="Pay_Click"/>
+                        </UniformGrid>
+                        <Button Style="{StaticResource ProPrimaryButton}" Content="FINALIZAR VENDA / PAGAMENTO  [F9]" FontSize="17" MinHeight="52" Margin="3,9,3,2" Click="Pay_Click"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="#F7FAF8" BorderBrush="#DFE7E2" BorderThickness="1" CornerRadius="11" Padding="12" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="Ações rápidas" FontSize="13" FontWeight="Bold" Foreground="#34423B" Margin="2,0,0,6"/>
+                        <UniformGrid Columns="2">
+                            <Button Style="{StaticResource ProSecondaryButton}" Content="DIVERSOS  [F4]" Click="Diversos_Click" Margin="3"/>
+                            <Button Style="{StaticResource ProSecondaryButton}" Content="CONSULTA PREÇO  [F5]" Click="QuickPriceScanner_Click" Margin="3"/>
+                            <Button Style="{StaticResource ProSecondaryButton}" Content="SALVAR ESPERA  [F6]" Click="HoldSale_Click" Margin="3"/>
+                            <Button Style="{StaticResource ProSecondaryButton}" Content="RECUPERAR ESPERA  [F7]" Click="FinalOps_Click" Margin="3"/>
+                            <Button Style="{StaticResource ProSecondaryButton}" Content="CALCULADORA" Click="Calculator_Click" Margin="3"/>
+                            <Button Style="{StaticResource ProDangerButton}" Content="DESCARTAR ABA" Click="CancelCurrentStable_Click" Margin="3"/>
+                        </UniformGrid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Rodapé de estado -->
+        <Border Grid.Column="1" Grid.ColumnSpan="2" Grid.Row="2" Background="White" BorderBrush="#DDE5E0" BorderThickness="0,1,0,0">
+            <Grid Margin="14,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="F1 Scanner   F2 Produto   F3 Cliente   F4 Diversos   F5 Preço   F6 Espera   F7 Recuperar   F8 Última venda   F9 Finalizar   F11 Tela cheia   ESC Cancelar" FontSize="10" FontWeight="SemiBold" Foreground="#4A5A52"/>
+                    <TextBlock x:Name="RecoveryText" Foreground="#A76500" FontSize="9" FontWeight="SemiBold"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock x:Name="DatabaseStatus" Foreground="#748079" FontSize="10"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

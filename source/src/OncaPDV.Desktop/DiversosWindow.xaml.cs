@@ -1,0 +1,12 @@
+using System; using System.Globalization; using System.IO; using System.Linq; using System.Windows; using System.Windows.Input;
+namespace OncaPDV.Desktop;
+public partial class DiversosWindow:Window{
+ public decimal Price{get;private set;} public decimal Quantity{get;private set;}=1m; public decimal UnitPrice=>Price; public string? Description=>string.IsNullOrWhiteSpace(DescriptionBox.Text)?null:DescriptionBox.Text.Trim();
+ private static string RecentFile=>Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Onca PDV Pro","diversos-recentes.txt");
+ public DiversosWindow(){InitializeComponent();Loaded+=(_,_)=>{LoadRecent();DescriptionBox.Focus();};}
+ private void LoadRecent(){try{if(File.Exists(RecentFile))RecentList.ItemsSource=File.ReadAllLines(RecentFile).Where(x=>!string.IsNullOrWhiteSpace(x)).Take(8).ToArray();}catch{}}
+ private void SaveRecent(){try{var s=Description;if(string.IsNullOrWhiteSpace(s))return;Directory.CreateDirectory(Path.GetDirectoryName(RecentFile)!);var a=(File.Exists(RecentFile)?File.ReadAllLines(RecentFile):Array.Empty<string>()).Prepend(s).Distinct(StringComparer.OrdinalIgnoreCase).Take(8);File.WriteAllLines(RecentFile,a);}catch{}}
+ private void Recent_DoubleClick(object sender,MouseButtonEventArgs e){if(RecentList.SelectedItem is string s)DescriptionBox.Text=s;}
+ private void Add_Click(object sender,RoutedEventArgs e)=>Confirm(); private void PriceBox_KeyDown(object sender,KeyEventArgs e){if(e.Key==Key.Enter)Confirm();}
+ private void Confirm(){var text=PriceBox.Text.Trim().Replace("R$","",StringComparison.OrdinalIgnoreCase).Trim();var ok=decimal.TryParse(text,NumberStyles.Number,CultureInfo.CurrentCulture,out var v)||decimal.TryParse(text.Replace(',','.'),NumberStyles.Number,CultureInfo.InvariantCulture,out v);if(!ok||v<=0){MessageBox.Show("Informe um preço válido maior que zero.","DIVERSOS",MessageBoxButton.OK,MessageBoxImage.Warning);return;}if(!decimal.TryParse(QuantityBox.Text,NumberStyles.Number,CultureInfo.CurrentCulture,out var q)||q<=0){MessageBox.Show("Informe uma quantidade válida maior que zero.","DIVERSOS",MessageBoxButton.OK,MessageBoxImage.Warning);return;}Price=v;Quantity=q;SaveRecent();DialogResult=true;}
+}

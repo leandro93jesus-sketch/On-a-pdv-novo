@@ -1,0 +1,24 @@
+<Window x:Class="OncaPDV.Desktop.DocumentsWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="Orçamentos e documentos — ONÇA PDV PRO" Width="1160" Height="760" MinWidth="980" MinHeight="640"
+ WindowStartupLocation="CenterOwner" Background="#F3F6F4" FontFamily="Segoe UI">
+ <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="ProfessionalCompatibility0210.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
+ <Grid Margin="18"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+  <StackPanel><TextBlock Text="Orçamentos e documentos" FontSize="27" FontWeight="Bold" Foreground="#17231D"/><TextBlock Text="Consulte orçamentos e rascunhos fiscais sem misturar documentos com a operação do caixa." Foreground="#6F7C75" Margin="0,3,0,14"/></StackPanel>
+  <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0">
+   <TabItem Header="ORÇAMENTOS"><Grid Margin="0,10,0,0"><Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Border Background="White" BorderBrush="#DDE5E0" BorderThickness="1" CornerRadius="10" Padding="7"><DataGrid x:Name="Quotes" AutoGenerateColumns="False" IsReadOnly="True"><DataGrid.Columns>
+     <DataGridTextColumn Header="NÚMERO" Binding="{Binding Number,StringFormat=000000}" Width="90"/><DataGridTextColumn Header="DATA" Binding="{Binding CreatedAt,StringFormat=dd/MM/yyyy HH:mm}" Width="145"/><DataGridTextColumn Header="CLIENTE" Binding="{Binding Customer}" Width="*"/><DataGridTextColumn Header="TOTAL" Binding="{Binding Total,StringFormat=C}" Width="115"/><DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="120"/><DataGridTextColumn Header="VALIDADE" Binding="{Binding ValidUntil,StringFormat=dd/MM/yyyy}" Width="110"/>
+    </DataGrid.Columns></DataGrid></Border>
+    <Grid Grid.Row="1" Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="Selecione um orçamento para continuar." Foreground="#75827B" VerticalAlignment="Center"/><WrapPanel Grid.Column="1"><Button Content="ABRIR NO CARRINHO" Click="OpenQuote_Click"/><Button Content="MARCAR CONVERTIDO" Click="ConvertQuote_Click"/><Button Content="GERAR PDF" Click="QuotePdf_Click"/><Button Content="ENVIAR PELO WHATSAPP" Click="QuoteWhatsApp_Click"/></WrapPanel></Grid>
+   </Grid></TabItem>
+   <TabItem Header="RASCUNHOS FISCAIS"><Grid Margin="0,10,0,0"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Border Background="#FFF8EE" BorderBrush="#F0E0C7" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,9"><TextBlock Text="A preparação não autoriza NF-e/NFC-e. A emissão fiscal real depende da integração fiscal." Foreground="#755A35" TextWrapping="Wrap"/></Border>
+    <Border Grid.Row="1" Background="White" BorderBrush="#DDE5E0" BorderThickness="1" CornerRadius="10" Padding="7"><DataGrid x:Name="Fiscal" AutoGenerateColumns="False" IsReadOnly="True"><DataGrid.Columns>
+     <DataGridTextColumn Header="VENDA" Binding="{Binding SaleNumber,StringFormat=000000}" Width="90"/><DataGridTextColumn Header="DATA" Binding="{Binding CreatedAt,StringFormat=dd/MM/yyyy HH:mm}" Width="145"/><DataGridTextColumn Header="CLIENTE" Binding="{Binding Customer}" Width="*"/><DataGridTextColumn Header="TOTAL" Binding="{Binding Total,StringFormat=C}" Width="115"/><DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="140"/>
+    </DataGrid.Columns></DataGrid></Border>
+    <Button Grid.Row="2" Content="PREPARAR PARA EMISSÃO FISCAL" HorizontalAlignment="Right" Margin="0,10,0,0" Click="Pending_Click"/>
+   </Grid></TabItem>
+  </TabControl>
+ </Grid>
+</Window>
