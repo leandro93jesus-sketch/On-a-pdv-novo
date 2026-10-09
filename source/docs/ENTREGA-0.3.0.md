@@ -2,7 +2,7 @@
 
 Data da validação: 09/10/2026. Base: tag `v0.2.3-operacao-pro`, commit `10be25f6dbc0e3e3974c3711038a4198c75286fc`.
 Código-fonte oficial 0.2.3 conferido pelo SHA-256 `3932a6a21c0a1e6f3e8e01a7c90ee246f72d1003060ad8aae74a60f48639785b`.
-Branch de trabalho: `feature/ux-0300`.
+Branch publicada: `feature/ux-0300-checkout-20261009`. A branch remota `feature/ux-0300` já existia e foi preservada.
 
 ## O que mudou
 
