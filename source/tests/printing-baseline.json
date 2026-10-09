@@ -1,0 +1,12 @@
+{
+  "src/OncaPDV.Printing/OncaPDV.Printing.csproj": "e7913d793f45d94022bbeca97ca5642b978cd3fd323b007549a060c0bffe181e",
+  "src/OncaPDV.Printing/PrinterDiscovery.cs": "45ca6253be689d76fb08714e5c84794426ed75cee62a46eb94b92a2a11146974",
+  "src/OncaPDV.Printing/Printing.cs": "31efe29ba9ad4ec1045f65743ebdb810e0f4eb91057d8785ffba6f59975607c4",
+  "src/OncaPDV.Desktop/ConfiguredPhysicalPrintService.cs": "f770c30860d7acfcc889151e58871f1ee067a948721df9ec551539c9bafd8de5",
+  "src/OncaPDV.Desktop/PrinterSettingsWindow.xaml": "1f33cdf3accda854b3bf6c989416a64772611c3da1deda4815a6ff4e7fdd9faf",
+  "src/OncaPDV.Desktop/PrinterSettingsWindow.xaml.cs": "c99b8b6b15e1e2e8db73118826a17552ca9aa5ea6979a0edb8d2f3f2577dedbb",
+  "src/OncaPDV.Desktop/ReceiptPreviewWindow.xaml": "c8b26d4aa945ecb5c8ccdaa051f9a8e649e9734b19b64d82faf69b3b278c796b",
+  "src/OncaPDV.Desktop/ReceiptPreviewWindow.xaml.cs": "d41a006fe0225001c92e2aff62b6e1ed82fed76c41c831c9870e64d0c2dc67b2",
+  "src/OncaPDV.Desktop/PaymentWindow.xaml": "5d311ee2d20629814abcbb7c063ce68d464bfdc30862cfe4410b119ced39a6bc",
+  "src/OncaPDV.Desktop/PaymentWindow.xaml.cs": "52c5ca6cc63df6827e4cf68b8294715eccaca72de39ad46bf89d17fee995d1fd"
+}

@@ -37,7 +37,9 @@ public sealed class MultiSaleRecovery040
         if(json is null)return null;
         var state=JsonSerializer.Deserialize<SaleTabsSnapshot040>(json)??throw new InvalidDataException("Recuperação de abas vazia.");
         Validate(state);
-        return state;
+        return state with { Tabs = state.Tabs.Select(t => t.CartId is Guid id && CompletedCart030.IsCommitted(_db, id)
+            ? t with { Items = [], Discount = 0, CustomerId = null, CustomerLabel = "CONSUMIDOR", OrderId = null, CartId = Guid.NewGuid() }
+            : t).ToList() };
     }
     public void Save(SaleTabsSnapshot040 state)
     {

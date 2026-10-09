@@ -1,8 +1,8 @@
 <Window x:Class="OncaPDV.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="ONÇA PDV PRO 0.2.3 — Operação profissional"
-        Height="900" Width="1540" MinHeight="680" MinWidth="1080"
+        Title="ONÇA PDV PRO 0.3.0 — Frente de caixa profissional"
+        Height="768" Width="1366" MinHeight="680" MinWidth="1080"
         WindowStartupLocation="CenterScreen"
         Background="#F3F6F4"
         FontFamily="Segoe UI"
@@ -27,16 +27,16 @@
         </ResourceDictionary>
     </Window.Resources>
 
-    <Grid>
+    <Grid Background="#F3F6F4">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="NavColumn" Width="220"/>
+            <ColumnDefinition x:Name="NavColumn" Width="184"/>
             <ColumnDefinition Width="*"/>
-            <ColumnDefinition x:Name="PaymentColumn" Width="370"/>
+            <ColumnDefinition x:Name="PaymentColumn" Width="310"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="64"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="42"/>
+            <RowDefinition Height="84"/>
         </Grid.RowDefinitions>
 
         <!-- Navegação: operação separada de gestão e sistema -->
@@ -48,7 +48,7 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="PDV PRO" FontSize="17" FontWeight="Bold" Foreground="#26342E"/>
                         <Border Background="#E9F5ED" CornerRadius="5" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="0.2.3" FontSize="10" FontWeight="Bold" Foreground="#0B6B3A"/>
+                            <TextBlock Text="0.3.0" FontSize="10" FontWeight="Bold" Foreground="#0B6B3A"/>
                         </Border>
                     </StackPanel>
                     <TextBlock Text="Onça Produtos de Limpeza" FontSize="11" Foreground="#7A8780" Margin="0,4,0,0"/>
@@ -103,8 +103,8 @@
             <Grid Margin="18,0">
                 <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="Frente de Caixa" FontSize="19" FontWeight="Bold" Foreground="#17231D"/>
-                    <TextBlock Text="Venda rápida • carrinho e pagamento em uma única tela" FontSize="11" Foreground="#76827C"/>
+                    <TextBlock x:Name="CurrentSaleText" Text="Frente de Caixa" FontSize="19" FontWeight="Bold" Foreground="#17231D"/>
+                    <TextBlock x:Name="SessionText" Text="Consultando estado do caixa..." FontSize="11" Foreground="#76827C"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0">
                     <Border Background="#FFF5E6" CornerRadius="7" Padding="9,5" Margin="3,0"><TextBlock x:Name="LastBackupText" Text="Backup: verificar" Foreground="#9A6200" FontSize="11" FontWeight="SemiBold"/></Border>
@@ -121,8 +121,8 @@
         </Border>
 
         <!-- Área central: busca, carrinho e histórico rápido -->
-        <Grid Grid.Column="1" Grid.Row="1" Margin="16,14,8,12">
-            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition x:Name="SalesHistoryRow" Height="164"/></Grid.RowDefinitions>
+        <Grid Grid.Column="1" Grid.Row="1" Margin="10,10,5,8">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition x:Name="SalesHistoryRow" Height="40"/></Grid.RowDefinitions>
 
             <StackPanel Grid.Row="0">
                 <Border Background="White" BorderBrush="#DDE5E0" BorderThickness="1" CornerRadius="10" Padding="8" Margin="0,0,0,9">
@@ -131,31 +131,28 @@
                         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" VerticalAlignment="Center">
                             <WrapPanel x:Name="MultiSaleTabsPanel" VerticalAlignment="Center"/>
                         </ScrollViewer>
-                        <Button Grid.Column="1" Style="{StaticResource ProPrimaryButton}" Content="+ NOVA VENDA" Padding="13,8" Margin="8,0,0,0" Click="NewMultiSale_Click"/>
+                        <Button Grid.Column="1" Style="{StaticResource ProPrimaryButton}" Content="+ NOVA" ToolTip="Nova venda — Ctrl+N" Padding="13,8" Margin="8,0,0,0" Click="NewMultiSale_Click"/>
                         <Button Grid.Column="2" Style="{StaticResource ProSecondaryButton}" Content="RENOMEAR" Padding="11,8" Margin="6,0,0,0" Click="RenameMultiSale040_Click"/>
-                        <Button Grid.Column="3" Style="{StaticResource ProDangerButton}" Content="FECHAR / DESCARTAR" Padding="11,8" Margin="6,0,0,0" Click="CloseMultiSale_Click"/>
+                        <Button Grid.Column="3" Style="{StaticResource ProDangerButton}" Content="FECHAR ABA" Padding="11,8" Margin="6,0,0,0" Click="CloseMultiSale_Click"/>
                     </Grid>
                 </Border>
 
                 <Border Background="White" BorderBrush="#CFE0D6" BorderThickness="1" CornerRadius="11" Padding="8" Margin="0,0,0,9">
                     <StackPanel><TabControl x:Name="ProductEntryTabs" SelectedIndex="0" Background="Transparent" BorderThickness="0" FontWeight="SemiBold">
                         <TabItem Header="PRODUTOS / SCANNER" Padding="16,7">
-                            <Grid Margin="4,9,4,3">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="CÓDIGO DE BARRAS, CÓDIGO OU NOME" FontSize="10" FontWeight="Bold" Foreground="#7C8982" Margin="2,0,0,3"/>
-                                    <TextBox x:Name="SearchBox" Style="{StaticResource ProTextBox}" FontSize="21" Padding="8,5" KeyDown="SearchBox_KeyDown" ToolTip="Passe o código, digite nome ou use 3*código para quantidade"/>
+                            <Grid Margin="4,7,4,3">
+                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <StackPanel><TextBlock Text="CÓDIGO OU NOME • quantidade: 3*código ou 3xcódigo" FontSize="11" Foreground="#65736C" Margin="0,0,0,4"/>
+                                    <TextBox x:Name="SearchBox" Style="{StaticResource ProTextBox}" FontSize="24" Padding="8,5" KeyDown="SearchBox_KeyDown" AutomationProperties.Name="Scanner"/>
                                 </StackPanel>
-                                <Button Grid.Column="1" Style="{StaticResource ProPrimaryButton}" Content="ADICIONAR  [ENTER]" Margin="10,18,3,0" MinWidth="142" Click="Add_Click"/>
-                                <Button Grid.Column="2" Style="{StaticResource ProSecondaryButton}" Content="CONSULTAR PREÇO  [F5]" Margin="3,18,3,0" Click="PriceLookup_Click"/>
-                                <Button Grid.Column="3" Style="{StaticResource ProSecondaryButton}" Content="CADASTRO / PRODUTOS  [F2]" Margin="3,18,3,0" Click="Product_Click"/>
+                                <Button Grid.Column="1" Style="{StaticResource ProPrimaryButton}" Content="ADICIONAR  ↵" Margin="8,18,0,0" Click="Add_Click"/>
                             </Grid>
                         </TabItem>
                         <TabItem Header="DIVERSOS  [F4]" Padding="16,7">
                             <Grid Margin="4,9,4,3">
                                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                                 <Grid>
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="155"/><ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="110"/><ColumnDefinition Width="68"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <StackPanel Margin="0,0,6,0">
                                         <TextBlock Text="DESCRIÇÃO DO ITEM" FontSize="10" FontWeight="Bold" Foreground="#7C8982" Margin="2,0,0,3"/>
                                         <TextBox x:Name="DiversosNameBox" Style="{StaticResource ProTextBox}" FontSize="17" ToolTip="Nome ou descrição do item"/>
@@ -168,11 +165,11 @@
                                         <TextBlock Text="QTD" FontSize="10" FontWeight="Bold" Foreground="#7C8982" Margin="2,0,0,3"/>
                                         <TextBox x:Name="DiversosQtyBox" Style="{StaticResource ProTextBox}" FontSize="17" Text="1" ToolTip="Quantidade"/>
                                     </StackPanel>
-                                    <Button Grid.Column="3" Style="{StaticResource ProPrimaryButton}" Content="ADICIONAR AO CARRINHO" Margin="4,18,0,0" MinWidth="174" Click="InlineDiversosAdd_Click"/>
+                                    <Button Grid.Column="3" Style="{StaticResource ProPrimaryButton}" Content="ADICIONAR" Margin="4,18,0,0" MinWidth="115" Click="InlineDiversosAdd_Click"/>
                                 </Grid>
                                 <Grid Grid.Row="1" Margin="2,7,2,0">
                                     <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock Text="Item avulso sem cadastro e sem movimentação de estoque." FontSize="11" Foreground="#77847D" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Item avulso sem cadastro." FontSize="11" Foreground="#77847D" VerticalAlignment="Center"/>
                                     <Button Grid.Column="1" Style="{StaticResource ProSecondaryButton}" Content="ABRIR TELA DIVERSOS" Padding="10,5" MinHeight="30" Click="Diversos_Click"/>
                                 </Grid>
                             </Grid>
@@ -187,35 +184,35 @@
             <Border Grid.Row="1" Background="White" BorderBrush="#DDE5E0" BorderThickness="1" CornerRadius="11" Margin="0,0,0,10">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="50"/><RowDefinition/><RowDefinition Height="46"/></Grid.RowDefinitions>
-                    <Grid Margin="14,0">
-                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Venda atual" Style="{StaticResource ProSectionTitle}"/>
-                            <Border Background="#EEF4F0" CornerRadius="6" Padding="8,3" Margin="10,0,0,0"><TextBlock x:Name="StatusText" Text="CAIXA LIVRE" Foreground="#0B6B3A" FontSize="11" FontWeight="Bold"/></Border>
-                        </StackPanel>
+                    <Grid Margin="12,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="CARRINHO" FontWeight="Bold" FontSize="15" VerticalAlignment="Center"/>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button Style="{StaticResource MiniActionButton}" Content="SALVAR EM ESPERA" Click="HoldSale_Click" ToolTip="Guarda o carrinho para atender outro cliente"/>
-                            <Button Style="{StaticResource MiniActionButton}" Content="VENDAS CONCLUÍDAS" Click="CompletedSalesStable_Click" ToolTip="Consultar vendas e pós-venda"/>
+                            <Button Style="{StaticResource MiniActionButton}" Content="−" Tag="-1" Click="AdjustQuantity030_Click" ToolTip="Diminuir quantidade"/>
+                            <Button Style="{StaticResource MiniActionButton}" Content="+" Tag="1" Click="AdjustQuantity030_Click" ToolTip="Aumentar quantidade"/>
+                            <Button Style="{StaticResource MiniActionButton}" Content="ALTERAR QTD" Click="EditQuantity030_Click"/>
+                            <Button Style="{StaticResource MiniActionButton}" Content="REMOVER" Click="RemoveSelected030_Click" Foreground="#B42318"/>
                         </StackPanel>
                     </Grid>
                     <DataGrid Grid.Row="1" x:Name="CartGrid" Style="{StaticResource ProDataGrid}" ColumnHeaderStyle="{StaticResource ProDataGridHeader}" AutoGenerateColumns="False" CellEditEnding="CartGrid_CellEditEnding" Margin="10,0">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="CÓDIGO" Binding="{Binding Code}" IsReadOnly="True" Width="105"/>
-                            <DataGridTextColumn Header="PRODUTO" Binding="{Binding Name,UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                            <DataGridTextColumn Header="CÓDIGO" Binding="{Binding Code}" IsReadOnly="True" Visibility="Collapsed" Width="75"/>
+                            <DataGridTextColumn Header="PRODUTO" Binding="{Binding Name,UpdateSourceTrigger=PropertyChanged}" Width="*">
+                                <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="ToolTip" Value="{Binding Code}"/><Setter Property="TextTrimming" Value="CharacterEllipsis"/></Style></DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
                             <DataGridTextColumn Header="QTD" Binding="{Binding Quantity,UpdateSourceTrigger=PropertyChanged}" Width="78"/>
-                            <DataGridTextColumn Header="UNITÁRIO" Binding="{Binding UnitPrice,UpdateSourceTrigger=PropertyChanged,StringFormat=N2}" Width="105"/>
-                            <DataGridTextColumn Header="TOTAL" Binding="{Binding Subtotal,StringFormat=N2}" IsReadOnly="True" Width="105"/>
-                            <DataGridTemplateColumn Header="" Width="54">
+                            <DataGridTextColumn Header="UNITÁRIO" Binding="{Binding UnitPrice,UpdateSourceTrigger=PropertyChanged,StringFormat=N2}" Width="90"/>
+                            <DataGridTextColumn Header="TOTAL" Binding="{Binding Subtotal,StringFormat=N2}" IsReadOnly="True" Width="90"/>
+                            <DataGridTemplateColumn Header="" Width="68">
                                 <DataGridTemplateColumn.CellTemplate><DataTemplate><Button Style="{StaticResource ProDangerButton}" Content="REMOVER" Padding="7,3" FontSize="9" Tag="{Binding Index}" Click="RemoveCartItem_Click" ToolTip="Remover item"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
                     <Grid Grid.Row="2" Margin="12,3">
                         <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <Button Style="{StaticResource ProDangerButton}" Content="CANCELAR VENDA  [ESC]" Click="Cancel_Click" HorizontalAlignment="Left" Padding="11,6" MinHeight="34"/>
-                        <Button Grid.Column="1" Style="{StaticResource ProSecondaryButton}" Content="CLIENTE" Click="Customer_Click" Padding="11,6" MinHeight="34"/>
-                        <Button Grid.Column="2" Style="{StaticResource ProSecondaryButton}" Content="VISUALIZAR CUPOM" Click="Preview_Click" Padding="11,6" MinHeight="34" Margin="6,0,0,0"/>
-                        <Button Grid.Column="3" Style="{StaticResource ProSecondaryButton}" Content="SALVAR ORÇAMENTO" Click="SaveQuote_Click" Padding="11,6" MinHeight="34" Margin="6,0,0,0"/>
+                        <Button Style="{StaticResource ProDangerButton}" Content="CANCELAR [ESC]" Click="Cancel_Click" HorizontalAlignment="Left" Padding="11,6" MinHeight="34"/>
+                        <Button Grid.Column="1" Style="{StaticResource ProSecondaryButton}" Content="SEPARAR PEDIDO" Click="SeparateOrder030_Click" Padding="11,6" MinHeight="34"/>
+                        <Button Grid.Column="2" Style="{StaticResource ProSecondaryButton}" Content="CUPOM" Click="Preview_Click" Padding="11,6" MinHeight="34" Margin="6,0,0,0"/>
+                        <Button Grid.Column="3" Style="{StaticResource ProSecondaryButton}" Content="ORÇAMENTO" Click="SaveQuote_Click" Padding="11,6" MinHeight="34" Margin="6,0,0,0"/>
                     </Grid>
                 </Grid>
             </Border>
@@ -225,13 +222,13 @@
                     <Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition/></Grid.RowDefinitions>
                     <Grid Margin="14,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <TextBlock Text="Últimas vendas" FontSize="15" FontWeight="Bold" Foreground="#27342E" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" Text="Consulta rápida" Foreground="#85918B" FontSize="11" VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Style="{StaticResource MiniActionButton}" Content="MOSTRAR / RECOLHER" Click="ToggleHistory030_Click"/>
                     </Grid>
-                    <DataGrid Grid.Row="1" x:Name="SalesGrid" Style="{StaticResource ProDataGrid}" ColumnHeaderStyle="{StaticResource ProDataGridHeader}" AutoGenerateColumns="False" IsReadOnly="True" RowHeight="32" FontSize="12" Margin="10,0,10,7">
+                    <DataGrid Grid.Row="1" x:Name="SalesGrid" Visibility="Collapsed" Style="{StaticResource ProDataGrid}" ColumnHeaderStyle="{StaticResource ProDataGridHeader}" AutoGenerateColumns="False" IsReadOnly="True" RowHeight="32" FontSize="12" Margin="10,0,10,7">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="VENDA" Binding="{Binding Number,StringFormat=000000}" Width="85"/>
                             <DataGridTextColumn Header="DATA / HORA" Binding="{Binding CreatedAt,StringFormat=dd/MM HH:mm}" Width="115"/>
-                            <DataGridTextColumn Header="TOTAL" Binding="{Binding Total,StringFormat=C}" Width="105"/>
+                            <DataGridTextColumn Header="TOTAL" Binding="{Binding Total,StringFormat=C}" Width="90"/>
                             <DataGridTemplateColumn Header="AÇÕES" Width="*">
                                 <DataGridTemplateColumn.CellTemplate><DataTemplate><StackPanel Orientation="Horizontal">
                                     <Button Style="{StaticResource MiniActionButton}" Content="VER" Tag="{Binding Id}" Click="ViewSale_Click"/>
@@ -245,82 +242,56 @@
             </Border>
         </Grid>
 
-        <!-- Checkout persistente -->
-        <ScrollViewer Grid.Column="2" Grid.Row="1" Margin="8,14,16,12" VerticalScrollBarVisibility="Auto">
-            <StackPanel>
-                <Border Background="White" BorderBrush="#DDE5E0" BorderThickness="1" CornerRadius="11" Padding="15" Margin="0,0,0,10">
-                    <Grid>
-                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <TextBlock Text="CLIENTE" Style="{StaticResource ProLabel}"/>
-                                <TextBlock x:Name="CustomerText" Text="CONSUMIDOR" FontSize="18" FontWeight="Bold" Foreground="#17231D" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                            </StackPanel>
-                            <Button Grid.Column="1" Style="{StaticResource ProSecondaryButton}" Content="ALTERAR" Padding="10,6" MinHeight="32" Click="Customer_Click"/>
-                            <Button Grid.Column="2" Style="{StaticResource ProSecondaryButton}" Content="HISTÓRICO" Padding="10,6" MinHeight="32" Margin="5,0,0,0" Click="CustomerHistoryQuick_Click"/>
-                            <Button Grid.Column="3" Style="{StaticResource ProSecondaryButton}" Content="LIMPAR" Padding="10,6" MinHeight="32" Margin="5,0,0,0" Click="RemoveCustomer_Click"/>
-                        </Grid>
-                        <TextBlock x:Name="CustomerPulseText" Grid.Row="1" Text="Compras e crediário aparecem aqui ao selecionar cliente." FontSize="11" Foreground="#52615A" Margin="0,7,0,0" TextWrapping="Wrap"/>
-                        <TextBlock Grid.Row="2" Text="Cliente da venda atual" FontSize="10" Foreground="#8A958F" Margin="0,3,0,0"/>
-                    </Grid>
-                </Border>
-
-                <Border Background="#0B6B3A" CornerRadius="12" Padding="18" Margin="0,0,0,10">
-                    <StackPanel>
-                        <TextBlock Text="TOTAL DA VENDA" FontSize="11" FontWeight="Bold" Foreground="#DDF2E4"/>
-                        <TextBlock x:Name="TotalText" Text="R$ 0,00" FontSize="45" FontWeight="Bold" Foreground="White" TextAlignment="Right" Margin="0,4,0,0"/>
-                    </StackPanel>
-                </Border>
-
-                <Border Background="#F7FAF8" BorderBrush="#DDE5E0" BorderThickness="1" CornerRadius="11" Padding="11" Margin="0,0,0,10">
-                    <StackPanel>
-                        <TextBlock Text="RESUMO DE HOJE" Style="{StaticResource ProLabel}"/>
-                        <TextBlock x:Name="CashPulseText" Text="Atualizando caixa..." FontSize="11" Foreground="#48574F" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                    </StackPanel>
-                </Border>
-
-                <Border x:Name="PaymentPanel" Background="White" BorderBrush="#DDE5E0" BorderThickness="1" CornerRadius="11" Padding="12" Margin="0,0,0,10">
-                    <StackPanel>
-                        <TextBlock Text="Pagamento" Style="{StaticResource ProSectionTitle}" Margin="3,0,0,7"/>
-                        <TextBlock Text="Escolha a forma principal ou use pagamento misto." Foreground="#77847D" FontSize="11" Margin="3,0,0,8"/>
-                        <UniformGrid Columns="2">
-                            <Button Style="{StaticResource CheckoutMethodButton}" Background="#EAF8EF" Foreground="#087233" Content="DINHEIRO" Click="PayCash_Click"/>
-                            <Button Style="{StaticResource CheckoutMethodButton}" Background="#E9F7F7" Foreground="#087C80" Content="PIX" Click="PayPix_Click"/>
-                            <Button Style="{StaticResource CheckoutMethodButton}" Background="#EEF5FF" Foreground="#175CD3" Content="DÉBITO" Click="PayDebit_Click"/>
-                            <Button Style="{StaticResource CheckoutMethodButton}" Background="#FFF5E8" Foreground="#A76000" Content="CRÉDITO" Click="PayCredit_Click"/>
-                            <Button Style="{StaticResource CheckoutMethodButton}" Background="#F2EEFF" Foreground="#5D47A1" Content="CREDIÁRIO" Click="PayStoreCredit_Click"/>
-                            <Button Style="{StaticResource CheckoutMethodButton}" Content="MISTO" Click="Pay_Click"/>
-                        </UniformGrid>
-                        <Button Style="{StaticResource ProPrimaryButton}" Content="FINALIZAR VENDA / PAGAMENTO  [F9]" FontSize="17" MinHeight="52" Margin="3,9,3,2" Click="Pay_Click"/>
-                    </StackPanel>
-                </Border>
-
-                <Border Background="#F7FAF8" BorderBrush="#DFE7E2" BorderThickness="1" CornerRadius="11" Padding="12" Margin="0,0,0,10">
-                    <StackPanel>
-                        <TextBlock Text="Ações rápidas" FontSize="13" FontWeight="Bold" Foreground="#34423B" Margin="2,0,0,6"/>
-                        <UniformGrid Columns="2">
-                            <Button Style="{StaticResource ProSecondaryButton}" Content="DIVERSOS  [F4]" Click="Diversos_Click" Margin="3"/>
-                            <Button Style="{StaticResource ProSecondaryButton}" Content="CONSULTA PREÇO  [F5]" Click="QuickPriceScanner_Click" Margin="3"/>
-                            <Button Style="{StaticResource ProSecondaryButton}" Content="SALVAR ESPERA  [F6]" Click="HoldSale_Click" Margin="3"/>
-                            <Button Style="{StaticResource ProSecondaryButton}" Content="RECUPERAR ESPERA  [F7]" Click="FinalOps_Click" Margin="3"/>
-                            <Button Style="{StaticResource ProSecondaryButton}" Content="CALCULADORA" Click="Calculator_Click" Margin="3"/>
-                            <Button Style="{StaticResource ProDangerButton}" Content="DESCARTAR ABA" Click="CancelCurrentStable_Click" Margin="3"/>
-                        </UniformGrid>
-                    </StackPanel>
-                </Border>
+        <!-- Resumo fixo: finalizar e cliente sempre visíveis. -->
+        <Grid Grid.Column="2" Grid.Row="1" Margin="5,10,10,8">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <Border Background="White" CornerRadius="10" Padding="12" BorderBrush="#DDE5E0" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock Text="CLIENTE DA VENDA" Style="{StaticResource ProLabel}"/>
+                    <TextBlock x:Name="CustomerText" Text="CONSUMIDOR" FontSize="20" FontWeight="Bold" TextTrimming="CharacterEllipsis" Margin="0,5"/>
+                    <WrapPanel>
+                        <Button Style="{StaticResource MiniActionButton}" Content="SELECIONAR [F3]" Click="Customer_Click"/>
+                        <Button Style="{StaticResource MiniActionButton}" Content="LIMPAR" Click="RemoveCustomer_Click"/>
+                        <Button Style="{StaticResource MiniActionButton}" Content="HISTÓRICO" Click="CustomerHistoryQuick_Click"/>
+                    </WrapPanel>
+                    <TextBlock x:Name="CustomerPulseText" FontSize="11" Foreground="#52615A" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+            <Border Grid.Row="1" Background="White" CornerRadius="10" Padding="12" Margin="0,8" BorderBrush="#DDE5E0" BorderThickness="1">
+                <DockPanel>
+                    <Button DockPanel.Dock="Top" Style="{StaticResource MiniActionButton}" Content="RESUMO DO CAIXA / FECHAMENTO" Click="Operations_Click"/>
+                    <TextBlock x:Name="CashPulseText" Text="Atualizando..." TextWrapping="Wrap" FontSize="12" Margin="0,7,0,0"/>
+                </DockPanel>
+            </Border>
+            <Border Grid.Row="2" Background="#0B6B3A" CornerRadius="10" Padding="15">
+                <StackPanel>
+                    <TextBlock x:Name="SubtotalText" Foreground="#DDF2E4" FontSize="12"/>
+                    <TextBlock x:Name="DiscountText" Foreground="#DDF2E4" FontSize="12" Visibility="Collapsed"/>
+                    <TextBlock Text="TOTAL" Foreground="White" FontWeight="Bold" Margin="0,5,0,0"/>
+                    <TextBlock x:Name="TotalText" Text="R$ 0,00" FontSize="42" FontWeight="Bold" Foreground="White" HorizontalAlignment="Right"/>
+                </StackPanel>
+            </Border>
+            <StackPanel Grid.Row="3" x:Name="PaymentPanel" Margin="0,8,0,0">
+                <Button x:Name="FinalizeButton030" Style="{StaticResource ProPrimaryButton}" Content="FINALIZAR VENDA — F9" FontSize="17" MinHeight="58" Click="Pay_Click"/>
+                <TextBlock Text="Escolha o pagamento ao finalizar" HorizontalAlignment="Center" Foreground="#65736C" FontSize="11" Margin="0,4,0,0"/>
             </StackPanel>
-        </ScrollViewer>
-
-        <!-- Rodapé de estado -->
-        <Border Grid.Column="1" Grid.ColumnSpan="2" Grid.Row="2" Background="White" BorderBrush="#DDE5E0" BorderThickness="0,1,0,0">
-            <Grid Margin="14,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="F1 Scanner   F2 Produto   F3 Cliente   F4 Diversos   F5 Preço   F6 Espera   F7 Recuperar   F8 Última venda   F9 Finalizar   F11 Tela cheia   ESC Cancelar" FontSize="10" FontWeight="SemiBold" Foreground="#4A5A52"/>
-                    <TextBlock x:Name="RecoveryText" Foreground="#A76500" FontSize="9" FontWeight="SemiBold"/>
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock x:Name="DatabaseStatus" Foreground="#748079" FontSize="10"/>
-                </StackPanel>
+        </Grid>
+        <Border Grid.Column="1" Grid.ColumnSpan="2" Grid.Row="2" Background="White" BorderBrush="#DDE5E0" BorderThickness="0,1,0,0" Padding="8,4">
+            <Grid><Grid.RowDefinitions><RowDefinition Height="44"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <UniformGrid Columns="8">
+                    <Button Style="{StaticResource MiniActionButton}" Content="PRODUTO [F2]" Click="Product_Click"/>
+                    <Button Style="{StaticResource MiniActionButton}" Content="CLIENTE [F3]" Click="Customer_Click"/>
+                    <Button Style="{StaticResource MiniActionButton}" Content="DIVERSOS [F4]" Click="Diversos_Click"/>
+                    <Button Style="{StaticResource MiniActionButton}" Click="QuickPriceScanner_Click"><TextBlock Text="CONSULTA PREÇO&#10;F5" TextAlignment="Center"/></Button>
+                    <Button Style="{StaticResource MiniActionButton}" Click="HoldSale_Click"><TextBlock Text="COLOCAR EM ESPERA&#10;F6" TextAlignment="Center"/></Button>
+                    <Button Style="{StaticResource MiniActionButton}" Click="FinalOps_Click"><TextBlock x:Name="HoldCountText" Text="RECUPERAR [F7]" TextAlignment="Center"/></Button>
+                    <Button Style="{StaticResource MiniActionButton}" Click="LastSale030_Click"><TextBlock Text="ÚLTIMA VENDA&#10;F8" TextAlignment="Center"/></Button>
+                    <Button Style="{StaticResource MiniActionButton}" Content="CALCULADORA" Click="Calculator_Click"/>
+                </UniformGrid>
+                <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="2*"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                    <TextBlock x:Name="StatusText" Text="SCANNER PRONTO" TextTrimming="CharacterEllipsis" FontSize="11" Foreground="#0B6B3A" VerticalAlignment="Center"/>
+                    <StackPanel Grid.Column="1" HorizontalAlignment="Right"><TextBlock x:Name="RecoveryText" FontSize="9" Foreground="#65736C"/><TextBlock x:Name="DatabaseStatus" FontSize="9" Foreground="#65736C"/></StackPanel>
+                </Grid>
             </Grid>
         </Border>
     </Grid>

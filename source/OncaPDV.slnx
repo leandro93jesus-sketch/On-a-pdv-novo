@@ -13,7 +13,6 @@
     <Project Path="tests/OncaPDV.Tests/OncaPDV.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
-    <Project Path="tools/OncaPDV.GateCheck/OncaPDV.GateCheck.csproj" />
-    <Project Path="tools/OncaPDV.PrintCheck/OncaPDV.PrintCheck.csproj" />
+    <Project Path="tools/OncaPDV.UxCheck/OncaPDV.UxCheck.csproj" />
   </Folder>
 </Solution>

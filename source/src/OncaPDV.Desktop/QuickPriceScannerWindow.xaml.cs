@@ -35,7 +35,7 @@ public partial class QuickPriceScannerWindow : Window
         SelectedProduct=selected;AddButton.IsEnabled=true;
         NameText.Text=selected.Name;CodeText.Text=$"Código: {selected.InternalCode}   •   Barras: {selected.Barcode ?? "—"}";
         PriceText.Text=selected.CurrentPrice(DateTimeOffset.Now).ToString("C");
-        StockText.Text=$"Estoque: {selected.Stock:N3} {selected.Unit}   •   Mínimo: {selected.MinimumStock:N3}";
+        StockText.Text=$"ATIVO • {(selected.CurrentPrice(DateTimeOffset.Now)!=selected.SalePrice ? $"Promoção • preço normal {selected.SalePrice:C}" : "Preço normal")}\nEstoque: {selected.Stock:N3} {selected.Unit}   •   Mínimo: {selected.MinimumStock:N3}";
         QueryBox.SelectAll();QueryBox.Focus();
     }
     private async void Search_Click(object sender,RoutedEventArgs e)=>await SearchAsync();

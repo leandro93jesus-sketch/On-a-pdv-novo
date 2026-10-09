@@ -1,0 +1,11 @@
+# Preserve the official printing baseline line endings on all hosts.
+source/src/OncaPDV.Printing/OncaPDV.Printing.csproj text eol=crlf
+source/src/OncaPDV.Printing/PrinterDiscovery.cs text eol=lf
+source/src/OncaPDV.Printing/Printing.cs text eol=lf
+source/src/OncaPDV.Desktop/ConfiguredPhysicalPrintService.cs text eol=crlf
+source/src/OncaPDV.Desktop/PrinterSettingsWindow.xaml text eol=crlf
+source/src/OncaPDV.Desktop/PrinterSettingsWindow.xaml.cs text eol=crlf
+source/src/OncaPDV.Desktop/ReceiptPreviewWindow.xaml text eol=lf
+source/src/OncaPDV.Desktop/ReceiptPreviewWindow.xaml.cs text eol=lf
+source/src/OncaPDV.Desktop/PaymentWindow.xaml text eol=lf
+source/src/OncaPDV.Desktop/PaymentWindow.xaml.cs text eol=lf

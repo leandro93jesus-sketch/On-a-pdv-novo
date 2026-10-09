@@ -250,7 +250,7 @@ ON CONFLICT(id) DO UPDATE SET internal_code=excluded.internal_code,barcode=exclu
     public async Task<Product?> FindAsync(string value, CancellationToken ct = default)
     {
         await using var c = database.Open(); await using var cmd = c.CreateCommand();
-        cmd.CommandText = "SELECT * FROM products WHERE active=1 AND (internal_code=$v OR barcode=$v OR name LIKE $like) ORDER BY CASE WHEN internal_code=$v THEN 0 WHEN barcode=$v THEN 1 WHEN name=$v COLLATE NOCASE THEN 2 WHEN name LIKE $prefix THEN 3 ELSE 4 END,internal_code LIMIT 1";
+        cmd.CommandText = "SELECT * FROM products WHERE active=1 AND (internal_code=$v OR barcode=$v OR name LIKE $like) ORDER BY CASE WHEN barcode=$v THEN 0 WHEN internal_code=$v THEN 1 WHEN name=$v COLLATE NOCASE THEN 2 WHEN name LIKE $prefix THEN 3 ELSE 4 END,internal_code LIMIT 1";
         cmd.Parameters.AddWithValue("$v", value); cmd.Parameters.AddWithValue("$like", $"%{value}%");
         cmd.Parameters.AddWithValue("$prefix", $"{value}%");
         await using var r = await cmd.ExecuteReaderAsync(ct); return await r.ReadAsync(ct) ? ReadProduct(r) : null;
@@ -259,9 +259,16 @@ ON CONFLICT(id) DO UPDATE SET internal_code=excluded.internal_code,barcode=exclu
     {
         term=(term??string.Empty).Trim();
         var list = new List<Product>(); await using var c = database.Open(); await using var cmd = c.CreateCommand();
-        cmd.CommandText = "SELECT * FROM products WHERE internal_code LIKE $q OR barcode LIKE $q OR name LIKE $q ORDER BY CASE WHEN internal_code=$exact THEN 0 WHEN barcode=$exact THEN 1 WHEN name=$exact COLLATE NOCASE THEN 2 WHEN name LIKE $prefix THEN 3 ELSE 4 END,name,internal_code LIMIT 50"; cmd.Parameters.AddWithValue("$q", $"%{term}%");cmd.Parameters.AddWithValue("$exact",term);cmd.Parameters.AddWithValue("$prefix",$"{term}%");
+        cmd.CommandText = "SELECT * FROM products WHERE internal_code LIKE $q OR barcode LIKE $q OR name LIKE $q ORDER BY CASE WHEN barcode=$exact THEN 0 WHEN internal_code=$exact THEN 1 WHEN name=$exact COLLATE NOCASE THEN 2 WHEN name LIKE $prefix THEN 3 ELSE 4 END,name,internal_code LIMIT 50"; cmd.Parameters.AddWithValue("$q", $"%{term}%");cmd.Parameters.AddWithValue("$exact",term);cmd.Parameters.AddWithValue("$prefix",$"{term}%");
+        var tokens = term.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(8).ToArray();
+        if (tokens.Length > 1)
+        {
+            var clauses = tokens.Select((_, i) => $"name LIKE $token{i}");
+            cmd.CommandText = cmd.CommandText.Replace("name LIKE $q ORDER", "name LIKE $q OR (" + string.Join(" AND ", clauses) + ") ORDER");
+            for (var i = 0; i < tokens.Length; i++) cmd.Parameters.AddWithValue($"$token{i}", "%" + tokens[i] + "%");
+        }
         await using(var r = await cmd.ExecuteReaderAsync(ct)) while (await r.ReadAsync(ct)) list.Add(ReadProduct(r));
-        if(term.Length<4 || list.Count>=10) return list;
+        if(term.Length<4 || term.Length>100 || list.Count>=10 || list.Any(p => string.Equals(p.Barcode,term,StringComparison.OrdinalIgnoreCase) || string.Equals(p.InternalCode,term,StringComparison.OrdinalIgnoreCase))) return list;
 
         // Fallback profissional para pequenos erros de digitação (ex.: AMCIANTE -> AMACIANTE).
         var seen=list.Select(x=>x.Id).ToHashSet();
@@ -283,6 +290,19 @@ ON CONFLICT(id) DO UPDATE SET internal_code=excluded.internal_code,barcode=exclu
     }
     private static int SearchDistance(string term,Product product)
     {
+        var words=NormalizeSearch(product.Name).Split(' ',StringSplitOptions.RemoveEmptyEntries);
+        var tokens=term.Split(' ',StringSplitOptions.RemoveEmptyEntries);
+        if(tokens.Length>1)
+        {
+            var total=0;
+            foreach(var token in tokens)
+            {
+                var distance=words.Select(w=>w.StartsWith(token,StringComparison.Ordinal)?0:Levenshtein(token,w)).DefaultIfEmpty(99).Min();
+                if(distance>(token.Length>=6?2:1))return 99;
+                total+=distance;
+            }
+            return total;
+        }
         var candidates=new List<string>{NormalizeSearch(product.InternalCode),NormalizeSearch(product.Name)};
         if(!string.IsNullOrWhiteSpace(product.Barcode))candidates.Add(NormalizeSearch(product.Barcode!));
         candidates.AddRange(NormalizeSearch(product.Name).Split(' ',StringSplitOptions.RemoveEmptyEntries));
@@ -297,7 +317,7 @@ ON CONFLICT(id) DO UPDATE SET internal_code=excluded.internal_code,barcode=exclu
     }
     private static int Levenshtein(string a,string b)
     {
-        if(a==b)return 0;if(a.Length==0)return b.Length;if(b.Length==0)return a.Length;
+        if(Math.Abs(a.Length-b.Length)>3)return 99;if(a==b)return 0;if(a.Length==0)return b.Length;if(b.Length==0)return a.Length;
         var prev=Enumerable.Range(0,b.Length+1).ToArray();var cur=new int[b.Length+1];
         for(var i=1;i<=a.Length;i++){cur[0]=i;for(var j=1;j<=b.Length;j++){var cost=a[i-1]==b[j-1]?0:1;cur[j]=Math.Min(Math.Min(cur[j-1]+1,prev[j]+1),prev[j-1]+cost);}var tmp=prev;prev=cur;cur=tmp;}
         return prev[b.Length];
@@ -348,8 +368,8 @@ public sealed class SqliteSaleRepository(OncaDatabase database, IClock clock) : 
                 var isDiversos = item.ProductId == Guid.Parse("00000000-0000-0000-0000-000000000001") || string.Equals(item.Code, "DIVERSOS", StringComparison.OrdinalIgnoreCase);
                 if (!isDiversos)
                 {
-                    var changed = await Exec(c, tx, "UPDATE products SET stock=stock-$q WHERE id=$p AND stock >= $q", ct,("$q",item.Quantity),("$p",item.ProductId));
-                    if (changed != 1) throw new DomainException($"Estoque insuficiente para {item.Name}.");
+                    var changed = await Exec(c, tx, "UPDATE products SET stock=stock-$q WHERE id=$p ", ct,("$q",item.Quantity),("$p",item.ProductId));
+                    if (changed != 1) throw new DomainException($"Produto não encontrado: {item.Name}.");
                 }
                 await Exec(c, tx,"INSERT INTO sale_items VALUES($id,$sale,$product,$code,$name,$q,$price,$sub)",ct,("$id",Guid.NewGuid()),("$sale",sale.Id),("$product",item.ProductId),("$code",item.Code),("$name",item.Name),("$q",item.Quantity),("$price",item.UnitPrice),("$sub",item.Subtotal));
                 if (!isDiversos)
@@ -406,7 +426,7 @@ public sealed class JsonCartRecoveryStore(AppPaths paths) : ICartRecoveryStore
     private string FilePath => Path.Combine(paths.Data,"pending-cart.json");
     private sealed record Snapshot(Guid? CustomerId,decimal Discount,List<CartItem> Items,Guid? CartId=null);
     public async Task SaveAsync(Cart cart,CancellationToken ct=default){paths.EnsureCreated();var json=JsonSerializer.Serialize(new Snapshot(cart.CustomerId,cart.Discount,cart.Items.ToList(),cart.Id),new JsonSerializerOptions{WriteIndented=true});var temp=FilePath+".tmp";await File.WriteAllTextAsync(temp,json,ct);File.Move(temp,FilePath,true);}
-    public async Task<Cart?> LoadAsync(CancellationToken ct=default){if(!File.Exists(FilePath))return null;var s=JsonSerializer.Deserialize<Snapshot>(await File.ReadAllTextAsync(FilePath,ct));if(s is null)return null;var cart=new Cart{Id=s.CartId is Guid saved && saved!=Guid.Empty?saved:Guid.NewGuid(),CustomerId=s.CustomerId};foreach(var i in s.Items)cart.Add(new Product(i.ProductId,i.Code,null,i.Name,null,null,null,0,i.UnitPrice,999999,0,"UN",null,null,true),i.Quantity);cart.SetDiscount(s.Discount);return cart;}
+    public async Task<Cart?> LoadAsync(CancellationToken ct=default){if(!File.Exists(FilePath))return null;var s=JsonSerializer.Deserialize<Snapshot>(await File.ReadAllTextAsync(FilePath,ct));if(s is null)return null;if(s.CartId is Guid committed && CompletedCart030.IsCommitted(new OncaDatabase(paths),committed))return null;var cart=new Cart{Id=s.CartId is Guid saved && saved!=Guid.Empty?saved:Guid.NewGuid(),CustomerId=s.CustomerId};foreach(var i in s.Items)cart.AddCustom(i.ProductId,i.Code,i.Name,i.Quantity,i.UnitPrice);cart.SetDiscount(s.Discount);return cart;}
     public Task ClearAsync(CancellationToken ct=default){if(File.Exists(FilePath))File.Delete(FilePath);return Task.CompletedTask;}
 }
 

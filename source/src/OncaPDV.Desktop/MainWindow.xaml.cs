@@ -135,8 +135,7 @@ public partial class MainWindow : Window
             if(selected is null)
             {
                 SetStatus("PRODUTO NÃO CADASTRADO");
-                if(MessageBox.Show("PRODUTO NÃO CADASTRADO\n\nCadastrar agora?\n\nO carrinho será preservado.","ONÇA PDV",MessageBoxButton.YesNo,MessageBoxImage.Question)==MessageBoxResult.Yes)
-                    await OpenProduct(query,true);
+                SetStatus("PRODUTO NÃO ENCONTRADO — confira a leitura ou cadastre em PRODUTO [F2]");
                 SearchBox.SelectAll();return;
             }
 
@@ -174,10 +173,11 @@ public partial class MainWindow : Window
 
     private async Task CompletePaymentAsync(PaymentMethod? initialMethod = null)
     {
-        if(_finalizing040 || _multiSaleSwitching037 || !_checkoutGuard0230.TryEnter()) { SetStatus("FINALIZAÇÃO JÁ EM ANDAMENTO"); return; }
+        if(_adding044 || _editingQuantity030 || _finalizing040 || _multiSaleSwitching037 || !_checkoutGuard0230.TryEnter()) { SetStatus("OPERAÇÃO EM ANDAMENTO"); return; }
         _finalizing040=true;
         if(PaymentPanel is not null)PaymentPanel.IsEnabled=false;
-        SetStatus("PROCESSANDO PAGAMENTO — NÃO CLIQUE NOVAMENTE");
+        SetStatus("FINALIZANDO VENDA...");
+        FinalizeButton030.Content="FINALIZANDO VENDA...";
         try
         {
         if (_workflow.Cart.Items.Count == 0)
@@ -225,15 +225,14 @@ public partial class MainWindow : Window
             var change = cash.Sum(x => x.Change);
             var cashSummary = cash.Length == 0 ? string.Empty : $"\nRecebido em dinheiro: {received:C}\nTroco: {change:C}";
 
-            MessageBox.Show(
-                $"VENDA CONCLUÍDA\n\nVenda Nº {sale.Number:000000}\nTotal: {sale.Total:C}\nPagamento: {string.Join(" + ", sale.Payments.Select(x => x.Method))}{cashSummary}\nImpressão: {(shouldPrint ? (printed?.Success == true ? "OK" : "FALHOU") : "NÃO SOLICITADA")}",
-                "ONÇA PDV",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            // Preserve all print outcomes without an extra acknowledgement on success.
+            if (shouldPrint && printed?.Success != true)
+                MessageBox.Show("A venda foi concluída, mas a impressão falhou. Consulte as impressões pendentes.", "Impressão", MessageBoxButton.OK, MessageBoxImage.Warning);
 
             await RefreshOperationalPulse0230();
             await RefreshCustomerPulse0230();
             ShowSaleToast0230(sale);
+            SaleToastText.Text += cashSummary;
             SetStatus("CAIXA LIVRE — PRÓXIMA VENDA");
             SearchBox.Focus();
         }
@@ -243,7 +242,7 @@ public partial class MainWindow : Window
         }
     
         }
-        finally { _finalizing040=false; if(PaymentPanel is not null)PaymentPanel.IsEnabled=true; _checkoutGuard0230.Exit(); }
+        finally { _finalizing040=false; if(PaymentPanel is not null)PaymentPanel.IsEnabled=true; _checkoutGuard0230.Exit(); FinalizeButton030.Content="FINALIZAR VENDA — F9"; SearchBox.Focus(); }
     }
 
     private async void Pay_Click(object sender, RoutedEventArgs e)
@@ -253,9 +252,6 @@ public partial class MainWindow : Window
         try
         {
         if (_workflow.Cart.Items.Count == 0) { SetStatus("CARRINHO VAZIO"); return; }
-        var choice = new FinalizeChoiceWindow { Owner = this };
-        if (choice.ShowDialog() != true) return;
-        if (choice.SeparateOrder) { await SeparateOrderAsync(); return; }
         await CompletePaymentAsync();
     
         }
@@ -643,7 +639,7 @@ public partial class MainWindow : Window
             RefreshMultiSaleTabs037();
             SearchBox.Focus();
             SetStatus($"VENDA {tabNumber} DESCARTADA — OUTRAS ABAS PRESERVADAS");
-            MessageBox.Show($"Carrinho da VENDA {tabNumber} descartado. As outras abas foram mantidas.", "Venda atual", MessageBoxButton.OK, MessageBoxImage.Information);
+            SetStatus($"CARRINHO DA VENDA {tabNumber} DESCARTADO");
         }
         catch (Exception ex)
         {
@@ -664,25 +660,29 @@ public partial class MainWindow : Window
     {
         WindowState = WindowState.Maximized;
         var width = SystemParameters.WorkArea.Width;
-        if (width < 1300) { NavColumn.Width = new GridLength(185); PaymentColumn.Width = new GridLength(315); }
-        else if (width < 1600) { NavColumn.Width = new GridLength(205); PaymentColumn.Width = new GridLength(340); }
+        if (width < 1300) { NavColumn.Width = new GridLength(170); PaymentColumn.Width = new GridLength(290); }
+        else if (width < 1600) { NavColumn.Width = new GridLength(184); PaymentColumn.Width = new GridLength(310); }
         else { NavColumn.Width = new GridLength(220); PaymentColumn.Width = new GridLength(370); }
     }
 
     private async void HoldSale_Click(object sender, RoutedEventArgs e)
     {
-        if (_workflow.Cart.Items.Count == 0) { FinalOps_Click(sender, e); return; }
+        if (_adding044 || _finalizing040 || _multiSaleSwitching037) return;
+        if (_workflow.Cart.Items.Count == 0) { SetStatus("CARRINHO VAZIO — NADA PARA COLOCAR EM ESPERA"); return; }
+        _multiSaleSwitching037=true;
         try
         {
             var svc = new FinalFeaturesService(_database);
             await svc.HoldAsync($"Espera {DateTime.Now:HH:mm}", _workflow.Cart.CustomerId, _workflow.Cart.Items.ToArray(), _workflow.Cart.Discount);
-            await _workflow.CancelAsync(); RefreshCart(); SetStatus("VENDA SALVA EM ESPERA"); SearchBox.Focus();
+            await _workflow.CancelAsync(); _activeOrderId=null; CustomerText.Text="CONSUMIDOR"; RefreshCart(); await RefreshCustomerPulse0230(); await RefreshContext030(); SetStatus("VENDA SALVA EM ESPERA"); SearchBox.Focus();
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Venda em espera", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        finally { _multiSaleSwitching037=false; SyncCurrentMultiSale037(); }
     }
 
     private async void FinalOps_Click(object sender, RoutedEventArgs e)
     {
+        if (_adding044 || _finalizing040 || _multiSaleSwitching037) return;
         var w = new FinalOperationsWindow(_database, OperatorId) { Owner = this };
         if (w.ShowDialog() != true || w.SelectedHold is null) return;
         if (_workflow.Cart.Items.Count > 0 && MessageBox.Show("Substituir o carrinho atual pela venda em espera?", "ONÇA PDV", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
@@ -694,7 +694,7 @@ public partial class MainWindow : Window
         await _workflow.ReplaceCartAsync(cart);
         if(h.CustomerId is Guid customerId){var customer=await _customers.GetAsync(customerId);CustomerText.Text=customer?.Name??"CLIENTE";}else CustomerText.Text="CONSUMIDOR";
         await new FinalFeaturesService(_database).DeleteHoldAsync(h.Id);
-        RefreshCart();await RefreshCustomerPulse0230(); SetStatus("VENDA EM ESPERA RECUPERADA");
+        _activeOrderId=null; RefreshCart();await RefreshCustomerPulse0230(); await RefreshContext030(); SetStatus("VENDA EM ESPERA RECUPERADA"); SearchBox.Focus();
     }
     private void Preview_Click(object sender, RoutedEventArgs e)
     {
@@ -780,19 +780,19 @@ public partial class MainWindow : Window
             var culture = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
             if (!decimal.TryParse(valueText, System.Globalization.NumberStyles.Number, culture, out var value) || value <= 0)
             {
-                MessageBox.Show("Informe um valor válido maior que zero.", "DIVERSOS", MessageBoxButton.OK, MessageBoxImage.Warning);
+                SetStatus("DIVERSOS — INFORME UM VALOR MAIOR QUE ZERO");
                 DiversosValueBox.Focus(); DiversosValueBox.SelectAll(); return;
             }
             if (!decimal.TryParse(qtyText, System.Globalization.NumberStyles.Number, culture, out var qty) || qty <= 0)
             {
-                MessageBox.Show("Informe uma quantidade válida maior que zero.", "DIVERSOS", MessageBoxButton.OK, MessageBoxImage.Warning);
+                SetStatus("DIVERSOS — INFORME UMA QUANTIDADE MAIOR QUE ZERO");
                 DiversosQtyBox.Focus(); DiversosQtyBox.SelectAll(); return;
             }
             await _workflow.AddDiversosAsync(name, qty, value);
             RefreshCart();
             SetStatus($"DIVERSOS ADICIONADO — {name}");
             DiversosNameBox.Clear(); DiversosValueBox.Clear(); DiversosQtyBox.Text = "1";
-            DiversosNameBox.Focus();
+            ProductEntryTabs.SelectedIndex=0; SearchBox.Focus();
         }
         catch (Exception ex)
         {
@@ -890,8 +890,11 @@ public partial class MainWindow : Window
         try
         {
             var p=await _insights0230.TodayAsync();
-            CashPulseText.Text=$"{p.Sales} venda(s) • Dinheiro {p.Cash:C} • PIX {p.Pix:C} • Débito {p.Debit:C} • Crédito {p.Credit:C} • Crediário {p.StoreCredit:C} • Recebimentos {p.CreditReceipts:C}";
-            HealthText.Text=_insights0230.HealthText();
+            CashPulseText.Text=$"HOJE • {p.Sales} venda(s)\nDinheiro  {p.Cash:C}     PIX  {p.Pix:C}\nDébito  {p.Debit:C}     Crédito  {p.Credit:C}\nCrediário  {p.StoreCredit:C}\nTotal vendido  {p.Net:C}\nRecebimentos  {p.CreditReceipts:C}";
+            var movements=await new CashMovements030(_database).TodayAsync();
+            CashPulseText.Text += $"\nSangria {movements.Withdrawals:C} • Suprimento {movements.Supplies:C}";
+            await RefreshContext030();
+            HealthText.Text=await Task.Run(() => _insights0230.HealthText());
             HealthText.Foreground=HealthText.Text.StartsWith("SISTEMA OK",StringComparison.OrdinalIgnoreCase)?new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(8,114,51)):new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(146,91,0));
         }
         catch(Exception ex){CashPulseText.Text="Resumo temporariamente indisponível";HealthText.Text="ATENÇÃO • diagnóstico";System.Diagnostics.Debug.WriteLine(ex);}
@@ -902,14 +905,15 @@ public partial class MainWindow : Window
     {
         if(_workflow.Cart.CustomerId is not Guid id)
         {
-            CustomerPulseText.Text="CONSUMIDOR • selecione um cliente para ver compras e crediário.";
+            CustomerPulseText.Text="Sem cliente vinculado.";
             return;
         }
         try
         {
             var p=await _insights0230.CustomerAsync(id);
             if(p is null){CustomerPulseText.Text="Cliente não encontrado.";return;}
-            CustomerPulseText.Text=$"{p.Purchases} compra(s) • Total comprado {p.Spent:C} • Crediário em aberto {p.CreditBalance:C} ({p.OpenCredits}) • Recebido {p.CreditPaid:C}";
+            var customer=await _customers.GetAsync(id);
+            CustomerPulseText.Text=$"{customer?.Phone ?? "Telefone não informado"} • {p.Purchases} compra(s) • Total comprado {p.Spent:C} • Crediário em aberto {p.CreditBalance:C} ({p.OpenCredits}) • Recebido {p.CreditPaid:C}";
         }
         catch{CustomerPulseText.Text="Histórico do cliente disponível em HISTÓRICO.";}
     }
@@ -943,11 +947,13 @@ public partial class MainWindow : Window
         if(_focusMode0230)
         {
             _navWidthBeforeFocus0230=NavColumn.Width;_salesHeightBeforeFocus0230=SalesHistoryRow.Height;
+            _windowState030=WindowState; _windowStyle030=WindowStyle; WindowStyle=WindowStyle.None; WindowState=WindowState.Maximized;
             NavColumn.Width=new GridLength(0);SalesHistoryRow.Height=new GridLength(0);LastSalesBorder.Visibility=Visibility.Collapsed;
             SetStatus("MODO CAIXA EM TELA CHEIA — F11 PARA VOLTAR");
         }
         else
         {
+            WindowStyle=_windowStyle030; WindowState=_windowState030;
             NavColumn.Width=_navWidthBeforeFocus0230;SalesHistoryRow.Height=_salesHeightBeforeFocus0230;LastSalesBorder.Visibility=Visibility.Visible;
             SetStatus("MODO COMPLETO RESTAURADO");
         }
@@ -983,6 +989,10 @@ public partial class MainWindow : Window
             _rows.Add(new(index, i.ProductId, i.Code, i.Name, i.Quantity, i.UnitPrice, i.Subtotal));
         }
         TotalText.Text = _workflow.Cart.Total.ToString("C");
+        SubtotalText.Text = $"Subtotal: {_workflow.Cart.GrossTotal:C}";
+        DiscountText.Text = $"Desconto: {_workflow.Cart.Discount:C}";
+        DiscountText.Visibility = _workflow.Cart.Discount > 0 ? Visibility.Visible : Visibility.Collapsed;
+        CurrentSaleText.Text = _multiSales037.Count == 0 ? "Frente de Caixa" : $"VENDA {_multiSales037[_currentMultiSale037].Number} • EM ATENDIMENTO";
         if(_workflow.Cart.Items.Count==0){StockAlertText.Text=string.Empty;StockAlertBorder.Visibility=Visibility.Collapsed;}
         SyncCurrentMultiSale037(); // MULTISALE037
     }
