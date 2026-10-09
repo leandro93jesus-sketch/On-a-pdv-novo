@@ -132,7 +132,7 @@ jobs:
             'x:Name="CustomerPulseText"',
             'x:Name="StockAlertBorder"',
             'x:Name="SaleToastBorder"',
-            'TELA CHEIA [F11]',
+            'TELA CHEIA  [F11]',
             '3*código',
             '0.2.3'
           )){if(-not $main.Contains($required)){throw "Missing 0.2.3 checkout feature: $required"}}
