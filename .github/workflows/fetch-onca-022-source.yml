@@ -1,0 +1,22 @@
+name: Fetch exact ONCA 0.2.2 source
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download exact release source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p input
+          gh release download v0.2.2-profissional --repo leandro93jesus-sketch/On-a-pdv-novo --pattern 'ONCA-PDV-PRO-0.2.2-CODIGO-FONTE.zip' --dir input --clobber
+          sha256sum input/ONCA-PDV-PRO-0.2.2-CODIGO-FONTE.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ONCA-PDV-PRO-0.2.2-SOURCE-EXACT
+          path: input/ONCA-PDV-PRO-0.2.2-CODIGO-FONTE.zip
+          retention-days: 7
