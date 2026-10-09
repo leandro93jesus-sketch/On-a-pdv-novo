@@ -1,6 +1,8 @@
 name: Fetch exact ONCA 0.2.2 source
 on:
-  workflow_dispatch:
+  push:
+    branches: [feature/pro-0230]
+    paths: ['.github/workflows/fetch-onca-022-source.yml']
 permissions:
   contents: read
 jobs:
